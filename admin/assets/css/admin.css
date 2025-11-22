@@ -1,0 +1,103 @@
+/* GLOBAL ADMIN STYLE */
+body {
+    margin: 0;
+    padding: 0;
+    background: #f5f7fa;
+    font-family: 'Inter', sans-serif;
+}
+
+.admin-container {
+    max-width: 1250px;
+    margin: 30px auto;
+    padding: 20px;
+}
+
+.dashboard-title {
+    font-size: 26px;
+    font-weight: 700;
+    margin-bottom: 5px;
+}
+
+.dashboard-subtitle {
+    color: #777;
+    margin-bottom: 25px;
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 18px;
+    margin-bottom: 32px;
+}
+
+.dashboard-card {
+    background: #fff;
+    padding: 22px;
+    border-radius: 14px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.05);
+    transition: 0.2s;
+    border: 1px solid #eee;
+}
+
+.dashboard-card:hover {
+    transform: translateY(-3px);
+}
+
+.dashboard-card-title {
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+.dashboard-card-number {
+    font-size: 32px;
+    font-weight: 700;
+    margin-bottom: 5px;
+}
+
+.dashboard-card a {
+    font-size: 13px;
+    color: #0066cc;
+    text-decoration: none;
+}
+
+/* Recent Orders Section */
+.table-box {
+    background: #fff;
+    padding: 20px;
+    border-radius: 14px;
+    margin-top: 10px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.05);
+    border: 1px solid #eee;
+}
+
+.table-box h3 {
+    margin-top: 0;
+    margin-bottom: 18px;
+}
+
+.table-box table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table-box th {
+    text-align: left;
+    padding: 12px 8px;
+    font-size: 13px;
+    background: #f0f3f7;
+    text-transform: uppercase;
+    border-bottom: 2px solid #ddd;
+}
+
+.table-box td {
+    padding: 10px 8px;
+    border-bottom: 1px solid #eee;
+    font-size: 14px;
+}
+
+.table-box tr:hover {
+    background: #fafafa;
+}

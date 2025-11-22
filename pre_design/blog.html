@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dove – Blog Sidebar Left</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Google Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+
+  <style>
+    :root{
+      --accent:#e74c3c;      /* red highlight */
+      --text:#222;
+      --muted:#777;
+      --border:#e3e3e3;
+      --bg:#f6f6f6;
+      --card-bg:#ffffff;
+      --footer-bg:#252525;
+    }
+
+    *{
+      margin:0;
+      padding:0;
+      box-sizing:border-box;
+    }
+
+    body{
+      font-family:"Poppins",sans-serif;
+      color:var(--text);
+      background:#ffffff;
+      line-height:1.6;
+    }
+
+    img{max-width:100%;display:block;}
+    a{text-decoration:none;color:inherit;}
+    ul{list-style:none;}
+
+    .container{
+      max-width:1200px;
+      margin:0 auto;
+      padding:0 15px;
+    }
+
+    /* ================= HEADER ================= */
+    .site-header{
+      border-bottom:1px solid #eee;
+      background:#fff;
+    }
+    .header-inner{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:18px 15px;
+      max-width:1200px;
+      margin:0 auto;
+    }
+    .logo{
+      font-size:24px;
+      font-weight:700;
+      letter-spacing:.3em;
+    }
+    .logo span{
+      font-weight:400;
+    }
+
+    .main-nav ul{
+      display:flex;
+      gap:30px;
+      font-size:13px;
+      text-transform:uppercase;
+      letter-spacing:.12em;
+    }
+    .main-nav li{
+      padding-bottom:4px;
+      cursor:pointer;
+    }
+    .main-nav li.active{
+      color:var(--accent);
+      border-bottom:2px solid var(--accent);
+    }
+
+    .header-right{
+      display:flex;
+      align-items:center;
+      gap:16px;
+      font-size:14px;
+    }
+    .search-box{
+      position:relative;
+    }
+    .search-box input{
+      border:1px solid #ddd;
+      border-radius:20px;
+      padding:6px 26px 6px 12px;
+      font-size:12px;
+      outline:none;
+      width:160px;
+    }
+    .search-box i{
+      position:absolute;
+      right:8px;
+      top:50%;
+      transform:translateY(-50%);
+      font-size:12px;
+      color:#999;
+    }
+
+    .header-icon{
+      cursor:pointer;
+      position:relative;
+    }
+    .cart-count{
+      position:absolute;
+      top:-6px;
+      right:-6px;
+      background:var(--accent);
+      color:#fff;
+      font-size:10px;
+      width:16px;
+      height:16px;
+      border-radius:50%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    /* ================= HERO / BREADCRUMB ================= */
+    .hero{
+      background:url("https://images.pexels.com/photos/3739653/pexels-photo-3739653.jpeg?auto=compress&cs=tinysrgb&w=1600")
+                 center/cover no-repeat;
+      position:relative;
+      color:#fff;
+      margin-bottom:40px;
+    }
+    .hero::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:rgba(0,0,0,0.4);
+    }
+    .hero-inner{
+      position:relative;
+      padding:80px 15px;
+      max-width:900px;
+      margin:0 auto;
+      text-align:center;
+    }
+    .hero-title{
+      font-size:30px;
+      font-weight:600;
+      margin-bottom:8px;
+    }
+    .breadcrumb{
+      font-size:13px;
+    }
+    .breadcrumb a{
+      color:#fff;
+      opacity:.8;
+    }
+    .breadcrumb span{
+      margin:0 4px;
+      color:var(--accent);
+    }
+
+    /* ================= LAYOUT ================= */
+    .layout{
+      max-width:1200px;
+      margin:0 auto 60px;
+      padding:0 15px;
+      display:grid;
+      grid-template-columns:280px 1fr;
+      gap:30px;
+    }
+
+    /* ----- SIDEBAR ----- */
+    .sidebar-box{
+      border:1px solid var(--border);
+      margin-bottom:25px;
+      background:#fff;
+    }
+    .sidebar-title{
+      background:#d4af37;
+      color:#fff;
+      padding:10px 14px;
+      font-size:13px;
+      font-weight:600;
+      text-transform:uppercase;
+    }
+    .sidebar-title span{
+      margin-right:6px;
+    }
+    .sidebar-content{
+      padding:12px 14px 16px;
+      font-size:13px;
+      color:#444;
+    }
+
+    .cat-list li{
+      padding:4px 0;
+      border-bottom:1px solid #f1f1f1;
+      display:flex;
+      justify-content:space-between;
+      font-size:13px;
+      cursor:pointer;
+    }
+    .cat-list li:last-child{border-bottom:none;}
+    .cat-list li:hover{color:var(--accent);}
+
+    .recent-post{
+      display:flex;
+      gap:10px;
+      margin-bottom:12px;
+    }
+    .recent-post img{
+      width:60px;
+      height:60px;
+      object-fit:cover;
+    }
+    .recent-post-title{
+      font-size:13px;
+      margin-bottom:4px;
+    }
+    .recent-post-meta{
+      font-size:11px;
+      color:#999;
+    }
+
+    .comment-item{
+      display:flex;
+      gap:10px;
+      margin-bottom:10px;
+      font-size:12px;
+    }
+    .comment-avatar{
+      width:40px;
+      height:40px;
+      background:#2f6bd9;
+      color:#fff;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:700;
+      font-size:18px;
+    }
+    .comment-meta{
+      font-size:11px;
+      color:#999;
+    }
+    .comment-text{
+      font-size:12px;
+    }
+
+    .tag-cloud{
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+    }
+    .tag-item{
+      background:#f3f3f3;
+      padding:4px 8px;
+      font-size:11px;
+      cursor:pointer;
+    }
+    .tag-item:hover{
+      background:var(--accent);
+      color:#fff;
+    }
+
+    /* ----- BLOG GRID ----- */
+    .blog-grid{
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:24px;
+    }
+    .post-card{
+      border:1px solid var(--border);
+      background:#fff;
+      display:flex;
+      flex-direction:column;
+    }
+    .post-thumb img{
+      width:100%;
+      height:190px;
+      object-fit:cover;
+    }
+    .post-body{
+      padding:16px 18px 18px;
+    }
+    .post-meta{
+      font-size:11px;
+      color:#999;
+      margin-bottom:6px;
+    }
+    .post-title{
+      font-size:16px;
+      font-weight:500;
+      margin-bottom:6px;
+    }
+    .post-excerpt{
+      font-size:13px;
+      color:#666;
+      margin-bottom:10px;
+    }
+    .post-readmore{
+      font-size:12px;
+      text-transform:uppercase;
+      letter-spacing:.12em;
+      color:var(--accent);
+      font-weight:500;
+    }
+
+    /* ================= BRAND STRIP ================= */
+    .brand-strip{
+      background:#333;
+      padding:25px 0;
+    }
+    .brand-strip-inner{
+      max-width:1200px;
+      margin:0 auto;
+      padding:0 15px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:30px;
+      color:#bdbdbd;
+      font-size:12px;
+      text-transform:uppercase;
+      flex-wrap:wrap;
+    }
+
+    /* ================= FOOTER ================= */
+    .footer{
+      background:var(--footer-bg);
+      color:#d3d3d3;
+      padding:40px 0 0;
+      font-size:13px;
+    }
+    .footer-inner{
+      max-width:1200px;
+      margin:0 auto;
+      padding:0 15px 30px;
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:30px;
+    }
+    .footer-title{
+      font-size:13px;
+      text-transform:uppercase;
+      margin-bottom:12px;
+    }
+    .footer-links li{
+      margin-bottom:6px;
+      color:#bfbfbf;
+      cursor:pointer;
+      font-size:12px;
+    }
+    .footer-links li:hover{
+      color:#fff;
+    }
+    .footer-bottom{
+      border-top:1px solid #3b3b3b;
+      padding:12px 15px 16px;
+      max-width:1200px;
+      margin:0 auto;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      font-size:11px;
+      color:#bfbfbf;
+    }
+    .footer-payments{
+      display:flex;
+      gap:6px;
+    }
+    .footer-payments span{
+      background:#333;
+      padding:4px 8px;
+      border-radius:2px;
+    }
+
+    /* Back to top */
+    .back-top{
+      position:fixed;
+      right:22px;
+      bottom:22px;
+      width:40px;
+      height:40px;
+      border-radius:50%;
+      border:1px solid #d0d0d0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      cursor:pointer;
+      background:#fff;
+      color:#555;
+      font-size:16px;
+    }
+
+    /* ================= RESPONSIVE ================= */
+    @media(max-width:1024px){
+      .blog-grid{
+        grid-template-columns:repeat(2,minmax(0,1fr));
+      }
+      .layout{
+        grid-template-columns:250px 1fr;
+      }
+    }
+
+    @media(max-width:768px){
+      .header-inner{
+        flex-direction:column;
+        align-items:flex-start;
+        gap:10px;
+      }
+      .layout{
+        grid-template-columns:1fr;
+      }
+      .blog-grid{
+        grid-template-columns:1fr;
+      }
+      .footer-inner{
+        grid-template-columns:repeat(2,minmax(0,1fr));
+      }
+      .brand-strip-inner{
+        justify-content:center;
+      }
+    }
+
+    @media(max-width:576px){
+      .footer-inner{
+        grid-template-columns:1fr;
+      }
+      .footer-bottom{
+        flex-direction:column;
+        align-items:flex-start;
+        gap:8px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="logo">DOVE</div>
+
+      <nav class="main-nav">
+        <ul>
+          <li>Home</li>
+          <li>Shop</li>
+          <li class="active">Blog</li>
+          <li>Pages</li>
+          <li>Portfolios</li>
+          <li>Elements</li>
+        </ul>
+      </nav>
+
+      <div class="header-right">
+        <div class="search-box">
+          <input type="text" placeholder="Search …" />
+          <i class="fa-solid fa-magnifying-glass"></i>
+        </div>
+        <div class="header-icon">
+          <i class="fa-regular fa-user"></i>
+        </div>
+        <div class="header-icon">
+          <i class="fa-solid fa-bag-shopping"></i>
+          <span class="cart-count">0</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- HERO / BREADCRUMB -->
+  <section class="hero">
+    <div class="hero-inner">
+      <div class="hero-title">Sidebar Left</div>
+      <div class="breadcrumb">
+        <a href="#">Home Elementor</a>
+        <span>&rsaquo;</span>
+        <a href="#">Blog</a>
+        <span>&rsaquo;</span>
+        <span>Sidebar Left</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- MAIN LAYOUT -->
+  <main class="layout">
+
+    <!-- SIDEBAR LEFT -->
+    <aside>
+      <!-- Categories -->
+      <div class="sidebar-box">
+        <div class="sidebar-title"><span>—</span> Categories</div>
+        <div class="sidebar-content">
+          <ul class="cat-list">
+            <li><span>Audio Post</span><span>(1)</span></li>
+            <li><span>Fashion’s Star</span><span>(4)</span></li>
+            <li><span>Forida</span><span>(6)</span></li>
+            <li><span>Gallery</span><span>(3)</span></li>
+            <li><span>Home18</span><span>(4)</span></li>
+            <li><span>Home20</span><span>(4)</span></li>
+            <li><span>Kid’s Clothing</span><span>(3)</span></li>
+            <li><span>Quote</span><span>(3)</span></li>
+            <li><span>Uncategorized</span><span>(3)</span></li>
+            <li><span>Video Post</span><span>(1)</span></li>
+            <li><span>What’s New</span><span>(2)</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Recent Posts -->
+      <div class="sidebar-box">
+        <div class="sidebar-title"><span>—</span> Recent Posts</div>
+        <div class="sidebar-content">
+          <div class="recent-post">
+            <img src="https://images.pexels.com/photos/3734695/pexels-photo-3734695.jpeg?auto=compress&cs=tinysrgb&w=400" alt="">
+            <div>
+              <div class="recent-post-title">Aliquam Tincidunt Mauris Eu Risus</div>
+              <div class="recent-post-meta">January 7, 2025 • ThemeFTC</div>
+            </div>
+          </div>
+
+          <div class="recent-post">
+            <img src="https://images.pexels.com/photos/3734878/pexels-photo-3734878.jpeg?auto=compress&cs=tinysrgb&w=400" alt="">
+            <div>
+              <div class="recent-post-title">Lorem Ipsum Is Simply Dummy Text</div>
+              <div class="recent-post-meta">January 6, 2025 • ThemeFTC</div>
+            </div>
+          </div>
+
+          <div class="recent-post">
+            <img src="https://images.pexels.com/photos/3734884/pexels-photo-3734884.jpeg?auto=compress&cs=tinysrgb&w=400" alt="">
+            <div>
+              <div class="recent-post-title">Mauris Viverra Erat</div>
+              <div class="recent-post-meta">January 5, 2025 • ThemeFTC</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Comments -->
+      <div class="sidebar-box">
+        <div class="sidebar-title"><span>—</span> Recent Comments</div>
+        <div class="sidebar-content">
+          <div class="comment-item">
+            <div class="comment-avatar">G</div>
+            <div>
+              <div class="comment-meta">Admin • Jan 09, 2025</div>
+              <div class="comment-text">I Really Like</div>
+            </div>
+          </div>
+
+          <div class="comment-item">
+            <div class="comment-avatar">G</div>
+            <div>
+              <div class="comment-meta">ThemeFTC • Jan 09, 2025</div>
+              <div class="comment-text">Like!</div>
+            </div>
+          </div>
+
+          <div class="comment-item">
+            <div class="comment-avatar">G</div>
+            <div>
+              <div class="comment-meta">ThemeFTC • Jan 06, 2025</div>
+              <div class="comment-text">Nice post</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tags -->
+      <div class="sidebar-box">
+        <div class="sidebar-title"><span>—</span> Tags</div>
+        <div class="sidebar-content">
+          <div class="tag-cloud">
+            <span class="tag-item">Kids</span>
+            <span class="tag-item">News</span>
+            <span class="tag-item">Nice</span>
+            <span class="tag-item">Photography</span>
+            <span class="tag-item">Sticky</span>
+            <span class="tag-item">Suggest</span>
+            <span class="tag-item">WooCommerce</span>
+            <span class="tag-item">WordPress</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- BLOG GRID -->
+    <section class="blog-grid">
+
+      <!-- Post 1 -->
+      <article class="post-card">
+        <div class="post-thumb">
+          <img src="https://images.pexels.com/photos/3734883/pexels-photo-3734883.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
+        </div>
+        <div class="post-body">
+          <div class="post-meta"><i class="fa-regular fa-calendar"></i> January 16, 2025</div>
+          <h2 class="post-title">Lorem Ipsum Qui</h2>
+          <p class="post-excerpt">
+            Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has
+            been the industry's standard dummy text.
+          </p>
+          <a href="#" class="post-readmore">READ MORE</a>
+        </div>
+      </article>
+
+      <!-- Post 2 -->
+      <article class="post-card">
+        <div class="post-thumb">
+          <img src="https://images.pexels.com/photos/3734890/pexels-photo-3734890.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
+        </div>
+        <div class="post-body">
+          <div class="post-meta"><i class="fa-regular fa-calendar"></i> January 16, 2025</div>
+          <h2 class="post-title">Mauris Viverra Erat</h2>
+          <p class="post-excerpt">
+            Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has
+            been the industry's standard dummy text.
+          </p>
+          <a href="#" class="post-readmore">READ MORE</a>
+        </div>
+      </article>
+
+      <!-- Post 3 -->
+      <article class="post-card">
+        <div class="post-thumb">
+          <img src="https://images.pexels.com/photos/3734885/pexels-photo-3734885.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
+        </div>
+        <div class="post-body">
+          <div class="post-meta"><i class="fa-regular fa-calendar"></i> January 16, 2025</div>
+          <h2 class="post-title">Odio Dignissim Qui</h2>
+          <p class="post-excerpt">
+            Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has
+            been the industry's standard dummy text.
+          </p>
+          <a href="#" class="post-readmore">READ MORE</a>
+        </div>
+      </article>
+
+      <!-- Post 4 -->
+      <article class="post-card">
+        <div class="post-thumb">
+          <img src="https://images.pexels.com/photos/3734887/pexels-photo-3734887.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
+        </div>
+        <div class="post-body">
+          <div class="post-meta"><i class="fa-regular fa-calendar"></i> January 16, 2025</div>
+          <h2 class="post-title">Simply Dummy Text</h2>
+          <p class="post-excerpt">
+            Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has
+            been the industry's standard dummy text.
+          </p>
+          <a href="#" class="post-readmore">READ MORE</a>
+        </div>
+      </article>
+
+      <!-- Post 5 -->
+      <article class="post-card">
+        <div class="post-thumb">
+          <img src="https://images.pexels.com/photos/3734882/pexels-photo-3734882.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
+        </div>
+        <div class="post-body">
+          <div class="post-meta"><i class="fa-regular fa-calendar"></i> January 7, 2025</div>
+          <h2 class="post-title">Aliquam Tincidunt Mauris Eu Risus</h2>
+          <p class="post-excerpt">
+            Suspendisse ac quam sed massa tincidunt blandit. Cras aliquam mi sit amet justo rutrum.
+          </p>
+          <a href="#" class="post-readmore">READ MORE</a>
+        </div>
+      </article>
+
+      <!-- Post 6 -->
+      <article class="post-card">
+        <div class="post-thumb">
+          <img src="https://images.pexels.com/photos/3734886/pexels-photo-3734886.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
+        </div>
+        <div class="post-body">
+          <div class="post-meta"><i class="fa-regular fa-calendar"></i> January 7, 2025</div>
+          <h2 class="post-title">Odio Qui Blandit</h2>
+          <p class="post-excerpt">
+            Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has
+            been the industry's standard dummy text.
+          </p>
+          <a href="#" class="post-readmore">READ MORE</a>
+        </div>
+      </article>
+
+    </section>
+
+  </main>
+
+  <!-- BRAND STRIP -->
+  <section class="brand-strip">
+    <div class="brand-strip-inner">
+      <span>Wild Mountain</span>
+      <span>Vintage Studio</span>
+      <span>Pomade Co.</span>
+      <span>BPFC</span>
+      <span>Inspirational Graphic</span>
+      <span>Pomade</span>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <div>
+        <h4 class="footer-title">Customer Service</h4>
+        <ul class="footer-links">
+          <li>Help & Contact Us</li>
+          <li>Returns & Refunds</li>
+          <li>Online Stores</li>
+          <li>Terms & Conditions</li>
+        </ul>
+      </div>
+
+      <div>
+        <h4 class="footer-title">Company</h4>
+        <ul class="footer-links">
+          <li>About Us</li>
+          <li>Blog</li>
+          <li>Order Tracking</li>
+          <li>FAQ Page</li>
+          <li>Contact Us</li>
+          <li>Login</li>
+        </ul>
+      </div>
+
+      <div>
+        <h4 class="footer-title">Social Media</h4>
+        <ul class="footer-links">
+          <li>Twitter</li>
+          <li>Instagram</li>
+          <li>Tumblr</li>
+          <li>Pinterest</li>
+        </ul>
+      </div>
+
+      <div>
+        <h4 class="footer-title">Archive</h4>
+        <ul class="footer-links">
+          <li>Designer Shoes</li>
+          <li>Gallery</li>
+          <li>Pricing</li>
+          <li>Feature Index</li>
+          <li>Login</li>
+          <li>Help & Support</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <span>Copyright © 2025 <strong>Dove</strong>. All Rights Reserved.</span>
+      <div class="footer-payments">
+        <span>Visa</span>
+        <span>MasterCard</span>
+        <span>Discover</span>
+        <span>PayPal</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Back to top -->
+  <div class="back-top" onclick="window.scrollTo({top:0,behavior:'smooth'});">
+    <i class="fa-solid fa-angle-up"></i>
+  </div>
+
+</body>
+</html>

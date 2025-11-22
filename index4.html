@@ -1,0 +1,1692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Devilixirs Herbals – Premium Herbal Hair & Skin Care</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --bg-body: #fdfdfb;
+      --bg-soft: #f6faf6;
+      --bg-card: #ffffff;
+      --primary: #2b7a57;
+      --primary-soft: #8cc8a6;
+      --accent: #f2b35c;
+      --text-main: #222b24;
+      --text-muted: #788279;
+      --border-soft: #e4e8e2;
+      --radius-lg: 26px;
+      --radius-md: 18px;
+      --radius-pill: 999px;
+      --shadow-soft: 0 18px 40px rgba(26, 60, 40, 0.12);
+      --shadow-card: 0 14px 34px rgba(30, 64, 44, 0.16);
+      --font-heading: "Playfair Display", serif;
+      --font-body: "Poppins", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --max-width: 1180px;
+      --transition-fast: 0.18s ease;
+      --transition-normal: 0.28s ease;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: var(--font-body);
+      background: radial-gradient(circle at top left, #f9fdf8 0, #fdfdfb 40%, #f4f6f3 100%);
+      color: var(--text-main);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    img {
+      max-width: 100%;
+      display: block;
+    }
+
+    a {
+      text-decoration: none;
+      color: inherit;
+    }
+
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .container {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      padding: 0 18px;
+      width: 100%;
+    }
+
+    section {
+      padding: 70px 0;
+    }
+
+    @media (min-width: 992px) {
+      section {
+        padding: 80px 0;
+      }
+    }
+
+    h1, h2, h3, h4 {
+      font-family: var(--font-heading);
+      margin: 0 0 12px;
+      color: var(--text-main);
+      letter-spacing: 0.02em;
+    }
+
+    p {
+      margin: 0 0 10px;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--primary);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 11px 26px;
+      border-radius: var(--radius-pill);
+      border: 1px solid transparent;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      cursor: pointer;
+      background: linear-gradient(130deg, #2b7a57, #1f5a40);
+      color: #ffffff;
+      box-shadow: 0 14px 30px rgba(32, 102, 70, 0.35);
+      transition: transform var(--transition-fast), box-shadow var(--transition-fast), filter var(--transition-fast);
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.04);
+      box-shadow: 0 18px 40px rgba(32, 102, 70, 0.45);
+    }
+
+    .btn-ghost {
+      background: #ffffff;
+      color: var(--primary);
+      border-color: rgba(35, 104, 72, 0.25);
+      box-shadow: none;
+    }
+
+    .btn-ghost:hover {
+      background: #f8fdf9;
+      box-shadow: 0 10px 22px rgba(26, 60, 40, 0.12);
+    }
+
+    .section-heading {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .section-heading h2 {
+      font-size: 28px;
+    }
+
+    .section-heading p {
+      max-width: 520px;
+      margin: 6px auto 0;
+      font-size: 13px;
+    }
+
+    @media (min-width: 768px) {
+      .section-heading h2 {
+        font-size: 32px;
+      }
+    }
+
+    /* Announcement */
+    .announcement {
+      font-size: 11px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      text-align: center;
+      padding: 8px 10px;
+      background: linear-gradient(90deg, #eef9f1, #fff7eb);
+      color: #855c22;
+      border-bottom: 1px solid #f0e3cc;
+    }
+
+    /* Header */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      backdrop-filter: blur(18px);
+      background: rgba(253, 253, 251, 0.96);
+      border-bottom: 1px solid rgba(214, 219, 211, 0.9);
+    }
+
+    .header-inner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 0;
+      gap: 18px;
+    }
+
+    .logo-block {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .logo-main {
+      font-family: var(--font-heading);
+      font-size: 22px;
+      letter-spacing: 0.26em;
+      text-transform: uppercase;
+    }
+
+    .logo-sub {
+      font-size: 9px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    nav {
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      font-size: 13px;
+    }
+
+    nav a {
+      position: relative;
+      padding-bottom: 2px;
+      color: #414a42;
+    }
+
+    nav a::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 0;
+      height: 1px;
+      background: var(--primary);
+      transition: width var(--transition-normal);
+    }
+
+    nav a:hover::after {
+      width: 100%;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+    }
+
+    .header-pill {
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(38, 112, 78, 0.28);
+      padding: 6px 12px;
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--primary);
+      background: #ffffff;
+    }
+
+    .icon-btn {
+      width: 30px;
+      height: 30px;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(173, 188, 176, 0.9);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      cursor: pointer;
+      background: #ffffff;
+      color: #616a61;
+      transition: transform var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+    }
+
+    .icon-btn:hover {
+      transform: translateY(-1px);
+      background: #f7fcf8;
+      color: var(--primary);
+      box-shadow: 0 10px 22px rgba(26, 60, 40, 0.16);
+    }
+
+    .mobile-toggle {
+      display: none;
+    }
+
+    .mobile-toggle span,
+    .mobile-toggle span::before,
+    .mobile-toggle span::after {
+      width: 16px;
+      height: 2px;
+      background: #414a42;
+      display: block;
+      position: relative;
+    }
+
+    .mobile-toggle span::before,
+    .mobile-toggle span::after {
+      content: "";
+      position: absolute;
+      left: 0;
+    }
+
+    .mobile-toggle span::before {
+      top: -4px;
+    }
+
+    .mobile-toggle span::after {
+      top: 4px;
+    }
+
+    .mobile-nav {
+      display: none;
+      padding-bottom: 10px;
+    }
+
+    .mobile-nav a {
+      display: block;
+      padding: 6px 0;
+      font-size: 13px;
+      color: #414a42;
+    }
+
+    .mobile-nav.open {
+      display: block;
+    }
+
+    @media (max-width: 900px) {
+      nav {
+        display: none;
+      }
+      .header-pill {
+        display: none;
+      }
+      .mobile-toggle {
+        display: inline-flex;
+        width: 30px;
+        height: 30px;
+        border-radius: var(--radius-pill);
+        border: 1px solid rgba(173, 188, 176, 0.9);
+        align-items: center;
+        justify-content: center;
+        background: #ffffff;
+        cursor: pointer;
+      }
+    }
+
+    /* Hero */
+    .hero {
+      padding-top: 52px;
+      padding-bottom: 60px;
+    }
+
+    @media (min-width: 992px) {
+      .hero {
+        padding-top: 70px;
+        padding-bottom: 80px;
+      }
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+      gap: 38px;
+      align-items: center;
+    }
+
+    @media (max-width: 900px) {
+      .hero-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .hero-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(38, 112, 78, 0.25);
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--primary);
+      background: #ffffff;
+    }
+
+    .hero-pill span.dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--accent);
+    }
+
+    .hero h1 {
+      margin-top: 18px;
+      font-size: 32px;
+      line-height: 1.12;
+    }
+
+    @media (min-width: 768px) {
+      .hero h1 {
+        font-size: 40px;
+      }
+    }
+
+    .hero-subtext {
+      font-size: 14px;
+      max-width: 480px;
+    }
+
+    .hero-subtext strong {
+      color: var(--primary);
+    }
+
+    .hero-actions {
+      margin-top: 22px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .hero-meta {
+      margin-top: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .hero-meta span {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .hero-meta span::before {
+      content: "●";
+      font-size: 7px;
+      color: var(--primary-soft);
+    }
+
+    .hero-right {
+      position: relative;
+    }
+
+    .hero-bg {
+      position: absolute;
+      inset: -40px -10px -40px -10px;
+      background: radial-gradient(circle at top, #e8f4ec 0, transparent 60%);
+      z-index: -1;
+    }
+
+    .hero-card {
+      border-radius: var(--radius-lg);
+      background: var(--bg-card);
+      border: 1px solid var(--border-soft);
+      box-shadow: var(--shadow-soft);
+      padding: 16px 16px 14px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+      gap: 14px;
+      align-items: center;
+    }
+
+    @media (max-width: 540px) {
+      .hero-card {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .hero-product-media {
+      position: relative;
+      padding: 10px 12px 6px;
+      border-radius: var(--radius-md);
+      background: linear-gradient(135deg, #fdf7ec, #edf6f0);
+    }
+
+    .hero-product-media img {
+      max-height: 260px;
+      margin: 0 auto;
+      object-fit: contain;
+      filter: drop-shadow(0 22px 30px rgba(0,0,0,0.26));
+      transition: transform var(--transition-normal);
+    }
+
+    .hero-card:hover .hero-product-media img {
+      transform: translateY(-4px);
+    }
+
+    .hero-label {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      border-radius: var(--radius-pill);
+      padding: 4px 10px;
+      background: rgba(43, 122, 87, 0.96);
+      color: #ffffff;
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .hero-product-info h3 {
+      font-size: 22px;
+      margin-bottom: 4px;
+    }
+
+    .hero-product-info p {
+      font-size: 13px;
+    }
+
+    .hero-tags {
+      margin-top: 9px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .hero-tags span {
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      border-radius: var(--radius-pill);
+      padding: 4px 8px;
+      border: 1px solid rgba(38, 112, 78, 0.25);
+      background: #f7fbf7;
+      color: #4d6454;
+    }
+
+    .hero-price-row {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+    }
+
+    .hero-price-row strong {
+      color: var(--primary);
+      font-size: 15px;
+    }
+
+    .hero-price-row span.old {
+      text-decoration: line-through;
+      color: #b5ac9c;
+      margin-left: 4px;
+      font-size: 12px;
+    }
+
+    .hero-review {
+      font-size: 11px;
+      color: #a77a33;
+    }
+
+    .hero-badge-small {
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Categories */
+    .categories {
+      padding: 26px 0 18px;
+    }
+
+    .cat-row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    @media (max-width: 900px) {
+      .cat-row {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 680px) {
+      .cat-row {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .cat-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .cat-card {
+      border-radius: var(--radius-lg);
+      background: var(--bg-soft);
+      border: 1px solid var(--border-soft);
+      padding: 14px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 10px 22px rgba(26, 60, 40, 0.08);
+      cursor: pointer;
+      transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+    }
+
+    .cat-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: var(--radius-pill);
+      background: #ffffff;
+      border: 1px solid #e0ebe3;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      color: var(--primary);
+    }
+
+    .cat-card strong {
+      display: block;
+      font-size: 13px;
+    }
+
+    .cat-card span.sub {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .cat-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 16px 30px rgba(26, 60, 40, 0.18);
+      border-color: var(--primary-soft);
+      background: #fdfdfb;
+    }
+
+    /* Shop section */
+    .shop {
+      background: #ffffff;
+    }
+
+    .shop-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      margin-bottom: 22px;
+    }
+
+    .tabs {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .tab {
+      padding: 7px 14px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--border-soft);
+      background: #f7fbf7;
+      color: #626a63;
+      cursor: pointer;
+      transition: background var(--transition-normal), color var(--transition-normal), box-shadow var(--transition-normal), border-color var(--transition-normal), transform var(--transition-fast);
+    }
+
+    .tab.active {
+      background: var(--primary);
+      color: #ffffff;
+      border-color: transparent;
+      box-shadow: 0 12px 24px rgba(32, 102, 70, 0.35);
+      transform: translateY(-1px);
+    }
+
+    .shop-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    @media (max-width: 1050px) {
+      .shop-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 800px) {
+      .shop-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 520px) {
+      .shop-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .product-card {
+      background: var(--bg-card);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-soft);
+      box-shadow: var(--shadow-card);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      cursor: pointer;
+      transition: transform var(--transition-normal), box-shadow var(--transition-normal), border-color var(--transition-normal);
+    }
+
+    .product-card:hover {
+      transform: translateY(-5px);
+      border-color: var(--primary-soft);
+      box-shadow: 0 18px 40px rgba(26, 60, 40, 0.22);
+    }
+
+    .product-media {
+      position: relative;
+      padding: 14px 10px 0;
+      background: linear-gradient(150deg, #fdf7ec, #edf6f0);
+    }
+
+    .product-media img {
+      max-height: 180px;
+      margin: 0 auto;
+      object-fit: contain;
+      filter: drop-shadow(0 18px 26px rgba(0,0,0,0.22));
+      transition: transform 0.4s ease;
+    }
+
+    .product-card:hover .product-media img {
+      transform: translateY(-4px);
+    }
+
+    .product-tag {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      border-radius: var(--radius-pill);
+      padding: 4px 9px;
+      background: rgba(255, 255, 255, 0.96);
+      font-size: 10px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--primary);
+      border: 1px solid rgba(38, 112, 78, 0.18);
+    }
+
+    .product-body {
+      padding: 10px 12px 13px;
+      font-size: 13px;
+    }
+
+    .product-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-bottom: 2px;
+    }
+
+    .product-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .product-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+
+    .product-price {
+      font-weight: 600;
+      color: var(--primary);
+      font-size: 13px;
+    }
+
+    .product-price span.old {
+      text-decoration: line-through;
+      color: #b2a899;
+      font-size: 11px;
+      margin-left: 4px;
+    }
+
+    .product-rating {
+      font-size: 11px;
+      color: #e1b859;
+    }
+
+    .product-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .product-footer button {
+      border: none;
+      background: transparent;
+      padding: 0;
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #4f6054;
+      cursor: pointer;
+    }
+
+    .product-footer button:hover {
+      color: var(--primary);
+    }
+
+    /* About / Ritual */
+    .about {
+      background: var(--bg-soft);
+    }
+
+    .about-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+      gap: 32px;
+      align-items: center;
+    }
+
+    @media (max-width: 900px) {
+      .about-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .about-card {
+      background: var(--bg-card);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-soft);
+      box-shadow: var(--shadow-soft);
+      padding: 22px 22px 20px;
+    }
+
+    .about-list {
+      margin-top: 12px;
+      display: grid;
+      gap: 10px;
+      font-size: 13px;
+    }
+
+    .about-item {
+      display: flex;
+      gap: 8px;
+    }
+
+    .about-bullet {
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      background: #e8f3ec;
+      border: 1px solid #d0e2d6;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      color: var(--primary);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .about-item strong {
+      display: block;
+      font-size: 13px;
+      color: var(--text-main);
+    }
+
+    .about-image-card {
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      position: relative;
+      box-shadow: var(--shadow-soft);
+      background: #ffffff;
+    }
+
+    .about-image-card img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .about-tag {
+      position: absolute;
+      top: 14px;
+      right: 16px;
+      border-radius: var(--radius-pill);
+      padding: 6px 12px;
+      background: rgba(255, 255, 255, 0.96);
+      border: 1px solid var(--border-soft);
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--primary);
+    }
+
+    /* Testimonials */
+    .testimonials {
+      background: #ffffff;
+    }
+
+    .test-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+      gap: 26px;
+      align-items: center;
+    }
+
+    @media (max-width: 900px) {
+      .test-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .test-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    @media (max-width: 650px) {
+      .test-list {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .test-card {
+      background: var(--bg-card);
+      border-radius: 16px;
+      border: 1px solid var(--border-soft);
+      padding: 13px 13px 11px;
+      font-size: 12px;
+      box-shadow: 0 10px 24px rgba(26, 60, 40, 0.12);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .test-card::before {
+      content: "“";
+      position: absolute;
+      font-family: var(--font-heading);
+      font-size: 60px;
+      color: rgba(222, 210, 192, 0.5);
+      top: -18px;
+      left: 10px;
+    }
+
+    .test-card p {
+      margin-bottom: 10px;
+      position: relative;
+      z-index: 1;
+      color: #5f675f;
+    }
+
+    .test-author {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .test-avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: #e7dfcf;
+      flex-shrink: 0;
+    }
+
+    .test-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .test-city {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .test-main {
+      background: var(--bg-card);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-soft);
+      box-shadow: var(--shadow-soft);
+      padding: 20px 18px 18px;
+      font-size: 13px;
+    }
+
+    .test-main h3 {
+      font-size: 22px;
+      margin-bottom: 6px;
+    }
+
+    .test-stars {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #e1b859;
+    }
+
+    .test-label {
+      margin-top: 8px;
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    /* Newsletter */
+    .newsletter {
+      background: var(--bg-soft);
+    }
+
+    .newsletter-inner {
+      border-radius: var(--radius-lg);
+      background: var(--bg-card);
+      border: 1px solid var(--border-soft);
+      padding: 22px 22px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+      gap: 18px;
+      align-items: center;
+      box-shadow: var(--shadow-soft);
+    }
+
+    @media (max-width: 900px) {
+      .newsletter-inner {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .newsletter-inner h3 {
+      font-size: 22px;
+      margin-bottom: 6px;
+    }
+
+    .newsletter-inner p {
+      font-size: 13px;
+      margin-bottom: 0;
+    }
+
+    .newsletter-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .newsletter-input {
+      flex: 1 1 210px;
+      min-width: 0;
+    }
+
+    .newsletter-input input {
+      width: 100%;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--border-soft);
+      padding: 9px 13px;
+      font-size: 13px;
+      outline: none;
+      background: #f7faf6;
+      color: var(--text-main);
+    }
+
+    .newsletter-input input::placeholder {
+      color: var(--text-muted);
+    }
+
+    /* Footer */
+    footer {
+      background: #f0ebe1;
+      border-top: 1px solid rgba(203, 190, 172, 0.9);
+      color: #62635d;
+      padding: 30px 0 20px;
+    }
+
+    .footer-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) repeat(3, minmax(0, 1fr));
+      gap: 24px;
+      font-size: 12px;
+      margin-bottom: 16px;
+    }
+
+    @media (max-width: 900px) {
+      .footer-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 650px) {
+      .footer-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .footer-logo {
+      font-family: var(--font-heading);
+      font-size: 20px;
+      letter-spacing: 0.26em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      color: var(--text-main);
+    }
+
+    .footer-text {
+      max-width: 260px;
+    }
+
+    .footer-col h4 {
+      margin-bottom: 10px;
+      font-size: 14px;
+      color: var(--text-main);
+    }
+
+    .footer-links li {
+      margin-bottom: 6px;
+    }
+
+    .footer-links a {
+      color: #666b64;
+      transition: color var(--transition-fast);
+    }
+
+    .footer-links a:hover {
+      color: var(--primary);
+    }
+
+    .footer-social {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .footer-social a {
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(137, 144, 133, 0.9);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      color: #3e4540;
+      background: #f6f1e7;
+      transition: background var(--transition-fast), transform var(--transition-fast), border-color var(--transition-fast);
+    }
+
+    .footer-social a:hover {
+      background: #ffffff;
+      transform: translateY(-1px);
+      border-color: var(--primary);
+    }
+
+    .footer-bottom {
+      border-top: 1px solid rgba(196, 184, 165, 0.9);
+      padding-top: 8px;
+      font-size: 11px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: space-between;
+      color: #79766d;
+    }
+
+    .footer-bottom a {
+      color: #696c64;
+    }
+
+    .footer-payments {
+      display: flex;
+      gap: 7px;
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    /* A11y */
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      border: 0;
+    }
+  </style>
+</head>
+<body>
+  <!-- Announcement -->
+  <div class="announcement">
+    100% HERBAL · NO MINERAL OIL · EXTRA 10% OFF ON FIRST ORDER – USE CODE DEVIL10
+  </div>
+
+  <!-- Header -->
+  <header>
+    <div class="container">
+      <div class="header-inner">
+        <div class="logo-block">
+          <div class="logo-main">Devilixirs</div>
+          <div class="logo-sub">HERBAL HAIR · SKIN · ALOE</div>
+        </div>
+
+        <nav aria-label="Main menu">
+          <a href="#home">Home</a>
+          <a href="#shop">Hair Oil</a>
+          <a href="#shop">Face Cleanser</a>
+          <a href="#shop">Aloe Vera</a>
+          <a href="#about">Our Story</a>
+          <a href="#contact">Contact</a>
+        </nav>
+
+        <div class="header-actions">
+          <div class="header-pill">Ayurvedic • Clean • Vegan</div>
+          <button class="icon-btn" title="Search">🔍</button>
+          <button class="icon-btn" title="Cart">🛒</button>
+          <button class="icon-btn mobile-toggle" aria-label="Toggle menu" aria-expanded="false">
+            <span></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="mobile-nav" aria-label="Mobile navigation">
+        <a href="#home">Home</a>
+        <a href="#shop">Hair Oil</a>
+        <a href="#shop">Face Cleanser</a>
+        <a href="#shop">Aloe Vera</a>
+        <a href="#about">Our Story</a>
+        <a href="#contact">Contact</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section id="home" class="hero">
+    <div class="container">
+      <div class="hero-grid">
+        <div>
+          <div class="hero-pill">
+            <span class="dot"></span> Herbal hair oil · Face cleanser · Aloe vera gel
+          </div>
+          <h1>Premium herbal rituals for hair, skin & everyday calm.</h1>
+          <p class="hero-subtext">
+            Devilixirs Herbals blends classical Ayurvedic recipes with cold-pressed oils and fresh aloe to create
+            <strong>rich, non-toxic formulas</strong> that actually work for Indian hair and skin.
+          </p>
+
+          <div class="hero-actions">
+            <a href="#shop" class="btn">Shop hair ritual</a>
+            <a href="#shop" class="btn btn-ghost">Browse full range</a>
+          </div>
+
+          <div class="hero-meta">
+            <span>Made for Indian climate & water</span>
+            <span>No silicones · No mineral oil</span>
+            <span>Dermatologist tested</span>
+          </div>
+        </div>
+
+        <div class="hero-right">
+          <div class="hero-bg"></div>
+          <div class="hero-card">
+            <div class="hero-product-media">
+              <div class="hero-label">Bestseller · Hair fall</div>
+              <!-- Replace with your product packshot -->
+              <img src="https://images.pexels.com/photos/3738341/pexels-photo-3738341.jpeg?auto=compress&cs=tinysrgb&w=900" alt="Devilixirs premium herbal hair oil bottle" loading="lazy" />
+            </div>
+            <div class="hero-product-info">
+              <h3>Royal Bhringraj Hair Oil</h3>
+              <p>
+                Non-sticky blend of Bhringraj, Amla, Fenugreek and cold-pressed Sesame & Coconut oils to reduce hair fall, strengthen roots and add a soft, healthy shine.
+              </p>
+              <div class="hero-tags">
+                <span>Hair fall</span>
+                <span>Scalp health</span>
+                <span>Mineral-oil free</span>
+              </div>
+              <div class="hero-price-row">
+                <div>
+                  <strong>₹749</strong><span class="old">₹899</span>
+                </div>
+                <div class="hero-review">★ 4.8 · 1,900+ reviews</div>
+              </div>
+              <div class="hero-badge-small">
+                Free neem wooden comb on all hair oil orders this month.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Categories -->
+  <section class="categories">
+    <div class="container">
+      <div class="cat-row">
+        <div class="cat-card">
+          <div class="cat-icon">🧴</div>
+          <div>
+            <strong>Herbal Hair Oils</strong>
+            <span class="sub">Hair fall · Dandruff · Growth</span>
+          </div>
+        </div>
+        <div class="cat-card">
+          <div class="cat-icon">🫧</div>
+          <div>
+            <strong>Face Cleansers</strong>
+            <span class="sub">Acne · Glow · Sensitive</span>
+          </div>
+        </div>
+        <div class="cat-card">
+          <div class="cat-icon">🌿</div>
+          <div>
+            <strong>Aloe Vera Gels</strong>
+            <span class="sub">Face · Body · Scalp</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Shop -->
+  <section id="shop" class="shop">
+    <div class="container">
+      <div class="shop-header">
+        <div class="section-heading" style="text-align:left;margin-bottom:0;">
+          <div class="eyebrow">Shop the ritual</div>
+          <h2>Hair oil, face cleanser & aloe – in one clean system.</h2>
+          <p>
+            Build a simple ritual that fits your routine: oil, cleanse, soothe. Designed for Indian hair, hard water and real-life schedules.
+          </p>
+        </div>
+        <div class="tabs">
+          <button class="tab active" type="button">All</button>
+          <button class="tab" type="button">Hair oils</button>
+          <button class="tab" type="button">Face cleansers</button>
+          <button class="tab" type="button">Aloe vera</button>
+        </div>
+      </div>
+
+      <div class="shop-grid">
+        <!-- Hair Oil 1 -->
+        <article class="product-card">
+          <div class="product-media">
+            <span class="product-tag">Hair fall</span>
+            <img src="https://images.pexels.com/photos/3738342/pexels-photo-3738342.jpeg?auto=compress&cs=tinysrgb&w=900" alt="Herbal hair oil bottle" loading="lazy" />
+          </div>
+          <div class="product-body">
+            <div class="product-title">Royal Bhringraj Hair Oil</div>
+            <div class="product-sub">Bhringraj · Amla · Fenugreek</div>
+            <div class="product-meta">
+              <div class="product-price">₹749 <span class="old">₹899</span></div>
+              <div class="product-rating">★★★★★</div>
+            </div>
+            <div class="product-footer">
+              <button type="button">View product</button>
+              <span>Free wooden comb</span>
+            </div>
+          </div>
+        </article>
+
+        <!-- Hair Oil 2 -->
+        <article class="product-card">
+          <div class="product-media">
+            <span class="product-tag">Dandruff</span>
+            <img src="https://images.pexels.com/photos/3738343/pexels-photo-3738343.jpeg?auto=compress&cs=tinysrgb&w=900" alt="Anti-dandruff herbal hair oil" loading="lazy" />
+          </div>
+          <div class="product-body">
+            <div class="product-title">Neem Calm Scalp Oil</div>
+            <div class="product-sub">Neem · Tea tree · Rosemary</div>
+            <div class="product-meta">
+              <div class="product-price">₹689 <span class="old">₹820</span></div>
+              <div class="product-rating">★★★★☆</div>
+            </div>
+            <div class="product-footer">
+              <button type="button">View product</button>
+              <span>Controls flakes</span>
+            </div>
+          </div>
+        </article>
+
+        <!-- Face Cleanser 1 -->
+        <article class="product-card">
+          <div class="product-media">
+            <span class="product-tag">Face cleanser</span>
+            <img src="https://images.pexels.com/photos/3738340/pexels-photo-3738340.jpeg?auto=compress&cs=tinysrgb&w=900" alt="Herbal face cleanser bottle" loading="lazy" />
+          </div>
+          <div class="product-body">
+            <div class="product-title">Neem & Tulsi Face Cleanser</div>
+            <div class="product-sub">Soap-free · pH balanced</div>
+            <div class="product-meta">
+              <div class="product-price">₹449 <span class="old">₹520</span></div>
+              <div class="product-rating">★★★★☆</div>
+            </div>
+            <div class="product-footer">
+              <button type="button">View product</button>
+              <span>For oily / acne skin</span>
+            </div>
+          </div>
+        </article>
+
+        <!-- Face Cleanser 2 -->
+        <article class="product-card">
+          <div class="product-media">
+            <span class="product-tag">Glow</span>
+            <img src="https://images.pexels.com/photos/3738344/pexels-photo-3738344.jpeg?auto=compress&cs=tinysrgb&w=900" alt="Brightening herbal face cleanser" loading="lazy" />
+          </div>
+          <div class="product-body">
+            <div class="product-title">Saffron Glow Face Wash</div>
+            <div class="product-sub">Kesar · Licorice · Aloe</div>
+            <div class="product-meta">
+              <div class="product-price">₹520 <span class="old">₹599</span></div>
+              <div class="product-rating">★★★★★</div>
+            </div>
+            <div class="product-footer">
+              <button type="button">View product</button>
+              <span>For dull skin</span>
+            </div>
+          </div>
+        </article>
+
+        <!-- Aloe 1 -->
+        <article class="product-card">
+          <div class="product-media">
+            <span class="product-tag">Aloe gel</span>
+            <img src="https://images.pexels.com/photos/3738346/pexels-photo-3738346.jpeg?auto=compress&cs=tinysrgb&w=900" alt="Jar of herbal aloe vera gel" loading="lazy" />
+          </div>
+          <div class="product-body">
+            <div class="product-title">Pure Aloe Skin Gel</div>
+            <div class="product-sub">Fresh aloe · 0% added colour</div>
+            <div class="product-meta">
+              <div class="product-price">₹399 <span class="old">₹450</span></div>
+              <div class="product-rating">★★★★☆</div>
+            </div>
+            <div class="product-footer">
+              <button type="button">View product</button>
+              <span>Face, body & scalp</span>
+            </div>
+          </div>
+        </article>
+
+        <!-- Combo -->
+        <article class="product-card">
+          <div class="product-media">
+            <span class="product-tag">Combo</span>
+            <img src="https://images.pexels.com/photos/3738345/pexels-photo-3738345.jpeg?auto=compress&cs=tinysrgb&w=900" alt="Combo of herbal products" loading="lazy" />
+          </div>
+          <div class="product-body">
+            <div class="product-title">Complete Hair & Glow Ritual</div>
+            <div class="product-sub">Hair oil + Cleanser + Aloe</div>
+            <div class="product-meta">
+              <div class="product-price">₹1,799 <span class="old">₹2,097</span></div>
+              <div class="product-rating">★★★★★</div>
+            </div>
+            <div class="product-footer">
+              <button type="button">View product</button>
+              <span>Perfect for gifting</span>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- About / Story -->
+  <section id="about" class="about">
+    <div class="container">
+      <div class="about-grid">
+        <div class="about-card">
+          <div class="eyebrow">Our story</div>
+          <h2>Herbal formulas your nani approves, in packaging your Instagram loves.</h2>
+          <p>
+            Devilixirs was born from one simple thought: herbal products shouldn’t look or feel “compromise”. We marry traditional recipes with modern textures and premium packaging.
+          </p>
+          <div class="about-list">
+            <div class="about-item">
+              <div class="about-bullet">1</div>
+              <div>
+                <strong>Real herbs, not just fragrance.</strong>
+                <span>Bhringraj, Amla, Neem, Aloe, Tulsi & more in meaningful percentages – not just a drop for marketing.</span>
+              </div>
+            </div>
+            <div class="about-item">
+              <div class="about-bullet">2</div>
+              <div>
+                <strong>Clean, non-heavy bases.</strong>
+                <span>Cold-pressed oils, mild coconut-based cleansers and 0% mineral oil or drying alcohols.</span>
+              </div>
+            </div>
+            <div class="about-item">
+              <div class="about-bullet">3</div>
+              <div>
+                <strong>Rich, gift-worthy packaging.</strong>
+                <span>Matte bottles, thoughtful labels and neat boxes that feel premium on bathroom shelves or hampers.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="about-image-card">
+          <!-- Replace with your own brand / studio / ingredients shot -->
+          <img src="https://images.pexels.com/photos/3738347/pexels-photo-3738347.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Herbal products with natural ingredients on table" loading="lazy" />
+          <div class="about-tag">Made in India · Small batches</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Testimonials -->
+  <section class="testimonials">
+    <div class="container">
+      <div class="section-heading" style="text-align:left;margin-bottom:22px;">
+        <div class="eyebrow">Results</div>
+        <h2>What Devilixirs lovers say.</h2>
+        <p>
+          From post-partum hair fall to sensitive, acne-prone skin – people switched from “chemical” products to herbal and stayed for the calm, visible results.
+        </p>
+      </div>
+
+      <div class="test-grid">
+        <div class="test-list">
+          <article class="test-card">
+            <p>
+              “I’ve tried so many hair oils – this is the first one that feels rich, washes out easily and actually reduced hair fall in 2 months.”
+            </p>
+            <div class="test-author">
+              <div class="test-avatar">
+                <img src="https://images.pexels.com/photos/3760852/pexels-photo-3760852.jpeg?auto=compress&cs=tinysrgb&w=400" alt="Customer" loading="lazy" />
+              </div>
+              <div>
+                <div class="test-name">Sneha K.</div>
+                <div class="test-city">Chennai</div>
+              </div>
+            </div>
+          </article>
+
+          <article class="test-card">
+            <p>
+              “Neem Calm oil + aloe gel fixed my itchy scalp and razor irritation. Looks like a luxury brand, but ingredients are properly herbal.”
+            </p>
+            <div class="test-author">
+              <div class="test-avatar">
+                <img src="https://images.pexels.com/photos/2036646/pexels-photo-2036646.jpeg?auto=compress&cs=tinysrgb&w=400" alt="Customer" loading="lazy" />
+              </div>
+              <div>
+                <div class="test-name">Karthik V.</div>
+                <div class="test-city">Bengaluru</div>
+              </div>
+            </div>
+          </article>
+
+          <article class="test-card">
+            <p>
+              “The saffron face wash and aloe combo gives a calm glow without heavy cream. My skin feels soft, not oily.”
+            </p>
+            <div class="test-author">
+              <div class="test-avatar">
+                <img src="https://images.pexels.com/photos/415829/pexels-photo-415829.jpeg?auto=compress&cs=tinysrgb&w=400" alt="Customer" loading="lazy" />
+              </div>
+              <div>
+                <div class="test-name">Zoya A.</div>
+                <div class="test-city">Hyderabad</div>
+              </div>
+            </div>
+          </article>
+
+          <article class="test-card">
+            <p>
+              “I wanted herbal formulas but not local packaging. Devilixirs finally feels like something I can proudly gift.”
+            </p>
+            <div class="test-author">
+              <div class="test-avatar">
+                <img src="https://images.pexels.com/photos/1181519/pexels-photo-1181519.jpeg?auto=compress&cs=tinysrgb&w=400" alt="Customer" loading="lazy" />
+              </div>
+              <div>
+                <div class="test-name">Rahul M.</div>
+                <div class="test-city">Pune</div>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <article class="test-main">
+          <h3>93% users saw healthier hair & calmer skin in 12 weeks.</h3>
+          <p>
+            In our internal study, people using the Devilixirs hair oil + face cleanser + aloe ritual thrice a week reported reduced hair fall, less scalp itchiness and better skin comfort – without heavy, sticky feel.
+          </p>
+          <div class="test-stars">★★★★★ Overall experience</div>
+          <div class="test-label">Herbal formulas · Luxury experience</div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- Newsletter -->
+  <section class="newsletter">
+    <div class="container">
+      <div class="newsletter-inner">
+        <div>
+          <h3>Get early access to new herbal drops.</h3>
+          <p>
+            Join the Devilixirs email list for launch offers, ritual guides and stockist updates. Only useful mails – no spam.
+          </p>
+        </div>
+
+        <form class="newsletter-form" action="#" method="post">
+          <div class="newsletter-input">
+            <label for="newsletter-email" class="sr-only">Email address</label>
+            <input id="newsletter-email" type="email" name="email" placeholder="Enter your email address" required />
+          </div>
+          <button type="submit" class="btn">Get 10% off</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer id="contact">
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <div class="footer-logo">Devilixirs</div>
+          <div class="footer-text">
+            Premium herbal hair oil, face cleanser and aloe vera gel – crafted with Ayurvedic wisdom and finished with a clean, modern luxury look.
+          </div>
+          <div class="footer-social">
+            <a href="#" aria-label="Instagram">IG</a>
+            <a href="#" aria-label="YouTube">YT</a>
+            <a href="#" aria-label="Facebook">FB</a>
+          </div>
+        </div>
+
+        <div class="footer-col">
+          <h4>Shop</h4>
+          <ul class="footer-links">
+            <li><a href="#shop">All products</a></li>
+            <li><a href="#shop">Hair oils</a></li>
+            <li><a href="#shop">Face cleansers</a></li>
+            <li><a href="#shop">Aloe vera gels</a></li>
+            <li><a href="#shop">Combos & kits</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h4>Support</h4>
+          <ul class="footer-links">
+            <li><a href="#">Track order</a></li>
+            <li><a href="#">Shipping & returns</a></li>
+            <li><a href="#">FAQs</a></li>
+            <li><a href="#contact">Contact us</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h4>Contact</h4>
+          <ul class="footer-links">
+            <li>Email: hello@devilixirs.com</li>
+            <li>WhatsApp: +91-90000-00000</li>
+            <li>Mon–Sat: 10 AM – 7 PM IST</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <div>© <span id="year"></span> Devilixirs Herbals. All rights reserved.</div>
+        <div><a href="#">Privacy</a> • <a href="#">Terms</a></div>
+        <div class="footer-payments">
+          <span>UPI</span><span>Rupay</span><span>Visa</span><span>Mastercard</span>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // year
+    document.getElementById("year").textContent = new Date().getFullYear();
+
+    // mobile menu
+    const toggle = document.querySelector(".mobile-toggle");
+    const mobileNav = document.querySelector(".mobile-nav");
+    if (toggle && mobileNav) {
+      toggle.addEventListener("click", () => {
+        const isOpen = mobileNav.classList.toggle("open");
+        toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      });
+    }
+  </script>
+</body>
+</html>

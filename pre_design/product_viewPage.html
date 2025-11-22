@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Devilixirs – Product Detail</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Google Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+
+  <style>
+ :root{
+  --primary:#D4AF37;
+  --primary-dark:#B89026;
+  --body-bg:#B5B5B5;
+  --berry:#A41B42;
+  --highlight:#3B502C;
+
+  --text:#1a1a1a;
+  --muted:#777777;
+  --border:#e1e1e1;
+  --card-bg:#ffffff;
+}
+
+*{
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+}
+
+html, body{
+  font-family:"Poppins",sans-serif;
+  color:var(--text);
+  background:#dadada00;
+  overflow-x:hidden;
+}
+
+a{ color:inherit; text-decoration:none; }
+img{ max-width:100%; display:block; }
+ul{ list-style:none; }
+
+.container{
+  max-width:1200px;
+  margin:0 auto;
+  padding:0 15px;
+}
+
+/* ================= HEADER ================= */
+.top-bar{
+  background:var(--primary-dark);
+  color:#fff;
+  font-size:12px;
+}
+.top-bar-inner{
+  max-width:1200px;
+  margin:0 auto;
+  padding:8px 15px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+.top-left span{
+  margin-right:16px;
+  cursor:pointer;
+}
+.top-left i{
+  font-size:10px;
+  margin-left:4px;
+}
+.top-right{
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+.top-right .social a{
+  margin-right:6px;
+  opacity:.9;
+}
+.top-right .social a:hover{
+  opacity:1;
+}
+
+header.header{
+  background:#ffffff;
+  border-bottom:1px solid var(--border);
+}
+.header-inner{
+  max-width:1200px;
+  margin:0 auto;
+  padding:18px 15px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:30px;
+}
+.logo img{
+  height:60px;
+}
+
+.search-box{
+  flex:1;
+  max-width:450px;
+  display:flex;
+  border-radius:999px;
+  overflow:hidden;
+  border:1px solid var(--border);
+  background:#fafafa;
+}
+.search-input{
+  flex:1;
+  border:none;
+  padding:10px 14px;
+  font-size:13px;
+  background:transparent;
+  outline:none;
+}
+.search-button{
+  min-width:46px;
+  border:none;
+  background:var(--primary);
+  color:#fff;
+  cursor:pointer;
+  font-size:15px;
+}
+.search-button:hover{
+  background:var(--primary-dark);
+}
+
+.header-icons{
+  display:flex;
+  align-items:center;
+  gap:16px;
+  font-size:14px;
+}
+.header-icons .icon-btn{
+  cursor:pointer;
+  position:relative;
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.cart-count{
+  position:absolute;
+  top:-5px;
+  right:-8px;
+  background:#000;
+  color:#fff;
+  font-size:10px;
+  border-radius:999px;
+  width:16px;
+  height:16px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+/* ================= NAV ================= */
+nav.nav{
+  background:var(--primary);
+  color:#fff;
+}
+.nav-inner{
+  max-width:1200px;
+  margin:0 auto;
+  padding:0 15px;
+}
+.nav-list{
+  display:flex;
+  align-items:center;
+  gap:32px;
+  font-size:13px;
+}
+.nav-list > li{
+  padding:14px 0;
+  position:relative;
+  cursor:pointer;
+}
+.nav-list > li.active{
+  font-weight:600;
+  border-bottom:3px solid #fff;
+}
+
+/* ============== HERO / BREADCRUMB ============== */
+.product-hero{
+  background:url("https://images.pexels.com/photos/3738344/pexels-photo-3738344.jpeg?auto=compress&cs=tinysrgb&w=1600")
+             center/cover no-repeat;
+  position:relative;
+  margin-bottom:40px;
+}
+.product-hero::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:rgba(0,0,0,.45);
+}
+.product-hero-inner{
+  position:relative;
+  z-index:1;
+  padding:60px 15px 70px;
+  max-width:900px;
+  margin:0 auto;
+  text-align:center;
+  color:#fff;
+}
+.product-hero h1{
+  font-size:32px;
+  margin-bottom:10px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.breadcrumb{
+  font-size:13px;
+}
+.breadcrumb a{
+  color:#ffffff;
+  opacity:.85;
+}
+.breadcrumb span{
+  margin:0 4px;
+}
+.breadcrumb a:hover{
+  opacity:1;
+}
+
+.hero-cats{
+  margin-top:16px;
+  display:flex;
+  justify-content:center;
+  flex-wrap:wrap;
+  gap:20px;
+  font-size:12px;
+}
+.hero-cat{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  opacity:.9;
+}
+.hero-cat i{
+  font-size:18px;
+}
+.hero-cat small{
+  display:block;
+  font-size:10px;
+  opacity:.8;
+}
+
+/* ============== MAIN PRODUCT SECTION ============== */
+.page-wrap{
+  max-width:1200px;
+  margin:0 auto 60px;
+  padding:0 15px;
+  display:grid;
+  grid-template-columns:3fr 2fr;
+  gap:40px;
+}
+
+.product-media{
+  background:#fff;
+  border:1px solid var(--border);
+  padding:18px;
+}
+.product-main-image{
+  border:1px solid var(--border);
+  background:#fafafa;
+}
+.product-main-image img{
+  width:100%;
+  height:430px;
+  object-fit:cover;
+}
+
+.thumb-row{
+  margin-top:12px;
+  display:flex;
+  gap:10px;
+}
+.thumb-item{
+  flex:1;
+  border:1px solid var(--border);
+  background:#fafafa;
+  cursor:pointer;
+}
+.thumb-item img{
+  height:90px;
+  object-fit:cover;
+  width:100%;
+}
+
+.product-summary{
+  background:#fff;
+  border:1px solid var(--border);
+  padding:22px 24px 24px;
+}
+.product-title{
+  font-size:20px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  margin-bottom:10px;
+}
+.product-meta{
+  font-size:12px;
+  color:var(--muted);
+  margin-bottom:10px;
+}
+
+.rating-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size:12px;
+  margin-bottom:8px;
+}
+.rating-stars{
+  color:#ffb400;
+  font-size:11px;
+}
+
+.stock{
+  font-size:12px;
+  margin-bottom:12px;
+}
+
+.price{
+  font-size:22px;
+  font-weight:700;
+  color:var(--berry);
+  margin-bottom:16px;
+}
+
+.short-desc{
+  font-size:13px;
+  color:var(--muted);
+  line-height:1.7;
+  margin-bottom:16px;
+  border-top:1px solid var(--border);
+  padding-top:16px;
+}
+
+.option-label{
+  font-size:13px;
+  margin-bottom:6px;
+  font-weight:500;
+}
+
+.color-options{
+  display:flex;
+  gap:8px;
+  margin-bottom:14px;
+}
+.color-dot{
+  width:22px;
+  height:22px;
+  border-radius:50%;
+  border:2px solid transparent;
+  cursor:pointer;
+}
+.color-dot.gold{ background:#d8a74b; }
+.color-dot.tan{ background:#d3b694; }
+.color-dot.blue{ background:#2f4f90; }
+.color-dot.active{
+  border-color:#000;
+}
+
+.size-options{
+  display:flex;
+  gap:8px;
+  margin-bottom:16px;
+}
+.size-btn{
+  min-width:36px;
+  padding:6px 10px;
+  border:1px solid var(--border);
+  background:#fff;
+  font-size:12px;
+  cursor:pointer;
+}
+.size-btn.active{
+  border-color:var(--highlight);
+  color:var(--highlight);
+}
+
+.icon-options{
+  display:flex;
+  gap:8px;
+  margin-bottom:18px;
+  font-size:12px;
+}
+.icon-options span{
+  width:32px;
+  height:32px;
+  border-radius:50%;
+  border:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  background:#fff;
+}
+
+.quantity-row{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  margin-top:10px;
+}
+.qty-label{
+  font-weight:600;
+  font-size:13px;
+}
+.qty-box{
+  display:flex;
+  align-items:center;
+  border:1px solid var(--border);
+  font-size:13px;
+}
+.qty-btn{
+  width:26px;
+  height:32px;
+  border:none;
+  background:#f3f3f3;
+  cursor:pointer;
+}
+.qty-input{
+  width:40px;
+  border:none;
+  text-align:center;
+  outline:none;
+}
+
+.btn-add-cart{
+  margin-left:10px;
+  padding:10px 32px;
+  border:none;
+  background:var(--berry);
+  color:#fff;
+  font-size:13px;
+  text-transform:uppercase;
+  letter-spacing:.12em;
+  cursor:pointer;
+}
+.btn-add-cart:hover{
+  background:#832238;
+}
+
+.share-row{
+  margin-top:22px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  font-size:12px;
+  align-items:center;
+}
+.share-row span.label{
+  font-weight:500;
+}
+.share-btn{
+  padding:6px 12px;
+  border:1px solid var(--border);
+  border-radius:999px;
+  background:#fff;
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+}
+
+/* ============== DESCRIPTION TABS & SIDEBAR ============== */
+/* ============== DESCRIPTION TABS & SIDEBAR ============== */
+.tabs-area{
+    max-width:1200px;
+    margin:0 auto 50px;
+    padding:0 15px;
+    display:grid;
+    grid-template-columns:3fr 1.4fr;
+    gap:30px;
+}
+.tabs-card{
+    background:#fff;
+    border:1px solid var(--border);
+    overflow:hidden;
+}
+.tabs-header{
+    display:flex;
+    border-bottom:1px solid var(--border);
+    background:#f8f8f8;
+    overflow-x:auto;
+    overflow-y:hidden;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+}
+.tabs-header::-webkit-scrollbar{
+    display:none;
+}
+.tab-item{
+    padding:12px 20px;
+    font-size:13px;
+    font-weight:500;
+    letter-spacing:.08em;
+    transition:all .25s ease;
+    cursor:pointer;
+    white-space:nowrap;
+    flex-shrink:0;
+}
+.tab-item:hover{
+    background:#ffffff;
+    color:var(--primary-dark);
+}
+.tab-item.active{
+    background:#fff;
+    border-bottom:2px solid var(--highlight);
+    color:var(--highlight);
+    font-weight:600;
+}
+/* TAB PANES */
+.tab-contents {
+  padding: 24px 26px;
+  background: #fff;
+}
+
+.tab-pane{
+  display:none;
+  animation: fadeIn .35s ease;
+}
+.tab-pane.active{
+  display:block;
+}
+
+.tab-pane h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--highlight);
+  margin-bottom: 12px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.tab-pane p {
+  font-size: 14px;
+  line-height: 1.8;
+  color: #555;
+  margin-bottom: 12px;
+}
+
+.tabs-list{
+  margin-top:10px;
+  font-size:13px;
+  padding-left:22px;
+}
+.tabs-list li{
+  margin-bottom:6px;
+  font-size:14px;
+  line-height:1.8;
+}
+
+@keyframes fadeIn {
+  from { opacity:0; transform:translateY(6px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+/* Right column (tags + banner) */
+.right-sidebar{
+  display:flex;
+  flex-direction:column;
+  gap:20px;
+}
+.tags-card{
+  background:#fff;
+  border:1px solid var(--border);
+  padding:16px 18px 18px;
+  font-size:13px;
+}
+.tags-title{
+  text-transform:uppercase;
+  font-size:12px;
+  margin-bottom:10px;
+  font-weight:600;
+}
+.tag-chip{
+  display:inline-block;
+  padding:4px 10px;
+  background:#f2f2f2;
+  border-radius:999px;
+  margin:0 6px 8px 0;
+  font-size:11px;
+  cursor:default;
+}
+.tag-chip:hover{
+  background:var(--primary);
+  color:#fff;
+}
+.side-banner{
+  background:#fff;
+  border:1px solid var(--border);
+}
+.side-banner img{
+  width:100%;
+  height:220px;
+  object-fit:cover;
+}
+.side-banner-txt{
+  padding:14px 16px 16px;
+  font-size:13px;
+}
+.side-banner-txt h4{
+  margin-bottom:4px;
+  font-size:15px;
+}
+.side-banner-txt span{
+  color:var(--muted);
+  font-size:12px;
+}
+
+/* REVIEWS FORM */
+.review-form h3{
+  margin:0 0 10px;
+  font-size:18px;
+  font-weight:600;
+  color:#333;
+}
+.review-form p{
+  margin:0 0 12px;
+  font-size:13px;
+  color:#777;
+}
+.form-row{
+  margin-bottom:14px;
+}
+.form-row.half{
+  display:flex;
+  gap:16px;
+}
+.form-row label{
+  display:block;
+  margin-bottom:4px;
+  font-size:13px;
+}
+textarea,
+input[type="text"],
+input[type="email"]{
+  width:100%;
+  padding:8px 10px;
+  border:1px solid #ddd;
+  font-size:13px;
+  outline:none;
+}
+textarea:focus,
+input:focus{
+  border-color:#e74c3c;
+}
+.rating-input{
+  direction:rtl;
+  display:inline-flex;
+  gap:4px;
+}
+.rating-input input{ display:none; }
+.rating-input label{
+  font-size:18px;
+  color:#ccc;
+  cursor:pointer;
+}
+.rating-input input:checked ~ label,
+.rating-input label:hover,
+.rating-input label:hover ~ label{
+  color:#f1c40f;
+}
+.btn-submit-review{
+  border:none;
+  background:#e74c3c;
+  color:#fff;
+  padding:10px 22px;
+  text-transform:uppercase;
+  font-size:12px;
+  letter-spacing:.08em;
+  cursor:pointer;
+}
+.btn-submit-review:hover{
+  background:#c0392b;
+}
+
+/* ============== BRAND STRIP & FOOTER ============== */
+.brand-strip{
+  background:#333;
+  padding:24px 0;
+}
+.brand-strip-inner{
+  max-width:1200px;
+  margin:0 auto;
+  padding:0 15px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:30px;
+  color:#bbbbbb;
+  font-size:12px;
+  text-transform:uppercase;
+}
+
+.footer{
+  background:#111;
+  color:#ddd;
+  padding:40px 0 0;
+}
+.footer-inner{
+  max-width:1200px;
+  margin:0 auto;
+  padding:0 15px 30px;
+  display:grid;
+  grid-template-columns:1.6fr 1.2fr 1.2fr 1.4fr;
+  gap:30px;
+  font-size:12px;
+}
+.footer-title{
+  font-size:13px;
+  text-transform:uppercase;
+  margin-bottom:14px;
+}
+.footer-links li{
+  margin-bottom:6px;
+  color:#bfbfbf;
+  cursor:pointer;
+}
+.footer-links li:hover{
+  color:#fff;
+}
+.footer-bottom{
+  border-top:1px solid #222;
+  padding:14px 15px 18px;
+  max-width:1200px;
+  margin:0 auto;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  font-size:11px;
+  color:#bfbfbf;
+}
+.footer-payments{
+  display:flex;
+  gap:6px;
+}
+.footer-payments span{
+  background:#222;
+  padding:4px 7px;
+  border-radius:2px;
+}
+
+/* Back to top */
+.back-top{
+  position:fixed;
+  right:20px;
+  bottom:20px;
+  width:40px;
+  height:40px;
+  border-radius:50%;
+  background:var(--berry);
+  color:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  font-size:18px;
+  box-shadow:0 3px 10px rgba(0,0,0,.25);
+}
+
+/* ============== RESPONSIVE ============== */
+@media(max-width:992px){
+  .page-wrap{
+    grid-template-columns:1.6fr 1.6fr;
+  }
+  .tabs-area{
+    grid-template-columns:1.6fr 1.4fr;
+  }
+  .footer-inner{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+
+@media(max-width:768px){
+  .header-inner{
+    flex-direction:column;
+    align-items:flex-start;
+    gap:10px;
+  }
+  .nav-list{
+    overflow-x:auto;
+  }
+  .page-wrap{
+    grid-template-columns:1fr;
+  }
+  .tabs-area{
+    grid-template-columns:1fr;
+  }
+
+  /* ✅ FIXED: mobile tabs horizontal scroll */
+  .tabs-header{
+    display: flex;
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+    scrollbar-width: none;
+  }
+
+  .tabs-header::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab-item{
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 12px 18px;
+    min-width: auto;
+  }
+
+  .form-row.half{
+    flex-direction:column;
+  }
+}
+
+@media(max-width:576px){
+  .hero-cats{
+    gap:14px;
+  }
+  .footer-inner{
+    grid-template-columns:1fr;
+  }
+}
+
+
+  </style>
+</head>
+<body>
+
+  <!-- TOP BAR -->
+  <div class="top-bar">
+    <div class="top-bar-inner">
+      <div class="top-left">
+        <span>USD <i class="fa-solid fa-caret-down"></i></span>
+        <span>ENGLISH <i class="fa-solid fa-caret-down"></i></span>
+      </div>
+      <div class="top-right">
+        <div class="social">
+          <a href="#"><i class="fab fa-facebook-f"></i></a>
+          <a href="#"><i class="fab fa-instagram"></i></a>
+          <a href="#"><i class="fab fa-twitter"></i></a>
+        </div>
+        <a href="#">Login / Register</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <a href="index.html">
+          <img src="logo.png" alt="Devilixirs Logo">
+        </a>
+      </div>
+
+      <form class="search-box">
+        <input class="search-input" type="text" placeholder="Search products…" />
+        <button class="search-button" type="submit">
+          <i class="fa-solid fa-magnifying-glass"></i>
+        </button>
+      </form>
+
+      <div class="header-icons">
+        <div class="icon-btn">
+          <i class="fa-regular fa-heart"></i>
+        </div>
+        <div class="icon-btn">
+          <i class="fa-solid fa-bag-shopping"></i>
+          <span class="cart-count">0</span>
+          <span>₹0.00</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- NAV -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <ul class="nav-list">
+        <li>Home</li>
+        <li class="active">Shop</li>
+        <li>Blog</li>
+        <li>Pages</li>
+        <li>Portfolios</li>
+        <li>Elements</li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- HERO / BREADCRUMB -->
+  <section class="product-hero">
+    <div class="product-hero-inner">
+      <h1>Dlorem Ipsum</h1>
+      <div class="breadcrumb">
+        <a href="#">Home</a><span>&rsaquo;</span>
+        <a href="#">Home20</a><span>&rsaquo;</span>
+        <span>Dlorem Ipsum</span>
+      </div>
+
+      <div class="hero-cats">
+        <div class="hero-cat"><i class="fa-solid fa-bag-shopping"></i> <span>Clutches <small>(13)</small></span></div>
+        <div class="hero-cat"><i class="fa-solid fa-plug-circle-bolt"></i> <span>Electronic <small>(14)</small></span></div>
+        <div class="hero-cat"><i class="fa-solid fa-leaf"></i> <span>Health &amp; Beauty <small>(11)</small></span></div>
+        <div class="hero-cat"><i class="fa-solid fa-yarn"></i> <span>House <small>(22)</small></span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MAIN PRODUCT SECTION -->
+  <section class="page-wrap">
+    <!-- LEFT: IMAGES -->
+    <div class="product-media">
+      <div class="product-main-image">
+        <img src="https://images.pexels.com/photos/3738337/pexels-photo-3738337.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Basket product">
+      </div>
+      <div class="thumb-row">
+        <div class="thumb-item">
+          <img src="https://images.pexels.com/photos/3738336/pexels-photo-3738336.jpeg?auto=compress&cs=tinysrgb&w=400" alt="">
+        </div>
+        <div class="thumb-item">
+          <img src="https://images.pexels.com/photos/3738335/pexels-photo-3738335.jpeg?auto=compress&cs=tinysrgb&w=400" alt="">
+        </div>
+        <div class="thumb-item">
+          <img src="https://images.pexels.com/photos/3738338/pexels-photo-3738338.jpeg?auto=compress&cs=tinysrgb&w=400" alt="">
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: SUMMARY -->
+    <div class="product-summary">
+      <h2 class="product-title">Dlorem Ipsum</h2>
+
+      <div class="product-meta">
+        <span><i class="fa-regular fa-pen-to-square"></i> 1 Review</span>
+      </div>
+
+      <div class="rating-row">
+        <div class="rating-stars">
+          ★★★★★
+        </div>
+        <span>(Rated 5.0)</span>
+      </div>
+
+      <div class="stock">In Stock</div>
+
+      <div class="price">$111.00 – $113.00</div>
+
+      <div class="short-desc">
+        Lorem ipsum dolor sit amet, feugiat delicata liberavisse id cum, no quo maiorum
+        intelegat, liber regione eu sit. Mea cu case ludus integre, vide viderer eleifend ex
+        mea. His at soluta regione dicere, cum et atqui placerat petentium.
+      </div>
+
+      <!-- Color -->
+      <div>
+        <div class="option-label">Color</div>
+        <div class="color-options">
+          <div class="color-dot gold active"></div>
+          <div class="color-dot tan"></div>
+          <div class="color-dot blue"></div>
+        </div>
+      </div>
+
+      <!-- Size -->
+      <div>
+        <div class="option-label">Size</div>
+        <div class="size-options">
+          <button class="size-btn">L</button>
+          <button class="size-btn active">M</button>
+          <button class="size-btn">S</button>
+        </div>
+      </div>
+
+      <!-- Icons -->
+      <div>
+        <div class="option-label">Style Icons</div>
+        <div class="icon-options">
+          <span><i class="fa-solid fa-paw"></i></span>
+          <span><i class="fa-regular fa-circle"></i></span>
+          <span><i class="fa-solid fa-sun"></i></span>
+          <span><i class="fa-solid fa-moon"></i></span>
+        </div>
+      </div>
+
+      <!-- Quantity + Add to cart -->
+      <div class="quantity-row">
+        <span class="qty-label">Quantity</span>
+        <div class="qty-box">
+          <button class="qty-btn">−</button>
+          <input class="qty-input" type="text" value="1">
+          <button class="qty-btn">+</button>
+        </div>
+        <button class="btn-add-cart">
+          <i class="fa-solid fa-bag-shopping"></i> &nbsp;Add To Cart
+        </button>
+      </div>
+
+      <!-- Share -->
+      <div class="share-row">
+        <span class="label">Share:</span>
+        <button class="share-btn"><i class="fa-brands fa-x-twitter"></i> Tweet</button>
+        <button class="share-btn"><i class="fa-brands fa-facebook-f"></i> Share</button>
+        <button class="share-btn"><i class="fa-brands fa-google-plus-g"></i> Google+</button>
+        <button class="share-btn"><i class="fa-brands fa-pinterest-p"></i> Pinterest</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- DESCRIPTION / TABS & SIDEBAR -->
+  <section class="tabs-area">
+    <!-- Tabs -->
+    <div class="tabs-card">
+
+      <div class="tabs-header">
+        <div class="tab-item active" data-tab="desc">Description</div>
+        <div class="tab-item" data-tab="ing">Ingredients</div>
+        <div class="tab-item" data-tab="use">How to use</div>
+        <div class="tab-item" data-tab="why">Why we choose us</div>
+        <div class="tab-item" data-tab="reviews">Reviews</div>
+      </div>
+
+      <div class="tab-contents">
+        <!-- DESCRIPTION -->
+        <div class="tab-pane active" id="tab-desc">
+          <h3>Description</h3>
+          <p>
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Etiam nibh ligula, faucibus sit amet aliquet ac,
+            molestie a massa. Fusce vitae feugiat enim, id fermentum magna. Aenean convallis egestas massa ac rhoncus.
+          </p>
+          <p>
+            Integer iaculis et erat id auctor. Vivamus porta, mi a porttitor imperdiet, purus metus tempus elit, ut dictum
+            mauris dui a tellus. Integer at ipsum sit amet sem vulputate ultricies in vel orci.
+          </p>
+          <ul class="tabs-list">
+            <li>✔ Hand–woven structure with soft lining.</li>
+            <li>✔ Available in three elegant colorways.</li>
+            <li>✔ Perfect for living room storage or gifting.</li>
+          </ul>
+        </div>
+
+        <!-- INGREDIENTS -->
+        <div class="tab-pane" id="tab-ing">
+          <h3>Ingredients</h3>
+          <ul class="tabs-list">
+            <li>✔ Coconut Oil</li>
+            <li>✔ Aloe Vera</li>
+            <li>✔ Amla Extract</li>
+            <li>✔ Natural Vitamin E</li>
+          </ul>
+        </div>
+
+        <!-- HOW TO USE -->
+        <div class="tab-pane" id="tab-use">
+          <h3>How to use</h3>
+          <ol class="tabs-list">
+            <li>Apply small quantity to scalp</li>
+            <li>Massage gently for 5 minutes</li>
+            <li>Leave for 1 hour or overnight</li>
+            <li>Wash with mild shampoo</li>
+          </ol>
+        </div>
+
+        <!-- WHY WE CHOOSE US -->
+        <div class="tab-pane" id="tab-why">
+          <h3>Why we choose us</h3>
+          <ul class="tabs-list">
+            <li>✔ 100% Herbal formula</li>
+            <li>✔ No chemicals or parabens</li>
+            <li>✔ Improves hair strength & shine</li>
+            <li>✔ Trusted by natural care experts</li>
+          </ul>
+        </div>
+
+        <!-- REVIEWS -->
+        <div class="tab-pane" id="tab-reviews">
+          <div class="review-form">
+            <h3>Write a review</h3>
+            <p>Your email address will not be published. Required fields are marked *</p>
+
+            <form action="#" method="post">
+              <div class="form-row">
+                <label for="rating">Your rating *</label>
+                <div class="rating-input">
+                  <input type="radio" name="rating" id="star5" value="5">
+                  <label for="star5">★</label>
+                  <input type="radio" name="rating" id="star4" value="4">
+                  <label for="star4">★</label>
+                  <input type="radio" name="rating" id="star3" value="3">
+                  <label for="star3">★</label>
+                  <input type="radio" name="rating" id="star2" value="2">
+                  <label for="star2">★</label>
+                  <input type="radio" name="rating" id="star1" value="1">
+                  <label for="star1">★</label>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <label for="review">Your review *</label>
+                <textarea id="review" name="review" rows="4" required></textarea>
+              </div>
+
+              <div class="form-row half">
+                <div>
+                  <label for="author">Name *</label>
+                  <input type="text" id="author" name="author" required>
+                </div>
+                <div>
+                  <label for="email">Email *</label>
+                  <input type="email" id="email" name="email" required>
+                </div>
+              </div>
+
+              <button type="submit" class="btn-submit-review">Submit Review</button>
+            </form>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Right Sidebar -->
+    <div class="right-sidebar">
+      <div class="tags-card">
+        <div class="tags-title">Popular Tags</div>
+        <div>
+          <span class="tag-chip">Herbal</span>
+          <span class="tag-chip">Handmade</span>
+          <span class="tag-chip">Basket</span>
+          <span class="tag-chip">Home Decor</span>
+          <span class="tag-chip">Comfort</span>
+          <span class="tag-chip">Gift</span>
+          <span class="tag-chip">Devilixirs</span>
+        </div>
+      </div>
+
+      <div class="side-banner">
+        <img src="https://images.pexels.com/photos/3738335/pexels-photo-3738335.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
+        <div class="side-banner-txt">
+          <h4>Living Room</h4>
+          <span>Pellentesque felis. Soft accents for every corner.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BRAND STRIP -->
+  <section class="brand-strip">
+    <div class="brand-strip-inner">
+      <span>Wild Mountain</span>
+      <span>Vintage Studio</span>
+      <span>Organic Blend</span>
+      <span>Inspire Graphic</span>
+      <span>Pure Aroma</span>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <div>
+        <div style="font-size:21px;margin-bottom:8px;font-weight:700;letter-spacing:.18em;">
+          DEVILIXIRS
+          <span style="display:block;font-size:10px;letter-spacing:.25em;font-weight:400;">HERBAL&nbsp;CARE</span>
+        </div>
+        <p style="color:#bfbfbf;line-height:1.7;margin-bottom:14px;">
+          Clean, simple herbal blends for hair, skin and home. Crafted in small batches with love from Chennai.
+        </p>
+      </div>
+
+      <div>
+        <h4 class="footer-title">Customer Service</h4>
+        <ul class="footer-links">
+          <li>Help &amp; Contact</li>
+          <li>Returns &amp; Refunds</li>
+          <li>Shipping</li>
+          <li>Order Tracking</li>
+        </ul>
+      </div>
+
+      <div>
+        <h4 class="footer-title">Company</h4>
+        <ul class="footer-links">
+          <li>About Us</li>
+          <li>Blog</li>
+          <li>Our Ingredients</li>
+          <li>Wholesale</li>
+        </ul>
+      </div>
+
+      <div>
+        <h4 class="footer-title">Archive</h4>
+        <ul class="footer-links">
+          <li>Designer Picks</li>
+          <li>Gift Boxes</li>
+          <li>Seasonal Offers</li>
+          <li>Lookbook</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <span>Copyright © 2025 <strong>Devilixirs</strong>. All Rights Reserved.</span>
+      <div class="footer-payments">
+        <span>Visa</span>
+        <span>MasterCard</span>
+        <span>Rupay</span>
+        <span>UPI</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Back to top -->
+  <div class="back-top" onclick="window.scrollTo({top:0,behavior:'smooth'});">
+    <i class="fa-solid fa-angle-up"></i>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const tabs  = document.querySelectorAll('.tab-item');
+      const panes = document.querySelectorAll('.tab-pane');
+
+      tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          tabs.forEach(t => t.classList.remove('active'));
+          panes.forEach(p => p.classList.remove('active'));
+
+          tab.classList.add('active');
+
+          const target = tab.getAttribute('data-tab');
+          const pane   = document.getElementById('tab-' + target);
+          if (pane) pane.classList.add('active');
+        });
+      });
+    });
+  </script>
+
+</body>
+</html>

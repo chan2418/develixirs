@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Devilixirs – Shop Products</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+
+  <style>
+    :root{
+      --primary:#1b4d3e;
+      --primary-dark:#0f2e24;
+      --accent:#c9a44a;
+      --text:#1a1a1a;
+      --muted:#6b6b6b;
+      --bg:#f7f1e6;
+      --card-bg:#ffffff;
+      --border:#e3d8c4;
+    }
+
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:'Poppins',sans-serif;color:var(--text);background:#fff;}
+    a{text-decoration:none;color:inherit;}
+    img{max-width:100%;display:block;}
+
+    .wrapper{max-width:1200px;margin:0 auto;padding:0 15px 60px;}
+
+    .header{background:var(--primary);padding:18px 0;color:#fff;}
+    .header-inner{max-width:1200px;margin:0 auto;padding:0 15px;display:flex;justify-content:space-between;align-items:center;}
+    .logo{font-size:24px;font-weight:700;letter-spacing:.14em;}
+
+    .nav{background:var(--primary);border-top:1px solid rgba(255,255,255,.15);}
+    .nav ul{max-width:1200px;margin:auto;display:flex;gap:30px;font-size:13px;padding:0 15px;color:#fff;}
+    .nav li{list-style:none;padding:14px 0;cursor:pointer;}
+    .nav li.active{font-weight:600;border-bottom:3px solid #fff;}
+
+    .main{background:linear-gradient(180deg, #f7f1e6 0%, #ffffff 55%);}
+
+    /* SHOP LAYOUT */
+    .shop-layout{display:grid;grid-template-columns:260px 1fr;gap:25px;padding-top:30px;}
+
+    /* SIDEBAR */
+    .sidebar{background:#fff;border:1px solid var(--border);padding:16px;border-radius:10px;}
+    .sidebar h4{font-size:13px;margin-bottom:12px;text-transform:uppercase;}
+    .filter-list li{font-size:13px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;color:var(--muted);}    
+    .filter-list li:hover{color:var(--primary);}
+
+    /* PRODUCT GRID */
+    .product-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;}
+    .product-toolbar span{font-size:13px;color:var(--muted);}
+
+    .product-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;}
+
+    .product-card{border:1px solid var(--border);background:#fff;border-radius:12px;padding:14px;box-shadow:0 2px 10px rgba(0,0,0,.04);transition:.2s;}
+    .product-card:hover{transform:translateY(-4px);box-shadow:0 8px 22px rgba(0,0,0,.08);}
+
+    .product-image{border-radius:10px;overflow:hidden;margin-bottom:10px;}
+    .product-name{font-size:14px;margin-bottom:4px;}
+    .product-price{font-weight:600;color:var(--primary-dark);}
+    .product-stars{font-size:11px;color:#f1b516;}
+
+    .add-btn{margin-top:10px;background:linear-gradient(145deg,#1b4d3e,#256b56);border:1px solid var(--accent);color:#fff;border-radius:30px;padding:8px 16px;font-size:12px;cursor:pointer;width:100%;text-align:center;}
+
+    @media(max-width:992px){.shop-layout{grid-template-columns:1fr}.product-grid{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:500px){.product-grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-inner">
+    <div class="logo">DEVILIXIRS</div>
+  </div>
+</header>
+
+<nav class="nav">
+  <ul>
+    <li>Home</li>
+    <li class="active">Shop</li>
+    <li>Blog</li>
+    <li>Contact</li>
+  </ul>
+</nav>
+
+<main class="main">
+  <div class="wrapper">
+
+    <div class="shop-layout">
+
+      <!-- SIDEBAR FILTER -->
+      <aside class="sidebar">
+        <h4>Categories</h4>
+        <ul class="filter-list">
+          <li>Hair Oils</li>
+          <li>Skin Care</li>
+          <li>Face Wash</li>
+          <li>Aloe Products</li>
+          <li>Combo Packs</li>
+        </ul>
+      </aside>
+
+      <!-- PRODUCTS AREA -->
+      <section>
+        <div class="product-toolbar">
+          <span>Showing 1–8 of 24 products</span>
+        </div>
+
+        <div class="product-grid">
+          <div class="product-card">
+            <div class="product-image"><img src="https://images.pexels.com/photos/3738339/pexels-photo-3738339.jpeg" alt=""></div>
+            <div class="product-name">Herbal Hair Repair Oil</div>
+            <div class="product-price">₹799</div>
+            <div class="product-stars">★★★★★</div>
+            <div class="add-btn">View Product</div>
+          </div>
+
+          <div class="product-card"><div class="product-image"><img src="https://images.pexels.com/photos/3738335/pexels-photo-3738335.jpeg"></div><div class="product-name">Aloe Vera Gel</div><div class="product-price">₹299</div><div class="product-stars">★★★★★</div><div class="add-btn">View Product</div></div>
+
+          <div class="product-card"><div class="product-image"><img src="https://images.pexels.com/photos/3738338/pexels-photo-3738338.jpeg"></div><div class="product-name">Onion Hair Serum</div><div class="product-price">₹599</div><div class="product-stars">★★★★★</div><div class="add-btn">View Product</div></div>
+
+          <div class="product-card"><div class="product-image"><img src="https://images.pexels.com/photos/3738341/pexels-photo-3738341.jpeg"></div><div class="product-name">Herbal Face Cleanser</div><div class="product-price">₹349</div><div class="product-stars">★★★★★</div><div class="add-btn">View Product</div></div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</main>
+
+</body>
+</html>

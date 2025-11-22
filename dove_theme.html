@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dove Handmade Shop – Demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Google Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Font Awesome for icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+
+  <style>
+    :root{
+      --primary:#00a89b;
+      --primary-dark:#008578;
+      --accent:#00b894;
+      --text:#333;
+      --muted:#777;
+      --border:#e6e6e6;
+      --bg:#f8f8f8;
+      --card-bg:#ffffff;
+    }
+
+    *{
+      margin:0;
+      padding:0;
+      box-sizing:border-box;
+    }
+
+    body{
+      font-family:'Poppins',sans-serif;
+      color:var(--text);
+      background:#ffffff;
+    }
+
+    a{
+      text-decoration:none;
+      color:inherit;
+    }
+
+    ul{
+      list-style:none;
+    }
+
+    img{
+      max-width:100%;
+      display:block;
+    }
+
+    .wrapper{
+      max-width:1200px;
+      margin:0 auto;
+      padding:0 15px 60px;
+    }
+
+    /* TOP BAR */
+    .top-bar{
+      background:var(--primary-dark);
+      color:#fff;
+      font-size:12px;
+    }
+    .top-bar-inner{
+      max-width:1200px;
+      margin:0 auto;
+      padding:8px 15px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+    }
+    .top-left span{
+      margin-right:20px;
+      cursor:pointer;
+    }
+    .top-left i{
+      margin-left:4px;
+      font-size:10px;
+    }
+    .top-right{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      font-size:13px;
+    }
+    .top-right a{
+      opacity:.9;
+    }
+    .top-right a:hover{
+      opacity:1;
+    }
+
+    /* MAIN HEADER */
+    .header{
+      background:var(--primary);
+      padding:18px 0;
+      color:#fff;
+    }
+    .header-inner{
+      max-width:1200px;
+      margin:0 auto;
+      padding:0 15px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:30px;
+    }
+    .logo{
+      font-size:24px;
+      font-weight:700;
+      letter-spacing:.12em;
+    }
+    .logo span{
+      display:block;
+      font-size:11px;
+      letter-spacing:.25em;
+      font-weight:400;
+      margin-top:2px;
+    }
+
+    .search-box{
+      flex:1;
+      max-width:600px;
+      display:flex;
+      background:#fff;
+      border-radius:2px;
+      overflow:hidden;
+    }
+    .search-category{
+      background:#fff;
+      padding:12px 18px;
+      border-right:1px solid var(--border);
+      display:flex;
+      align-items:center;
+      gap:6px;
+      font-size:13px;
+      color:var(--muted);
+      white-space:nowrap;
+    }
+    .search-input{
+      flex:1;
+      border:none;
+      padding:0 14px;
+      font-size:13px;
+      outline:none;
+    }
+    .search-button{
+      width:48px;
+      border:none;
+      background:#fff;
+      cursor:pointer;
+      font-size:16px;
+      color:var(--muted);
+      border-left:1px solid var(--border);
+    }
+    .search-button:hover{
+      color:var(--primary);
+    }
+
+    .header-icons{
+      display:flex;
+      align-items:center;
+      gap:18px;
+      font-size:14px;
+    }
+    .header-icons .icon-btn{
+      cursor:pointer;
+      display:flex;
+      align-items:center;
+      gap:6px;
+      font-size:13px;
+      position:relative;
+    }
+    .header-icons .icon-btn i{
+      font-size:18px;
+    }
+    .cart-count{
+      position:absolute;
+      top:-5px;
+      right:-10px;
+      background:#000;
+      color:#fff;
+      border-radius:50%;
+      font-size:10px;
+      width:16px;
+      height:16px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    /* NAVBAR */
+    .nav{
+      background:var(--primary);
+      border-top:1px solid rgba(255,255,255,.15);
+    }
+    .nav-inner{
+      max-width:1200px;
+      margin:0 auto;
+      padding:0 15px;
+    }
+    .nav ul{
+      display:flex;
+      gap:32px;
+      align-items:center;
+      font-size:13px;
+      color:#fff;
+    }
+    .nav li{
+      padding:14px 0;
+      position:relative;
+      cursor:pointer;
+    }
+    .nav li.active{
+      font-weight:600;
+    }
+    .nav li.active::after{
+      content:'';
+      position:absolute;
+      left:0;
+      bottom:0;
+      width:100%;
+      height:3px;
+      background:#fff;
+    }
+
+    /* MAIN CONTENT */
+    .main{
+      background:#fff;
+    }
+    .hero-section{
+      padding:40px 0 30px;
+    }
+    .hero-grid{
+      display:grid;
+      grid-template-columns:260px 1fr;
+      gap:25px;
+      align-items:stretch;
+    }
+
+    /* CATEGORY SIDEBAR CARD */
+    .card{
+      background:var(--card-bg);
+      border:1px solid var(--border);
+      box-shadow:0 2px 6px rgba(0,0,0,.04);
+    }
+    .card + .card{
+      margin-top:24px;
+    }
+    .card-header{
+      background:var(--primary);
+      color:#fff;
+      padding:12px 16px;
+      font-size:13px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      text-transform:uppercase;
+      font-weight:600;
+    }
+    .card-header .label{
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .card-body{
+      padding:12px 0;
+    }
+
+    .category-list li{
+      padding:10px 18px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      font-size:13px;
+      border-top:1px solid var(--border);
+      cursor:pointer;
+    }
+    .category-list li:first-child{
+      border-top:none;
+    }
+    .category-list li i{
+      color:var(--primary);
+      width:16px;
+      text-align:center;
+    }
+    .category-list li:hover{
+      background:var(--bg);
+    }
+
+    /* HERO RIGHT */
+    .hero-banner{
+      background:#fff;
+      border:1px solid var(--border);
+      min-height:220px;
+      display:flex;
+      align-items:center;
+      padding:40px 60px;
+      box-shadow:0 2px 6px rgba(0,0,0,.04);
+    }
+    .hero-text small{
+      font-size:11px;
+      letter-spacing:.2em;
+      text-transform:uppercase;
+      color:var(--muted);
+      display:block;
+      margin-bottom:10px;
+    }
+    .hero-text h1{
+      font-size:30px;
+      letter-spacing:.04em;
+      margin-bottom:10px;
+    }
+    .hero-text p{
+      font-size:13px;
+      color:var(--muted);
+      max-width:360px;
+      margin-bottom:22px;
+    }
+    .btn-primary{
+      background:var(--primary);
+      color:#fff;
+      padding:11px 26px;
+      font-size:13px;
+      border-radius:2px;
+      border:none;
+      text-transform:uppercase;
+      font-weight:500;
+      cursor:pointer;
+      transition:.2s ease;
+    }
+    .btn-primary:hover{
+      background:var(--primary-dark);
+      transform:translateY(-1px);
+      box-shadow:0 3px 10px rgba(0,0,0,.15);
+    }
+
+    /* CONTENT BELOW HERO */
+    .content-grid{
+      display:grid;
+      grid-template-columns:260px 1fr;
+      gap:25px;
+    }
+
+    /* BANNERS ROW */
+    .banner-row{
+      display:grid;
+      grid-template-columns:2fr 2fr 2fr;
+      gap:18px;
+      margin-bottom:26px;
+    }
+    .banner-item{
+      position:relative;
+      overflow:hidden;
+      background:#eee;
+      border:1px solid var(--border);
+    }
+    .banner-item img{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      transition:transform .3s ease;
+    }
+    .banner-item:hover img{
+      transform:scale(1.04);
+    }
+    .banner-caption{
+      position:absolute;
+      left:20px;
+      bottom:22px;
+      color:#fff;
+      text-shadow:0 1px 2px rgba(0,0,0,.3);
+      max-width:70%;
+    }
+    .banner-caption h4{
+      font-size:18px;
+      font-weight:600;
+      margin-bottom:3px;
+    }
+    .banner-caption span{
+      font-size:12px;
+    }
+
+    /* SECTION TITLE ROW */
+    .section-header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      margin-bottom:14px;
+    }
+    .section-header h3{
+      font-size:15px;
+      text-transform:uppercase;
+      position:relative;
+      padding-left:14px;
+    }
+    .section-header h3::before{
+      content:'';
+      position:absolute;
+      left:0;
+      top:50%;
+      width:6px;
+      height:60%;
+      background:var(--primary);
+      transform:translateY(-50%);
+      border-radius:3px;
+    }
+    .section-arrows{
+      display:flex;
+      gap:6px;
+      font-size:13px;
+      color:var(--muted);
+    }
+    .section-arrows span{
+      width:24px;
+      height:24px;
+      border-radius:50%;
+      border:1px solid var(--border);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      cursor:pointer;
+    }
+    .section-arrows span:hover{
+      border-color:var(--primary);
+      color:var(--primary);
+    }
+
+    /* PRODUCT GRID */
+    .product-grid{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:18px;
+    }
+    .product-card{
+      border:1px solid var(--border);
+      background:#fff;
+      padding:14px;
+      text-align:left;
+      transition:box-shadow .2s ease, transform .2s ease;
+    }
+    .product-card:hover{
+      box-shadow:0 2px 10px rgba(0,0,0,.08);
+      transform:translateY(-2px);
+    }
+    .product-image{
+      margin-bottom:14px;
+    }
+    .product-name{
+      font-size:13px;
+      margin-bottom:4px;
+    }
+    .product-price{
+      font-weight:600;
+      font-size:14px;
+      margin-bottom:4px;
+    }
+    .product-stars{
+      font-size:10px;
+      color:#ccc;
+    }
+
+    /* SIDE CARDS (SPECIAL / FEATURED / TAGS) */
+    .mini-product{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:10px 16px;
+      border-top:1px solid var(--border);
+    }
+    .mini-product:first-child{
+      border-top:none;
+    }
+    .mini-product img{
+      width:56px;
+      height:56px;
+      object-fit:cover;
+      border:1px solid var(--border);
+    }
+    .mini-info{
+      flex:1;
+    }
+    .mini-name{
+      font-size:12px;
+      margin-bottom:4px;
+    }
+    .mini-price{
+      color:var(--primary);
+      font-weight:600;
+      font-size:13px;
+    }
+
+    .tags-wrap{
+      padding:14px 16px;
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+    }
+    .tag-item{
+      padding:5px 9px;
+      font-size:11px;
+      background:#f3f3f3;
+      border-radius:2px;
+      cursor:pointer;
+    }
+    .tag-item:hover{
+      background:var(--primary);
+      color:#fff;
+    }
+
+    /* BANNER STRIP */
+    .wide-banner{
+      margin-top:30px;
+      border:1px solid var(--border);
+      position:relative;
+      overflow:hidden;
+      background:#eee;
+    }
+    .wide-banner img{
+      width:100%;
+      height:220px;
+      object-fit:cover;
+      filter:brightness(.88);
+    }
+    .wide-banner-text{
+      position:absolute;
+      inset:0;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      color:#fff;
+      text-align:center;
+      text-shadow:0 1px 3px rgba(0,0,0,.4);
+    }
+    .wide-banner-text h2{
+      font-size:20px;
+      letter-spacing:.2em;
+      text-transform:uppercase;
+      margin-bottom:8px;
+    }
+    .wide-banner-text p{
+      font-size:13px;
+    }
+
+    /* BACK TO TOP */
+    .back-top{
+      position:fixed;
+      right:25px;
+      bottom:25px;
+      width:42px;
+      height:42px;
+      border-radius:50%;
+      background:var(--primary);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color:#fff;
+      font-size:18px;
+      cursor:pointer;
+      box-shadow:0 3px 12px rgba(0,0,0,.25);
+      z-index:10;
+    }
+
+    /* RESPONSIVE */
+    @media (max-width:992px){
+      .hero-grid,
+      .content-grid{
+        grid-template-columns:1fr;
+      }
+      .banner-row{
+        grid-template-columns:repeat(2,minmax(0,1fr));
+      }
+      .product-grid{
+        grid-template-columns:repeat(3,minmax(0,1fr));
+      }
+    }
+
+    @media (max-width:768px){
+      .header-inner{
+        flex-direction:column;
+        align-items:flex-start;
+        gap:15px;
+      }
+      .banner-row{
+        grid-template-columns:1fr;
+      }
+      .product-grid{
+        grid-template-columns:repeat(2,minmax(0,1fr));
+      }
+      .top-bar-inner{
+        flex-direction:column;
+        align-items:flex-start;
+        gap:6px;
+      }
+      .nav ul{
+        overflow-x:auto;
+      }
+    }
+
+    @media (max-width:480px){
+      .product-grid{
+        grid-template-columns:1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- TOP BAR -->
+  <div class="top-bar">
+    <div class="top-bar-inner">
+      <div class="top-left">
+        <span>USD <i class="fa-solid fa-caret-down"></i></span>
+        <span>ENGLISH <i class="fa-solid fa-caret-down"></i></span>
+      </div>
+      <div class="top-right">
+        <div class="social">
+          <a href="#"><i class="fab fa-facebook-f"></i></a>
+          <a href="#"><i class="fab fa-instagram"></i></a>
+          <a href="#"><i class="fab fa-twitter"></i></a>
+          <a href="#"><i class="fab fa-dribbble"></i></a>
+          <a href="#"><i class="fab fa-pinterest-p"></i></a>
+          <a href="#"><i class="fab fa-google-plus-g"></i></a>
+          <a href="#"><i class="fab fa-behance"></i></a>
+        </div>
+        <a href="#">Login / Register</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        DOVE
+        <span>HANDMADE SHOP</span>
+      </div>
+
+      <form class="search-box">
+        <div class="search-category">
+          All categories <i class="fa-solid fa-caret-down"></i>
+        </div>
+        <input class="search-input" type="text" placeholder="Search ..." />
+        <button class="search-button" type="submit">
+          <i class="fa-solid fa-magnifying-glass"></i>
+        </button>
+      </form>
+
+      <div class="header-icons">
+        <div class="icon-btn">
+          <i class="fa-regular fa-heart"></i>
+        </div>
+        <div class="icon-btn">
+          <i class="fa-solid fa-bag-shopping"></i>
+          <span class="cart-count">0</span>
+          <span>$0.00</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- NAV -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <ul>
+        <li class="active">Home</li>
+        <li>Shop</li>
+        <li>Blog</li>
+        <li>Pages</li>
+        <li>Portfolios</li>
+        <li>Elements</li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="wrapper">
+
+      <!-- HERO WITH CATEGORY SIDEBAR -->
+      <section class="hero-section">
+        <div class="hero-grid">
+          <!-- Categories card -->
+          <div>
+            <div class="card">
+              <div class="card-header">
+                <div class="label">
+                  <i class="fa-solid fa-bars"></i>
+                  <span>Categories</span>
+                </div>
+              </div>
+              <div class="card-body">
+                <ul class="category-list">
+                  <li><i class="fa-solid fa-mobile-screen-button"></i>Mobile</li>
+                  <li><i class="fa-solid fa-gear"></i>Smartphones Accessories</li>
+                  <li><i class="fa-solid fa-bolt"></i>Electronics</li>
+                  <li><i class="fa-solid fa-display"></i>Computers &amp; Networking</li>
+                  <li><i class="fa-solid fa-car-side"></i>Car Accessories</li>
+                  <li><i class="fa-regular fa-lightbulb"></i>Lights &amp; Lighting</li>
+                  <li><i class="fa-solid fa-house-chimney"></i>Home &amp; Office</li>
+                  <li><i class="fa-solid fa-futbol"></i>Sports &amp; Outdoors</li>
+                  <li><i class="fa-solid fa-bag-shopping"></i>Apparel &amp; Accessories</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Hero banner -->
+          <div class="hero-banner">
+            <div class="hero-text">
+              <small>New Arrivals 2025</small>
+              <h1>HAND MADE &amp; CRAFT</h1>
+              <p>
+                Discover beautiful handmade products crafted with love and attention to detail. Perfect for gifts, décor and everyday joy.
+              </p>
+              <button class="btn-primary">Shop now !</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CONTENT GRID: LEFT SIDE CARDS + RIGHT PRODUCTS/BANNERS -->
+      <section class="content-grid">
+        <!-- LEFT COLUMN -->
+        <div>
+          <!-- Special -->
+          <div class="card">
+            <div class="card-header">
+              <div class="label">
+                <i class="fa-solid fa-trophy"></i>
+                <span>Special</span>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="mini-product">
+                <img src="https://images.pexels.com/photos/731217/pexels-photo-731217.jpeg?auto=compress&cs=tinysrgb&w=400" alt="">
+                <div class="mini-info">
+                  <div class="mini-name">Cozy Winter Set</div>
+                  <div class="product-stars">★★★★★</div>
+                  <div class="mini-price">$150.00</div>
+                </div>
+              </div>
+              <div class="mini-product">
+                <img src="https://images.pexels.com/photos/3738088/pexels-photo-3738088.jpeg?auto=compress&cs=tinysrgb&w=400" alt="">
+                <div class="mini-info">
+                  <div class="mini-name">Pink Knit Beanie</div>
+                  <div class="product-stars">★★★★★</div>
+                  <div class="mini-price">$250.00</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Featured -->
+          <div class="card">
+            <div class="card-header">
+              <div class="label">
+                <i class="fa-solid fa-trophy"></i>
+                <span>Featured Products</span>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="mini-product">
+                <img src="https://images.pexels.com/photos/3843289/pexels-photo-3843289.jpeg?auto=compress&cs=tinysrgb&w=400" alt="">
+                <div class="mini-info">
+                  <div class="mini-name">Soft Blue Hat</div>
+                  <div class="product-stars">★★★★★</div>
+                  <div class="mini-price">$150.00</div>
+                </div>
+              </div>
+              <div class="mini-product">
+                <img src="https://images.pexels.com/photos/3738083/pexels-photo-3738083.jpeg?auto=compress&cs=tinysrgb&w=400" alt="">
+                <div class="mini-info">
+                  <div class="mini-name">Grey Knit Cap</div>
+                  <div class="product-stars">★★★★★</div>
+                  <div class="mini-price">$250.00</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tags -->
+          <div class="card">
+            <div class="card-header">
+              <div class="label">
+                <i class="fa-solid fa-tag"></i>
+                <span>Tags</span>
+              </div>
+            </div>
+            <div class="tags-wrap">
+              <span class="tag-item">DIY</span>
+              <span class="tag-item">Fashion</span>
+              <span class="tag-item">Furniture</span>
+              <span class="tag-item">Health &amp; Beauty</span>
+              <span class="tag-item">Hot</span>
+              <span class="tag-item">Perfect</span>
+              <span class="tag-item">Sale</span>
+              <span class="tag-item">Handmade</span>
+              <span class="tag-item">WooCommerce</span>
+              <span class="tag-item">WordPress</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT COLUMN -->
+        <div>
+          <!-- Top banners -->
+          <div class="banner-row">
+            <div class="banner-item">
+              <img src="https://images.pexels.com/photos/3738087/pexels-photo-3738087.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
+              <div class="banner-caption">
+                <h4>Lucky Day 50 Outfits</h4>
+                <span>Under $30</span>
+              </div>
+            </div>
+            <div class="banner-item">
+              <img src="https://images.pexels.com/photos/3738062/pexels-photo-3738062.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
+              <div class="banner-caption">
+                <h4>How to Decorate</h4>
+                <span>Birthday Gift Box</span>
+              </div>
+            </div>
+            <div class="banner-item">
+              <img src="https://images.pexels.com/photos/1105766/pexels-photo-1105766.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
+              <div class="banner-caption">
+                <h4>With Attractive Shape</h4>
+                <span>New up to 30% off</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- New Products -->
+          <div class="section-header">
+            <h3>New Products</h3>
+            <div class="section-arrows">
+              <span><i class="fa-solid fa-chevron-left"></i></span>
+              <span><i class="fa-solid fa-chevron-right"></i></span>
+            </div>
+          </div>
+
+          <div class="product-grid">
+            <div class="product-card">
+              <div class="product-image">
+                <img src="https://images.pexels.com/photos/3738072/pexels-photo-3738072.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
+              </div>
+              <div class="product-name">Duspendisse</div>
+              <div class="product-price">$150.00</div>
+              <div class="product-stars">★★★★★</div>
+            </div>
+            <div class="product-card">
+              <div class="product-image">
+                <img src="https://images.pexels.com/photos/3738070/pexels-photo-3738070.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
+              </div>
+              <div class="product-name">Dwetsuit Grey</div>
+              <div class="product-price">$250.00</div>
+              <div class="product-stars">★★★★★</div>
+            </div>
+            <div class="product-card">
+              <div class="product-image">
+                <img src="https://images.pexels.com/photos/3738089/pexels-photo-3738089.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
+              </div>
+              <div class="product-name">Duisque Volut</div>
+              <div class="product-price">$420.00</div>
+              <div class="product-stars">★★★★★</div>
+            </div>
+            <div class="product-card">
+              <div class="product-image">
+                <img src="https://images.pexels.com/photos/3738091/pexels-photo-3738091.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
+              </div>
+              <div class="product-name">Cozy Home Cup</div>
+              <div class="product-price">$90.00</div>
+              <div class="product-stars">★★★★★</div>
+            </div>
+          </div>
+
+          <!-- Wide banner -->
+          <div class="wide-banner">
+            <img src="https://images.pexels.com/photos/3738086/pexels-photo-3738086.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="">
+            <div class="wide-banner-text">
+              <h2>We Make it Easy to Experience Creativity</h2>
+              <p>Stylish new design for your handmade lifestyle.</p>
+            </div>
+          </div>
+
+          <!-- Best Seller -->
+          <div style="margin-top:30px;">
+            <div class="section-header">
+              <h3>Best Seller</h3>
+              <div class="section-arrows">
+                <span><i class="fa-solid fa-chevron-left"></i></span>
+                <span><i class="fa-solid fa-chevron-right"></i></span>
+              </div>
+            </div>
+
+            <div class="product-grid">
+              <div class="product-card">
+                <div class="product-image">
+                  <img src="https://images.pexels.com/photos/3738092/pexels-photo-3738092.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
+                </div>
+                <div class="product-name">Dwomen Bag</div>
+                <div class="product-price">$250.00</div>
+                <div class="product-stars">★★★★★</div>
+              </div>
+              <div class="product-card">
+                <div class="product-image">
+                  <img src="https://images.pexels.com/photos/3738082/pexels-photo-3738082.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
+                </div>
+                <div class="product-name">Ceramic Friends</div>
+                <div class="product-price">$100.00</div>
+                <div class="product-stars">★★★★★</div>
+              </div>
+              <div class="product-card">
+                <div class="product-image">
+                  <img src="https://images.pexels.com/photos/3738084/pexels-photo-3738084.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
+                </div>
+                <div class="product-name">Duspendisse</div>
+                <div class="product-price">$150.00</div>
+                <div class="product-stars">★★★★★</div>
+              </div>
+              <div class="product-card">
+                <div class="product-image">
+                  <img src="https://images.pexels.com/photos/3738085/pexels-photo-3738085.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
+                </div>
+                <div class="product-name">Pastel Plates</div>
+                <div class="product-price">$160.00</div>
+                <div class="product-stars">★★★★★</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Back to top button (static, no JS scroll) -->
+  <div class="back-top">
+    <i class="fa-solid fa-angle-up"></i>
+  </div>
+
+</body>
+</html>

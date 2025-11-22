@@ -1,0 +1,1542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Devilixirs – Handmade & Modern Essentials</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Lato:wght@300;400;500;700&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --color-bg: #f8f5f1;          /* warm neutral background */
+      --color-bg-alt: #f1ece4;      /* section alternate */
+      --color-accent: #c18f5a;      /* accent (buttons, highlights) */
+      --color-text-main: #333333;   /* headings */
+      --color-text-body: #555555;   /* body */
+      --color-border: #e0d6c7;
+      --color-footer-bg: #111111;
+      --color-footer-text: #dcdcdc;
+
+      --font-heading: "Playfair Display", serif;
+      --font-body: "Lato", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+      --container-width: 1140px;
+
+      --transition-fast: 0.2s ease;
+      --transition-normal: 0.3s ease;
+      --radius-soft: 8px;
+      --shadow-soft: 0 10px 25px rgba(0, 0, 0, 0.06);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: var(--font-body);
+      color: var(--color-text-body);
+      background-color: var(--color-bg);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    img {
+      max-width: 100%;
+      display: block;
+    }
+
+    a {
+      text-decoration: none;
+      color: inherit;
+    }
+
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .container {
+      width: 100%;
+      max-width: var(--container-width);
+      margin: 0 auto;
+      padding: 0 16px;
+    }
+
+    section {
+      padding: 60px 0;
+    }
+
+    @media (min-width: 992px) {
+      section {
+        padding: 80px 0;
+      }
+    }
+
+    h1, h2, h3, h4, h5 {
+      font-family: var(--font-heading);
+      color: var(--color-text-main);
+      margin: 0 0 16px;
+    }
+
+    p {
+      margin: 0 0 14px;
+      font-size: 15px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 28px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      background: var(--color-accent);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.1);
+    }
+
+    .btn:hover {
+      background: #a8743e;
+      transform: translateY(-1px);
+      box-shadow: 0 10px 22px rgba(0, 0, 0, 0.12);
+    }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--color-text-main);
+      border-color: var(--color-text-main);
+      box-shadow: none;
+    }
+
+    .btn-outline:hover {
+      background: var(--color-text-main);
+      color: #fff;
+    }
+
+    .section-header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .section-header span.eyebrow {
+      display: inline-block;
+      font-size: 12px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #8c7c64;
+      margin-bottom: 8px;
+    }
+
+    .section-header h2 {
+      font-size: 26px;
+    }
+
+    @media (min-width: 768px) {
+      .section-header h2 {
+        font-size: 32px;
+      }
+    }
+
+    .section-header p {
+      max-width: 540px;
+      margin: 0 auto;
+      font-size: 14px;
+      color: #777;
+    }
+
+    /* Announcement bar */
+    .announcement-bar {
+      background: var(--color-bg-alt);
+      color: var(--color-text-main);
+      font-size: 13px;
+      text-align: center;
+      padding: 8px 16px;
+    }
+
+    /* Header */
+    header.site-header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(10px);
+      background: rgba(248, 245, 241, 0.9);
+      border-bottom: 1px solid rgba(0,0,0,0.04);
+    }
+
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 0;
+    }
+
+    .logo {
+      font-family: var(--font-heading);
+      font-size: 22px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    nav.main-nav {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      font-size: 14px;
+    }
+
+    nav.main-nav a {
+      position: relative;
+      padding-bottom: 4px;
+    }
+
+    nav.main-nav a::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 0;
+      height: 1px;
+      background: var(--color-accent);
+      transition: width var(--transition-normal);
+    }
+
+    nav.main-nav a:hover::after {
+      width: 100%;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 14px;
+    }
+
+    .header-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 999px;
+      border: 1px solid rgba(0,0,0,0.08);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+    }
+
+    .header-icon:hover {
+      background: #fff;
+      box-shadow: var(--shadow-soft);
+      transform: translateY(-1px);
+    }
+
+    /* Mobile nav */
+    .mobile-toggle {
+      display: none;
+      width: 32px;
+      height: 32px;
+      border-radius: 999px;
+      border: 1px solid rgba(0,0,0,0.12);
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .mobile-toggle span {
+      width: 16px;
+      height: 2px;
+      background: #333;
+      position: relative;
+      display: block;
+    }
+
+    .mobile-toggle span::before,
+    .mobile-toggle span::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      width: 16px;
+      height: 2px;
+      background: #333;
+    }
+
+    .mobile-toggle span::before {
+      top: -5px;
+    }
+
+    .mobile-toggle span::after {
+      top: 5px;
+    }
+
+    .mobile-nav {
+      display: none;
+      border-top: 1px solid rgba(0,0,0,0.05);
+      padding: 8px 0 12px;
+    }
+
+    .mobile-nav a {
+      display: block;
+      padding: 8px 0;
+      font-size: 14px;
+    }
+
+    @media (max-width: 768px) {
+      nav.main-nav {
+        display: none;
+      }
+      .header-actions {
+        display: none;
+      }
+      .mobile-toggle {
+        display: inline-flex;
+      }
+      .mobile-nav.open {
+        display: block;
+      }
+    }
+
+    /* Hero */
+    .hero {
+      padding-top: 40px;
+      padding-bottom: 50px;
+    }
+
+    @media (min-width: 992px) {
+      .hero {
+        padding-top: 60px;
+        padding-bottom: 80px;
+      }
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr;
+      gap: 40px;
+      align-items: center;
+    }
+
+    @media (max-width: 900px) {
+      .hero-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .hero-tag {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: #8c7c64;
+      margin-bottom: 10px;
+    }
+
+    .hero h1 {
+      font-size: 30px;
+      line-height: 1.2;
+      margin-bottom: 16px;
+    }
+
+    @media (min-width: 768px) {
+      .hero h1 {
+        font-size: 40px;
+      }
+    }
+
+    .hero-subtitle {
+      font-size: 14px;
+      color: #777;
+      margin-bottom: 24px;
+      max-width: 480px;
+    }
+
+    .hero-meta {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: #888;
+      margin-top: 16px;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .hero-image-wrap {
+      position: relative;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: var(--shadow-soft);
+      background: #e8e0d3;
+    }
+
+    .hero-image-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scale(1.02);
+      transition: transform 0.7s ease;
+    }
+
+    .hero-image-wrap:hover img {
+      transform: scale(1.05);
+    }
+
+    .hero-badge {
+      position: absolute;
+      bottom: 16px;
+      right: 16px;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 10px 14px;
+      border-radius: 999px;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .hero-badge span.dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--color-accent);
+    }
+
+    /* Featured categories */
+    .featured-categories {
+      background: #fff;
+    }
+
+    .featured-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 20px;
+    }
+
+    @media (max-width: 900px) {
+      .featured-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 640px) {
+      .featured-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .featured-card {
+      position: relative;
+      overflow: hidden;
+      border-radius: var(--radius-soft);
+      background: #f4eee5;
+      cursor: pointer;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.04);
+      transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+    }
+
+    .featured-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+    }
+
+    .featured-card img {
+      width: 100%;
+      height: 220px;
+      object-fit: cover;
+      transition: transform 0.6s ease;
+    }
+
+    .featured-card:hover img {
+      transform: scale(1.08);
+    }
+
+    .featured-content {
+      position: absolute;
+      inset: auto 18px 18px 18px;
+      background: rgba(255, 255, 255, 0.93);
+      border-radius: 999px;
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .featured-content span.label {
+      font-weight: 600;
+    }
+
+    .featured-content span.cta {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--color-accent);
+    }
+
+    /* About / Brand story */
+    .about {
+      background: var(--color-bg);
+    }
+
+    .about-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+      gap: 36px;
+      align-items: center;
+    }
+
+    @media (max-width: 900px) {
+      .about-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .about-image-wrap {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 16px;
+    }
+
+    .about-image {
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: var(--shadow-soft);
+      background: #e5ddd0;
+    }
+
+    .about-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.8s ease;
+    }
+
+    .about-image:hover img {
+      transform: scale(1.05);
+    }
+
+    .about-content h2 {
+      margin-bottom: 10px;
+    }
+
+    .about-content p {
+      font-size: 14px;
+      color: #666;
+    }
+
+    .about-list {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .about-list li {
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .about-list li span.bullet {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--color-accent);
+      flex-shrink: 0;
+    }
+
+    /* Product showcase */
+    .products {
+      background: #fff;
+    }
+
+    .products-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    .products-tabs {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+
+    .products-tab {
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid #ddd;
+      background: #f8f6f2;
+      cursor: pointer;
+      transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+    }
+
+    .products-tab.active {
+      background: var(--color-text-main);
+      color: #fff;
+      border-color: var(--color-text-main);
+    }
+
+    .products-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 20px;
+    }
+
+    @media (max-width: 1024px) {
+      .products-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 768px) {
+      .products-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 540px) {
+      .products-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .product-card {
+      background: #f9f6f1;
+      border-radius: var(--radius-soft);
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+      box-shadow: 0 6px 18px rgba(0,0,0,0.03);
+      cursor: pointer;
+    }
+
+    .product-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 30px rgba(0,0,0,0.08);
+    }
+
+    .product-media {
+      position: relative;
+      overflow: hidden;
+      background: #e6ded1;
+    }
+
+    .product-media img {
+      width: 100%;
+      height: 230px;
+      object-fit: cover;
+      transition: opacity 0.4s ease, transform 0.6s ease;
+    }
+
+    .product-media img.secondary {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      transform: scale(1.03);
+    }
+
+    .product-card:hover .product-media img.primary {
+      opacity: 0;
+    }
+
+    .product-card:hover .product-media img.secondary {
+      opacity: 1;
+      transform: scale(1.02);
+    }
+
+    .product-badge {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      background: rgba(255, 255, 255, 0.96);
+      color: #7a6a52;
+    }
+
+    .product-body {
+      padding: 12px 14px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .product-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-text-main);
+    }
+
+    .product-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+    }
+
+    .product-price {
+      font-weight: 600;
+      color: #3c3c3c;
+    }
+
+    .product-price span.compare {
+      text-decoration: line-through;
+      color: #999;
+      font-weight: 400;
+      margin-left: 4px;
+      font-size: 12px;
+    }
+
+    .product-cta {
+      margin-top: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: #7b7b7b;
+    }
+
+    .product-cta button {
+      border: none;
+      background: transparent;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .product-cta button:hover {
+      color: var(--color-accent);
+    }
+
+    /* Testimonials */
+    .testimonials {
+      background: var(--color-bg-alt);
+    }
+
+    .testimonials-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+      gap: 40px;
+      align-items: center;
+    }
+
+    @media (max-width: 900px) {
+      .testimonials-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .testimonial-card {
+      background: #fff;
+      border-radius: 18px;
+      padding: 24px 24px 22px;
+      box-shadow: var(--shadow-soft);
+      position: relative;
+    }
+
+    .testimonial-card::before {
+      content: "“";
+      position: absolute;
+      font-family: var(--font-heading);
+      font-size: 60px;
+      top: 10px;
+      left: 18px;
+      color: rgba(193, 143, 90, 0.22);
+    }
+
+    .testimonial-text {
+      font-size: 14px;
+      margin-bottom: 18px;
+      color: #666;
+    }
+
+    .testimonial-author {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+    }
+
+    .testimonial-avatar {
+      width: 38px;
+      height: 38px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: #ddd;
+      flex-shrink: 0;
+    }
+
+    .testimonial-author span.name {
+      font-weight: 600;
+      color: var(--color-text-main);
+    }
+
+    .testimonial-author span.role {
+      display: block;
+      font-size: 11px;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+    }
+
+    .testimonial-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+      font-size: 13px;
+      color: #777;
+    }
+
+    .testimonial-list li::before {
+      content: "★";
+      margin-right: 4px;
+      color: #e2b15f;
+      font-size: 12px;
+    }
+
+    /* Blog section */
+    .blog {
+      background: #fff;
+    }
+
+    .blog-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 24px;
+    }
+
+    @media (max-width: 900px) {
+      .blog-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 640px) {
+      .blog-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .blog-card {
+      background: #f9f6f1;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 6px 14px rgba(0,0,0,0.04);
+      display: flex;
+      flex-direction: column;
+      transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+      cursor: pointer;
+    }
+
+    .blog-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 26px rgba(0,0,0,0.08);
+    }
+
+    .blog-media img {
+      width: 100%;
+      height: 190px;
+      object-fit: cover;
+    }
+
+    .blog-body {
+      padding: 16px 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 13px;
+    }
+
+    .blog-meta {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: #8c7c64;
+    }
+
+    .blog-title {
+      font-family: var(--font-heading);
+      font-size: 16px;
+      color: var(--color-text-main);
+    }
+
+    .blog-excerpt {
+      font-size: 13px;
+      color: #777;
+    }
+
+    .blog-read-more {
+      margin-top: 10px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--color-accent);
+    }
+
+    /* Newsletter / CTA */
+    .newsletter {
+      background: var(--color-bg-alt);
+    }
+
+    .newsletter-inner {
+      background: #fff;
+      border-radius: 20px;
+      padding: 28px 22px;
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 22px;
+      align-items: center;
+      box-shadow: var(--shadow-soft);
+    }
+
+    @media (max-width: 900px) {
+      .newsletter-inner {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .newsletter h3 {
+      margin-bottom: 8px;
+    }
+
+    .newsletter p {
+      font-size: 13px;
+      color: #777;
+    }
+
+    .newsletter-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .newsletter-form input[type="email"] {
+      flex: 1 1 180px;
+      min-width: 0;
+      padding: 10px 12px;
+      border-radius: 999px;
+      border: 1px solid #ddd;
+      font-size: 13px;
+      outline: none;
+      background: #faf7f2;
+    }
+
+    .newsletter-form input[type="email"]::placeholder {
+      color: #aaa;
+    }
+
+    /* Footer */
+    footer {
+      background: var(--color-footer-bg);
+      color: var(--color-footer-text);
+      padding: 40px 0 20px;
+    }
+
+    .footer-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr));
+      gap: 30px;
+      margin-bottom: 24px;
+      font-size: 13px;
+    }
+
+    @media (max-width: 900px) {
+      .footer-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 640px) {
+      .footer-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .footer-col h4 {
+      font-family: var(--font-heading);
+      font-size: 16px;
+      color: #fff;
+      margin-bottom: 12px;
+    }
+
+    .footer-logo {
+      font-family: var(--font-heading);
+      font-size: 20px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .footer-links li {
+      margin-bottom: 6px;
+    }
+
+    .footer-links a {
+      color: var(--color-footer-text);
+      opacity: 0.86;
+      transition: opacity var(--transition-fast);
+    }
+
+    .footer-links a:hover {
+      opacity: 1;
+    }
+
+    .footer-social {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .footer-social a {
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.25);
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 13px;
+      opacity: 0.85;
+      transition: background var(--transition-fast), opacity var(--transition-fast), transform var(--transition-fast);
+    }
+
+    .footer-social a:hover {
+      opacity: 1;
+      background: rgba(255,255,255,0.08);
+      transform: translateY(-1px);
+    }
+
+    .footer-bottom {
+      border-top: 1px solid rgba(255,255,255,0.1);
+      padding-top: 12px;
+      font-size: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .footer-bottom a {
+      color: var(--color-footer-text);
+      opacity: 0.8;
+    }
+
+    .footer-payments {
+      display: flex;
+      gap: 8px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      opacity: 0.8;
+    }
+  </style>
+</head>
+<body>
+  <!-- Announcement bar -->
+  <div class="announcement-bar">
+    Free shipping on orders above ₹2,000 • New “Earthbound Collection” now live
+  </div>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="container">
+      <div class="header-inner">
+        <div class="logo">
+          Devilixirs
+        </div>
+
+        <nav class="main-nav" aria-label="Primary navigation">
+          <a href="#home">Home</a>
+          <a href="#shop">Shop</a>
+          <a href="#about">About</a>
+          <a href="#blog">Blog</a>
+          <a href="#contact">Contact</a>
+        </nav>
+
+        <div class="header-actions" aria-label="Quick actions">
+          <div class="header-icon" title="Search">
+            🔍
+          </div>
+          <div class="header-icon" title="Account">
+            👤
+          </div>
+          <div class="header-icon" title="Cart">
+            🛒
+          </div>
+        </div>
+
+        <button class="mobile-toggle" aria-label="Toggle navigation" aria-expanded="false">
+          <span></span>
+        </button>
+      </div>
+
+      <div class="mobile-nav" aria-label="Mobile navigation">
+        <a href="#home">Home</a>
+        <a href="#shop">Shop</a>
+        <a href="#about">About</a>
+        <a href="#blog">Blog</a>
+        <a href="#contact">Contact</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section id="home" class="hero">
+    <div class="container">
+      <div class="hero-grid">
+        <div class="hero-content">
+          <div class="hero-tag">
+            Hand-crafted • Small batch • Planet kind
+          </div>
+          <h1>
+            Hand-crafted essentials<br />
+            made to live with you.
+          </h1>
+          <p class="hero-subtitle">
+            Devilixirs curates modern, timeless pieces for home and life — crafted by artisans, designed to be loved for years, not seasons.
+          </p>
+          <div class="hero-actions">
+            <a href="#shop" class="btn">Shop the collection</a>
+            <a href="#about" class="btn btn-outline">Our story</a>
+          </div>
+          <div class="hero-meta">
+            Thoughtful materials • Fair production • Made in small studios
+          </div>
+        </div>
+
+        <div class="hero-image-wrap" aria-hidden="true">
+          <!-- Replace with your high-res hero image -->
+          <img src="https://images.pexels.com/photos/3965545/pexels-photo-3965545.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Handmade ceramics and decor on a wooden table" loading="lazy" />
+          <div class="hero-badge">
+            <span class="dot"></span>
+            New: Earthbound Collection
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Featured categories -->
+  <section class="featured-categories" aria-labelledby="featured-heading">
+    <div class="container">
+      <div class="section-header">
+        <span class="eyebrow">Explore categories</span>
+        <h2 id="featured-heading">Pieces for every corner of your home</h2>
+      </div>
+
+      <div class="featured-grid">
+        <!-- Category 1 -->
+        <article class="featured-card">
+          <!-- Replace with category image -->
+          <img src="https://images.pexels.com/photos/1080696/pexels-photo-1080696.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Minimal wooden chair in a warm interior" loading="lazy" />
+          <div class="featured-content">
+            <div>
+              <span class="label">Furniture</span>
+              <div style="font-size:12px;color:#777;">Chairs, tables & storage</div>
+            </div>
+            <span class="cta">View</span>
+          </div>
+        </article>
+
+        <!-- Category 2 -->
+        <article class="featured-card">
+          <img src="https://images.pexels.com/photos/4622354/pexels-photo-4622354.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Handmade vases and decor on a shelf" loading="lazy" />
+          <div class="featured-content">
+            <div>
+              <span class="label">Decor</span>
+              <div style="font-size:12px;color:#777;">Vases, candles & art</div>
+            </div>
+            <span class="cta">View</span>
+          </div>
+        </article>
+
+        <!-- Category 3 -->
+        <article class="featured-card">
+          <img src="https://images.pexels.com/photos/1926769/pexels-photo-1926769.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Wrapped gift with natural materials" loading="lazy" />
+          <div class="featured-content">
+            <div>
+              <span class="label">Artisan Gifts</span>
+              <div style="font-size:12px;color:#777;">Thoughtful, ready to gift</div>
+            </div>
+            <span class="cta">View</span>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- About / Brand story -->
+  <section id="about" class="about">
+    <div class="container">
+      <div class="about-grid">
+        <div class="about-image-wrap" aria-hidden="true">
+          <div class="about-image">
+            <!-- Replace with studio / artisan image -->
+            <img src="https://images.pexels.com/photos/3738081/pexels-photo-3738081.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Artisan hands crafting pottery" loading="lazy" />
+          </div>
+          <div class="about-image">
+            <!-- Replace with detail / materials image -->
+            <img src="https://images.pexels.com/photos/3738086/pexels-photo-3738086.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Clay pots drying in the studio" loading="lazy" />
+          </div>
+        </div>
+
+        <div class="about-content">
+          <span class="eyebrow">Our story</span>
+          <h2>Designed for homes that tell stories.</h2>
+          <p>
+            Devilixirs started as a tiny studio shelf — a place to gather objects that felt warm, intentional and made with care. Today, we work with independent makers to bring you pieces that honour craft, culture and the slow joy of living at home.
+          </p>
+          <p>
+            Every product is made in small batches, using materials chosen for durability and touch. No mass production, no throwaway trends — just timeless silhouettes that age beautifully with you.
+          </p>
+          <ul class="about-list">
+            <li><span class="bullet"></span> Small-batch, handcrafted pieces</li>
+            <li><span class="bullet"></span> Fair pricing for artisans</li>
+            <li><span class="bullet"></span> Thoughtful, low-waste packaging</li>
+            <li><span class="bullet"></span> Designed in India, loved worldwide</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Product showcase -->
+  <section id="shop" class="products" aria-labelledby="products-heading">
+    <div class="container">
+      <div class="products-header">
+        <div>
+          <span class="eyebrow">Bestsellers</span>
+          <h2 id="products-heading">Most loved this season</h2>
+        </div>
+
+        <div class="products-tabs" aria-label="Product filters">
+          <button class="products-tab active" type="button">All</button>
+          <button class="products-tab" type="button">New in</button>
+          <button class="products-tab" type="button">Furniture</button>
+          <button class="products-tab" type="button">Decor</button>
+        </div>
+      </div>
+
+      <div class="products-grid">
+        <!-- Product 1 -->
+        <article class="product-card">
+          <div class="product-media">
+            <span class="product-badge">New</span>
+            <img class="primary" src="https://images.pexels.com/photos/1080696/pexels-photo-1080696.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Oak arc lounge chair" loading="lazy" />
+            <img class="secondary" src="https://images.pexels.com/photos/1866149/pexels-photo-1866149.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Side view of oak arc lounge chair in a living room" loading="lazy" />
+          </div>
+          <div class="product-body">
+            <div class="product-title">Oak Arc Lounge Chair</div>
+            <div class="product-meta">
+              <div class="product-price">
+                ₹18,900 <span class="compare">₹21,500</span>
+              </div>
+              <div style="font-size:12px;color:#999;">In stock</div>
+            </div>
+            <div class="product-cta">
+              <button type="button">View product</button>
+              <span>★ ★ ★ ★ ☆</span>
+            </div>
+          </div>
+        </article>
+
+        <!-- Product 2 -->
+        <article class="product-card">
+          <div class="product-media">
+            <span class="product-badge">Limited</span>
+            <img class="primary" src="https://images.pexels.com/photos/3965545/pexels-photo-3965545.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Set of sculpted stoneware mugs" loading="lazy" />
+            <img class="secondary" src="https://images.pexels.com/photos/3738080/pexels-photo-3738080.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Close-up of stoneware mug details" loading="lazy" />
+          </div>
+          <div class="product-body">
+            <div class="product-title">Sculpted Stoneware Mug Set</div>
+            <div class="product-meta">
+              <div class="product-price">
+                ₹2,450
+              </div>
+              <div style="font-size:12px;color:#999;">Set of 4</div>
+            </div>
+            <div class="product-cta">
+              <button type="button">View product</button>
+              <span>★ ★ ★ ★ ★</span>
+            </div>
+          </div>
+        </article>
+
+        <!-- Product 3 -->
+        <article class="product-card">
+          <div class="product-media">
+            <span class="product-badge">Bestseller</span>
+            <img class="primary" src="https://images.pexels.com/photos/4622354/pexels-photo-4622354.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Handmade ceramic bud vase" loading="lazy" />
+            <img class="secondary" src="https://images.pexels.com/photos/5698855/pexels-photo-5698855.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Styled shelf with handmade decor" loading="lazy" />
+          </div>
+          <div class="product-body">
+            <div class="product-title">Cloudline Ceramic Bud Vase</div>
+            <div class="product-meta">
+              <div class="product-price">
+                ₹1,290
+              </div>
+              <div style="font-size:12px;color:#999;">Multiple colours</div>
+            </div>
+            <div class="product-cta">
+              <button type="button">View product</button>
+              <span>★ ★ ★ ★ ☆</span>
+            </div>
+          </div>
+        </article>
+
+        <!-- Product 4 -->
+        <article class="product-card">
+          <div class="product-media">
+            <span class="product-badge">New</span>
+            <img class="primary" src="https://images.pexels.com/photos/1571450/pexels-photo-1571450.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Textured woven throw blanket" loading="lazy" />
+            <img class="secondary" src="https://images.pexels.com/photos/3965555/pexels-photo-3965555.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Throw styled on a sofa" loading="lazy" />
+          </div>
+          <div class="product-body">
+            <div class="product-title">Sunrise Woven Throw</div>
+            <div class="product-meta">
+              <div class="product-price">
+                ₹3,200
+              </div>
+              <div style="font-size:12px;color:#999;">Ethically sourced</div>
+            </div>
+            <div class="product-cta">
+              <button type="button">View product</button>
+              <span>★ ★ ★ ★ ★</span>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- Testimonials -->
+  <section class="testimonials" aria-labelledby="testimonials-heading">
+    <div class="container">
+      <div class="testimonials-grid">
+        <div>
+          <div class="section-header" style="text-align:left;margin-bottom:20px;">
+            <span class="eyebrow">What customers say</span>
+            <h2 id="testimonials-heading">Loved in real homes.</h2>
+            <p>
+              Devilixirs lives in cosy city corners, sunlit studios and quiet weekend homes. Here’s what our community is saying.
+            </p>
+          </div>
+
+          <ul class="testimonial-list">
+            <li>“The quality is insane for the price.”</li>
+            <li>“Feels like it’s been part of my home forever.”</li>
+            <li>“The packaging was so thoughtful and earth-friendly.”</li>
+          </ul>
+        </div>
+
+        <div>
+          <article class="testimonial-card">
+            <p class="testimonial-text">
+              “I’ve slowly replaced my mass-made decor with Devilixirs pieces, and my space finally feels like me. The textures, the warmth — even the small details feel considered.”
+            </p>
+            <div class="testimonial-author">
+              <div class="testimonial-avatar">
+                <!-- Replace with avatar if you want -->
+                <img src="https://images.pexels.com/photos/3760852/pexels-photo-3760852.jpeg?auto=compress&cs=tinysrgb&w=400" alt="Portrait of a happy customer" loading="lazy" />
+              </div>
+              <div>
+                <span class="name">Anisha R.</span>
+                <span class="role">Interior stylist • Bengaluru</span>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Blog / Inspiration -->
+  <section id="blog" class="blog" aria-labelledby="blog-heading">
+    <div class="container">
+      <div class="section-header">
+        <span class="eyebrow">Journal</span>
+        <h2 id="blog-heading">Slow living, styled simply.</h2>
+        <p>
+          Stories from inside the studio, styling tips and conversations with the makers behind your favourite pieces.
+        </p>
+      </div>
+
+      <div class="blog-grid">
+        <!-- Post 1 -->
+        <article class="blog-card">
+          <div class="blog-media">
+            <img src="https://images.pexels.com/photos/3965541/pexels-photo-3965541.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Minimal living room with warm-toned decor" loading="lazy" />
+          </div>
+          <div class="blog-body">
+            <div class="blog-meta">Home • Styling</div>
+            <div class="blog-title">5 ways to make your rental feel like home</div>
+            <p class="blog-excerpt">
+              Small rituals, layered textures and a few thoughtful pieces can turn any space into a gentle retreat...
+            </p>
+            <div class="blog-read-more">Read more</div>
+          </div>
+        </article>
+
+        <!-- Post 2 -->
+        <article class="blog-card">
+          <div class="blog-media">
+            <img src="https://images.pexels.com/photos/3738087/pexels-photo-3738087.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Ceramic artist working in the studio" loading="lazy" />
+          </div>
+          <div class="blog-body">
+            <div class="blog-meta">Makers</div>
+            <div class="blog-title">Inside the studio with Aditi Ceramics</div>
+            <p class="blog-excerpt">
+              We spend a day in the studio with Aditi, whose pieces are at the heart of our Earthbound collection...
+            </p>
+            <div class="blog-read-more">Read more</div>
+          </div>
+        </article>
+
+        <!-- Post 3 -->
+        <article class="blog-card">
+          <div class="blog-media">
+            <img src="https://images.pexels.com/photos/3738088/pexels-photo-3738088.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Hands wrapping a gift with natural materials" loading="lazy" />
+          </div>
+          <div class="blog-body">
+            <div class="blog-meta">Gifting</div>
+            <div class="blog-title">A guide to meaningful, low-waste gifting</div>
+            <p class="blog-excerpt">
+              How to pick gifts that feel deeply personal, useful and gentle on the planet.
+            </p>
+            <div class="blog-read-more">Read more</div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- Newsletter / CTA -->
+  <section class="newsletter" aria-labelledby="newsletter-heading">
+    <div class="container">
+      <div class="newsletter-inner">
+        <div>
+          <h3 id="newsletter-heading">Join our circle &amp; get 10% off.</h3>
+          <p>
+            Be the first to know about new drops, studio seconds and stories from our makers. No spam, just cosy inbox energy.
+          </p>
+        </div>
+        <form class="newsletter-form" action="#" method="post">
+          <label class="sr-only" for="newsletter-email">Email address</label>
+          <input id="newsletter-email" type="email" name="email" placeholder="Enter your email" required />
+          <button type="submit" class="btn">Sign me up</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer id="contact">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-col">
+          <div class="footer-logo">Devilixirs</div>
+          <p>
+            Modern, small-batch objects for homes that feel lived-in, not staged. Curated from independent makers across India.
+          </p>
+          <div class="footer-social" aria-label="Social media">
+            <a href="#" aria-label="Instagram">IG</a>
+            <a href="#" aria-label="Pinterest">PT</a>
+            <a href="#" aria-label="Facebook">FB</a>
+          </div>
+        </div>
+
+        <div class="footer-col">
+          <h4>Shop</h4>
+          <ul class="footer-links">
+            <li><a href="#shop">All products</a></li>
+            <li><a href="#shop">Furniture</a></li>
+            <li><a href="#shop">Decor</a></li>
+            <li><a href="#shop">Gifts</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h4>Company</h4>
+          <ul class="footer-links">
+            <li><a href="#about">Our story</a></li>
+            <li><a href="#blog">Journal</a></li>
+            <li><a href="#contact">Contact</a></li>
+            <li><a href="#">Shipping & returns</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h4>Stay in touch</h4>
+          <p style="margin-bottom:10px;">
+            Studio visits by appointment only. For collaborations or bulk orders, write to:
+          </p>
+          <p style="font-size:13px;">hello@devilixirs.com</p>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <div>
+          © <span id="year"></span> Devilixirs. All rights reserved.
+        </div>
+        <div>
+          <a href="#">Privacy policy</a> • <a href="#">Terms</a>
+        </div>
+        <div class="footer-payments">
+          <span>Visa</span>
+          <span>UPI</span>
+          <span>Mastercard</span>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Minimal JS: mobile menu + year -->
+  <script>
+    // Current year
+    document.getElementById("year").textContent = new Date().getFullYear();
+
+    // Mobile nav toggle
+    const toggle = document.querySelector(".mobile-toggle");
+    const mobileNav = document.querySelector(".mobile-nav");
+
+    if (toggle && mobileNav) {
+      toggle.addEventListener("click", () => {
+        const isOpen = mobileNav.classList.toggle("open");
+        toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      });
+    }
+  </script>
+</body>
+</html>
