@@ -21,15 +21,27 @@ $errors  = flash_get('form_errors') ?: [];
 $success = flash_get('success_msg') ?: null;
 $old     = flash_get('old') ?: [];
 
-/* ---------- DETECT LABEL FIELD ---------- */
+/* ---------- DETECT LABEL FIELD + ENSURE IMAGE COLUMN ---------- */
 try {
-    $cols = $pdo->query("SHOW COLUMNS FROM categories")->fetchAll(PDO::FETCH_ASSOC);
+    $cols   = $pdo->query("SHOW COLUMNS FROM categories")->fetchAll(PDO::FETCH_ASSOC);
     $fields = array_column($cols, 'Field');
 } catch (Exception $e) {
     $fields = [];
 }
 
+// label field
 $labelField = in_array('title',$fields) ? 'title' : (in_array('name',$fields) ? 'name' : null);
+
+// ensure image column exists
+if (!in_array('image', $fields)) {
+    try {
+        // add a nullable image column
+        $pdo->exec("ALTER TABLE categories ADD COLUMN image VARCHAR(255) NULL");
+        $fields[] = 'image';
+    } catch (Exception $e) {
+        // silently ignore if it fails (no hard crash in UI)
+    }
+}
 
 /* ---------- FETCH EDIT ---------- */
 $edit = null;
@@ -43,8 +55,17 @@ if (!empty($_GET['edit'])) {
 $list = [];
 try {
     $stmt = $pdo->query("
-        SELECT id, $labelField AS title, slug, parent_id, description, created_at
-        FROM categories ORDER BY COALESCE(parent_id,id), parent_id IS NOT NULL, title ASC
+        SELECT id,
+               $labelField AS title,
+               slug,
+               parent_id,
+               description,
+               created_at,
+               image
+        FROM categories
+        ORDER BY COALESCE(parent_id,id),
+                 parent_id IS NOT NULL,
+                 title ASC
     ");
     $list = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {}
@@ -124,44 +145,49 @@ function render_options($nodes,$level=0,$selected=null,$exclude=null){
             <h3 class="text-lg font-bold mb-1"><?= $edit ? "Edit Category" : "Add Category" ?></h3>
             <p class="text-sm text-slate-500 mb-4"><?= $edit ? "Modify this category" : "Create a new category" ?></p>
 
-            <form action="save_category.php" method="post">
-                <input type="hidden" name="csrf_token" value="<?php
-                    if(empty($_SESSION['csrf_token'])) $_SESSION['csrf_token']=bin2hex(random_bytes(16));
-                    echo $_SESSION['csrf_token'];
-                ?>">
+            <!-- IMPORTANT: enctype for file upload -->
+            <form action="save_category.php" method="post" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="<?php
+        if (empty($_SESSION['csrf_token'])) {
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
+        }
+        echo $_SESSION['csrf_token'];
+    ?>">
 
-                <?php if($edit): ?>
-                    <input type="hidden" name="id" value="<?= $edit['id'] ?>">
-                <?php endif; ?>
+    <?php if($edit): ?>
+        <input type="hidden" name="id" value="<?= (int)$edit['id'] ?>">
+    <?php endif; ?>
 
-                <!-- TITLE -->
-                <label class="block font-semibold mb-1"><?= ucfirst($labelField) ?></label>
-                <input name="title" class="w-full p-2 rounded-lg border border-gray-300 mb-4"
-                       value="<?= old_val('title') ?>" required>
+    <!-- Title -->
+    <label class="block font-semibold mb-1">Title</label>
+    <input name="title" class="w-full p-2 rounded-lg border border-gray-300 mb-4"
+           value="<?= old_val('title') ?>" required>
 
-                <!-- PARENT -->
-                <label class="block font-semibold mb-1">Parent Category</label>
-                <select name="parent_id" class="w-full p-2 rounded-lg border border-gray-300 mb-4">
-                    <option value="">-- None --</option>
-                    <?= render_options($roots,0, $edit['parent_id'] ?? null, $edit['id'] ?? null) ?>
-                </select>
+    <!-- Parent -->
+    <label class="block font-semibold mb-1">Parent Category</label>
+    <select name="parent_id" class="w-full p-2 rounded-lg border border-gray-300 mb-4">
+        <option value="">-- None --</option>
+        <?= render_options($roots,0, $edit['parent_id'] ?? null, $edit['id'] ?? null) ?>
+    </select>
 
-                <!-- DESCRIPTION -->
-                <label class="block font-semibold mb-1">Description</label>
-                <textarea name="description" rows="4"
-                          class="w-full p-2 rounded-lg border border-gray-300"><?= old_val('description') ?></textarea>
+    <!-- Image -->
+    <label class="block font-semibold mb-1">Category Image</label>
+    <input type="file" name="image" class="w-full mb-4" accept="image/*">
 
-                <!-- ACTIONS -->
-                <div class="flex justify-end gap-3 mt-4">
-                    <?php if($edit): ?>
-                        <a href="categories.php" class="px-4 py-2 rounded-lg border">Cancel</a>
-                    <?php endif; ?>
+    <!-- Description -->
+    <label class="block font-semibold mb-1">Description</label>
+    <textarea name="description" rows="4"
+              class="w-full p-2 rounded-lg border border-gray-300"><?= old_val('description') ?></textarea>
 
-                    <button class="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold">
-                        <?= $edit ? "Update" : "Add Category" ?>
-                    </button>
-                </div>
-            </form>
+    <div class="flex justify-end gap-3 mt-4">
+        <?php if($edit): ?>
+            <a href="categories.php" class="px-4 py-2 rounded-lg border">Cancel</a>
+        <?php endif; ?>
+        <button class="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold">
+            <?= $edit ? "Update" : "Add Category" ?>
+        </button>
+    </div>
+</form>
         </div>
 
         <!-- CATEGORY TABLE -->
@@ -182,6 +208,7 @@ function render_options($nodes,$level=0,$selected=null,$exclude=null){
                 <table class="w-full text-sm">
                     <thead class="bg-gray-50 border-b">
                         <tr>
+                            <th class="p-3 text-left">Image</th> <!-- NEW -->
                             <th class="p-3 text-left">Title</th>
                             <th class="p-3 text-left">Slug</th>
                             <th class="p-3 text-left">Parent</th>
@@ -197,7 +224,24 @@ function render_options($nodes,$level=0,$selected=null,$exclude=null){
                             $indent = str_repeat("&nbsp;&nbsp;&nbsp;",$level);
                             $parent = $node['parent_id'] ? ($map[$node['parent_id']] ?? '-') : '-';
 
+                            // path for category image
+                            $imgSrc = '';
+                            if (!empty($node['image'])) {
+                                $imgSrc = '/assets/uploads/categories/' . ltrim($node['image'], '/');
+                            }
+
                             echo "<tr class='border-b' data-title='".strtolower($node['title'])."'>";
+
+                            // IMAGE CELL
+                            echo "<td class='p-3'>";
+                            if ($imgSrc) {
+                                echo "<img src='".htmlspecialchars($imgSrc, ENT_QUOTES, 'UTF-8')."' alt='' class='w-10 h-10 object-cover rounded border border-gray-200'>";
+                            } else {
+                                echo "<span class='text-xs text-slate-400'>—</span>";
+                            }
+                            echo "</td>";
+
+                            // TITLE CELL
                             echo "<td class='p-3'>{$indent}<strong>".htmlspecialchars($node['title'])."</strong></td>";
                             echo "<td class='p-3'>".htmlspecialchars($node['slug'])."</td>";
                             echo "<td class='p-3'>".htmlspecialchars($parent)."</td>";

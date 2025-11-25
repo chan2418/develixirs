@@ -49,19 +49,28 @@ $nav = [
 ];
 
 // Determine if current page is inside special parents (Products / Orders / Appearance)
-$isProductArea = in_array($req_file, ['products.php','add_product.php','edit_product.php','product_reviews.php','product_inventory.php']) ||
-                 stripos($req_path, '/admin/products') === 0 ||
-                 stripos($req_path, '/admin/product_reviews') === 0 ||
-                 stripos($req_path, '/admin/product_inventory') === 0;
+$isProductArea = in_array($req_file, [
+                    'products.php',
+                    'add_product.php',
+                    'edit_product.php',
+                    'product_reviews.php',
+                    'product_inventory.php',
+                    'tags.php'                // 👈 NEW
+                ]) ||
+                stripos($req_path, '/admin/products') === 0 ||
+                stripos($req_path, '/admin/product_reviews') === 0 ||
+                stripos($req_path, '/admin/product_inventory') === 0 ||
+                stripos($req_path, '/admin/tags') === 0;   // 👈 NEW
 
 $isOrdersArea = in_array($req_file, ['orders.php','order_view.php','invoices.php','invoice_view.php','shipments.php']) ||
                 stripos($req_path, '/admin/orders') === 0 ||
                 stripos($req_path, '/admin/invoices') === 0 ||
                 stripos($req_path, '/admin/shipments') === 0;
 
-$isAppearanceArea = in_array($req_file, ['banner.php','appearance.php']) ||
+$isAppearanceArea = in_array($req_file, ['banner.php','appearance.php','product_highlights.php']) ||
                     stripos($req_path, '/admin/banner.php') === 0 ||
-                    stripos($req_path, '/admin/appearance') === 0;
+                    stripos($req_path, '/admin/appearance') === 0 ||
+                    stripos($req_path, '/admin/product_highlights') === 0;
 
 ?>
 <!-- Sidebar -->
@@ -120,6 +129,12 @@ $isAppearanceArea = in_array($req_file, ['banner.php','appearance.php']) ||
           <span class="text-slate-500">•</span>
           <span class="text-sm">Theme / Sections</span>
         </a>
+
+        <a href="/admin/product_highlights.php"
+          class="<?php echo is_active_link(['product_highlights','product_highlights.php','highlights']); ?> block px-3 py-2 rounded-md">
+          <span class="text-slate-500">•</span>
+          <span class="text-sm">Product Highlights</span>
+        </a>
       </div>
     </div>
 
@@ -154,6 +169,13 @@ $isAppearanceArea = in_array($req_file, ['banner.php','appearance.php']) ||
           <span class="text-sm">Products</span>
         </a>
 
+        <!-- 👇 NEW: Product Tags -->
+        <a href="/admin/tags.php"
+          class="<?php echo is_active_link(['tags','tags.php','product_tags']); ?> block px-3 py-2 rounded-md">
+          <span class="text-slate-500">•</span>
+          <span class="text-sm">Product Tags</span>
+        </a>
+
         <a href="/admin/product_reviews.php" class="<?php echo is_active_link(['product_reviews','product_reviews.php']); ?> block px-3 py-2 rounded-md">
           <span class="text-slate-500">•</span>
           <span class="text-sm">Product Reviews</span>
@@ -163,7 +185,6 @@ $isAppearanceArea = in_array($req_file, ['banner.php','appearance.php']) ||
           <span class="text-slate-500">•</span>
           <span class="text-sm">Product Inventory</span>
         </a>
-      </div>
     </div>
 
     <!-- Orders parent (collapsible) with Invoices + Shipments -->

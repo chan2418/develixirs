@@ -1,12 +1,149 @@
 <?php
-// =================== DB CONNECTION ===================
-// Change these according to your setup
-$host   = 'localhost';
-$dbname = 'develixirs_db';   // your DB name
-$user   = 'root';            // your DB username
-$pass   = '';                // your DB password
+require_once __DIR__ . '/includes/db.php';   // make sure this creates $pdo
 
-$pdo = null;
+
+// ================== HOME OFFER BANNER (LEFT BOTTOM AD CARD) ==================
+$homeOfferBanner = null;
+try {
+    $stmt = $pdo->prepare("
+        SELECT *
+        FROM banners
+        WHERE is_active = 1
+          AND page_slot = 'home_offer'
+        ORDER BY id DESC
+        LIMIT 1
+    ");
+    $stmt->execute();
+    $homeOfferBanner = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+} catch (PDOException $e) {
+    $homeOfferBanner = null;
+}
+
+$popularTags = [];
+
+try {
+    $stmt = $pdo->query("
+        SELECT t.id, t.name, t.slug, COUNT(pt.product_id) as usage_count
+        FROM tags t
+        LEFT JOIN product_tags pt ON pt.tag_id = t.id
+        WHERE t.is_active = 1
+        GROUP BY t.id
+        ORDER BY usage_count DESC, t.name ASC
+        LIMIT 10
+    ");
+    $popularTags = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    $popularTags = [];
+}
+
+// ================== HERO BANNERS (HOME ONLY) ==================
+$homeBanners = [];
+try {
+    $stmt = $pdo->prepare("
+        SELECT *
+        FROM banners
+        WHERE is_active = 1
+          AND page_slot = :slot
+        ORDER BY id DESC
+    ");
+    $stmt->execute(['slot' => 'home']);
+    $homeBanners = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    $homeBanners = [];
+}
+
+// ================== HOME LEFT SIDEBAR BANNERS ==================
+$homeSidebarBanners = [];
+try {
+    $stmt = $pdo->prepare("
+        SELECT *
+        FROM banners
+        WHERE is_active = 1
+          AND page_slot = 'home_sidebar'
+        ORDER BY id DESC
+    ");
+    $stmt->execute();
+    $homeSidebarBanners = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+} catch (PDOException $e) {
+    $homeSidebarBanners = [];
+}
+
+// ================== HOME CENTER BANNER (FOR WIDE BANNER) ==================
+$homeCenterBanner = null;
+try {
+    $stmt = $pdo->prepare("
+        SELECT *
+        FROM banners
+        WHERE is_active = 1
+          AND page_slot = 'home_center'
+        ORDER BY id DESC
+        LIMIT 1
+    ");
+    $stmt->execute();
+    $homeCenterBanner = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+} catch (PDOException $e) {
+    $homeCenterBanner = null;
+}
+
+// ================== HOMEPAGE BANNER (fallback if you ever need it) ==================
+$homeBanner = null;
+try {
+    $stmt = $pdo->prepare("SELECT * FROM banners WHERE is_active = 1 ORDER BY id DESC LIMIT 1");
+    $stmt->execute();
+    $homeBanner = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+} catch (PDOException $e) {
+    $homeBanner = null;
+}
+
+function get_first_image($images) {
+    // change this default if you have a different placeholder
+    $default = '/assets/images/avatar-default.png';
+
+    if (!$images) return $default;
+
+    // try JSON first
+    $maybe = @json_decode($images, true);
+    if (is_array($maybe) && !empty($maybe[0])) {
+        $val = $maybe[0];
+    } else {
+        // then comma-separated
+        if (strpos($images, ',') !== false) {
+            $parts = array_map('trim', explode(',', $images));
+            $val = $parts[0] ?? '';
+        } else {
+            $val = trim($images);
+        }
+    }
+
+    if (!$val) return $default;
+
+    // if full URL or absolute path
+    if (preg_match('#^https?://#i', $val) || strpos($val, '/') === 0) {
+        return $val;
+    }
+
+    // else assume file in uploads
+    return '/assets/uploads/products/' . ltrim($val, '/');
+}
+
+// helper: fetch specific homepage sections (best seller, trendy, sale, top_rated)
+function fetch_home_section(PDO $pdo, string $section, int $limit): array {
+    $sql = "
+        SELECT p.id, p.name, p.price, p.images
+        FROM homepage_products hp
+        JOIN products p ON p.id = hp.product_id
+        WHERE hp.section = :section
+        ORDER BY hp.sort_order ASC, hp.id DESC
+        LIMIT :lim
+    ";
+    $stmt = $pdo->prepare($sql);
+    $stmt->bindValue(':section', $section, PDO::PARAM_STR);
+    $stmt->bindValue(':lim', $limit, PDO::PARAM_INT);
+    $stmt->execute();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+$categories    = [];
 $allProducts   = [];
 $newProducts   = [];
 $bestProducts  = [];
@@ -15,42 +152,99 @@ $tabLatest     = [];
 $tabTrendy     = [];
 $tabSale       = [];
 $tabTop        = [];
+$subCategories = [];
 
 try {
-    $dsn  = "mysql:host=$host;dbname=$dbname;charset=utf8mb4";
-    $opts = [
-        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    ];
-    $pdo = new PDO($dsn, $user, $pass, $opts);
+    // ================== CATEGORY LABEL FIELD (same as admin) ==================
+    $cols   = $pdo->query("SHOW COLUMNS FROM categories")->fetchAll(PDO::FETCH_ASSOC);
+    $fields = array_column($cols, 'Field');
 
-    // Get up to 20 products (latest first)
-    // Adjust the query if you have created_at or another field
-    $stmt = $pdo->query("SELECT id, name, price, image_url FROM products ORDER BY id DESC LIMIT 20");
-    $allProducts = $stmt->fetchAll();
+    $labelField = in_array('title', $fields)
+        ? 'title'
+        : (in_array('name', $fields) ? 'name' : null);
 
-    // Now slice for different sections (all from same DB list)
-    $newProducts   = array_slice($allProducts, 0, 4);  // New Herbal Products
-    $bestProducts  = array_slice($allProducts, 4, 4);  // Best Sellers
-    $picksProducts = array_slice($allProducts, 0, 2);  // Devilixirs Picks (sidebar)
+    if ($labelField !== null) {
+        $catSql = "
+            SELECT id, {$labelField} AS title
+            FROM categories
+            WHERE parent_id = 0 OR parent_id IS NULL
+            ORDER BY title ASC
+        ";
+        $catStmt    = $pdo->query($catSql);
+        $categories = $catStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 
-    // Tabbed sections – reuse same array in different slices
+    // ===== SUBCATEGORIES FOR BANNER ROW =====
+    if ($labelField !== null) {
+        // Try to detect an image field in categories table
+        $imgField = null;
+        foreach ($fields as $f) {
+            if (in_array($f, ['image', 'thumbnail', 'thumb', 'banner', 'icon', 'img'])) {
+                $imgField = $f;
+                break;
+            }
+        }
+
+        // If there is an image column, select it; otherwise set NULL as img
+        $imgSelect = $imgField ? ", {$imgField} AS img" : ", NULL AS img";
+
+        $subSql = "
+            SELECT id, {$labelField} AS title, parent_id {$imgSelect}
+            FROM categories
+            WHERE parent_id IS NOT NULL
+              AND parent_id <> 0
+            ORDER BY title ASC
+        ";
+
+        $subStmt       = $pdo->query($subSql);
+        $subCategories = $subStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * 1) NEW HERBAL PRODUCTS + DEVILIXIRS PICKS + LATEST TAB
+     *    - all come from latest products in `products` table (auto, no manual selection)
+     */
+    $stmt = $pdo->query("
+        SELECT id, name, price, images
+        FROM products
+        ORDER BY id DESC
+        LIMIT 8
+    ");
+    $allProducts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // New Herbal Products – first 4 latest
+    $newProducts   = array_slice($allProducts, 0, 4);
+
+    // Devilixirs Picks – first 2 latest
+    $picksProducts = array_slice($allProducts, 0, 2);
+
+    // Latest Products (tab column) – same logic as New Herbal: from latest products
     $tabLatest = array_slice($allProducts, 0, 3);
-    $tabTrendy = array_slice($allProducts, 3, 3);
-    $tabSale   = array_slice($allProducts, 6, 3);
-    $tabTop    = array_slice($allProducts, 9, 3);
+
+    /**
+     * 2) OTHER SECTIONS FROM homepage_products TABLE
+     *    - Best Sellers (homepage_products.section = 'best_seller')
+     *    - Trendy Products (section = 'trendy')
+     *    - Sale Products (section = 'sale')
+     *    - Top Rated (section = 'top_rated')
+     */
+    $bestProducts = fetch_home_section($pdo, 'best_seller', 4);
+    $tabTrendy    = fetch_home_section($pdo, 'trendy', 3);
+    $tabSale      = fetch_home_section($pdo, 'sale', 3);
+    $tabTop       = fetch_home_section($pdo, 'top_rated', 3);
 
 } catch (PDOException $e) {
-    // If DB fails, everything stays empty; page still works, no products shown
-    // Uncomment if you want to debug:
+    // uncomment for debugging:
     // echo "DB error: " . $e->getMessage();
+    $categories = $allProducts = $newProducts = $bestProducts = $picksProducts = [];
+    $tabLatest = $tabTrendy = $tabSale = $tabTop = [];
 }
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Devilixirs – Herbal Shop</title>
+  <title>Devilixirs – Herbal Shop Demo</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <!-- Google Font -->
@@ -58,7 +252,6 @@ try {
 
   <!-- Font Awesome for icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
-
   <style>
     :root{
       /* Devilixirs Gold + Silver Theme */
@@ -83,7 +276,7 @@ try {
     body{
       font-family:'Poppins',sans-serif;
       color:var(--text);
-      background:#B5B5B5;
+      background:#dadada00; /* was #ffffff */
     }
 
     a{
@@ -182,20 +375,21 @@ try {
       display:flex;
       background:#fff;
       border-radius:999px;
-      overflow:hidden;
+      overflow:visible;   /* ✅ allow dropdown to show */
       box-shadow:0 4px 14px rgba(0,0,0,.12);
     }
     .search-category{
-      background:#f7faf8;
-      padding:12px 18px;
-      border-right:1px solid var(--border);
-      display:flex;
-      align-items:center;
-      gap:6px;
-      font-size:13px;
-      color:var(--muted);
-      white-space:nowrap;
-    }
+  position:relative;
+  padding:12px 18px;
+  border-right:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:13px;
+  color:var(--muted);
+  white-space:nowrap;
+  cursor:pointer;
+}
     .search-input{
       flex:1;
       border:none;
@@ -310,6 +504,7 @@ try {
       z-index:60;
     }
 
+    /* show on hover (desktop) */
     .nav li.has-mega:hover .mega-menu{
       display:block;
     }
@@ -336,24 +531,22 @@ try {
       list-style:none;
       margin:0;
       padding:0;
-      display:block;
     }
 
-    .mega-menu .mega-list li{
-      display:block;
-      padding:4px 0;
+    .mega-list li{
+      margin-bottom:6px;
     }
 
     .mega-item-link{
       display:block;
-      padding:3px 0;
-      font-size:13px;
-      color:#333;
+      padding:8px 10px;
+      border-radius:8px;
       transition:.2s ease;
     }
 
     .mega-item-link:hover{
-      color:var(--primary-dark);
+      background:#f8f4e6;
+      transform:translateX(3px);
     }
 
     .mega-demo{
@@ -382,29 +575,55 @@ try {
       margin-left:6px;
     }
 
-    /* MAIN CONTENT */
-    .main{
-      background:linear-gradient(180deg, #B5B5B5 0%, #ffffff 55%);
+    .mega-menu .mega-list{
+      display:block;
+      margin:0;
+      padding:0;
     }
 
-    .hero-section{
-      padding:40px 0 30px;
+    .mega-menu .mega-list li{
+      display:block;
+      padding:4px 0;
     }
-    .hero-grid{
+    .mega-item-link{
+      display:block;
+      padding:3px 0;
+      font-size:13px;
+      color:#333;
+    }
+
+    .mega-item-link:hover{
+      color:var(--primary-dark);
+    }
+
+    /* MAIN CONTENT */
+    .main{
+      background:linear-gradient(180deg, #dadada00 0%, #ffffff 55%);
+    }
+
+    /* ---- NEW LAYOUT: SIDEBAR + MAIN ---- */
+    .page-grid{
       display:grid;
       grid-template-columns:260px 1fr;
       gap:25px;
-      align-items:stretch;
+      margin-top:40px;
     }
 
-    /* CARD BASE */
+    .side-column{
+      display:flex;
+      flex-direction:column;
+      gap:24px;
+    }
+
+    .hero-section{
+      padding:0 0 30px;
+    }
+
+    /* CATEGORY SIDEBAR CARD */
     .card{
       background:var(--card-bg);
       border:1px solid var(--border);
       box-shadow:0 2px 6px rgba(0,0,0,.04);
-    }
-    .card + .card{
-      margin-top:24px;
     }
     .card-header{
       background:var(--primary);
@@ -427,7 +646,6 @@ try {
       padding:12px 0;
     }
 
-    /* Categories specific */
     .categories-card .card-header{
       cursor:pointer;
     }
@@ -483,7 +701,6 @@ try {
       width:230px;
       height:230px;
       border-radius:50%;
-      background:radial-gradient(circle at 30% 30%,#e5f6ec,#c3ecd7);
       opacity:.8;
     }
     .hero-text{
@@ -530,29 +747,29 @@ try {
       box-shadow:0 6px 18px rgba(0,0,0,.25);
     }
 
-    /* CONTENT GRID */
+    /* CONTENT BELOW HERO (right column) */
     .content-grid{
-      display:grid;
-      grid-template-columns:260px 1fr;
-      gap:25px;
+      /* now just a normal flow container */
     }
 
     /* BANNERS ROW */
     .banner-row{
-      display:grid;
-      grid-template-columns:2fr 2fr 2fr;
+      display:flex;
       gap:18px;
       margin-bottom:26px;
+      overflow:hidden;
+      scroll-behavior:smooth;
     }
     .banner-item{
       position:relative;
       overflow:hidden;
       background:#eee;
       border:1px solid var(--border);
+      flex:0 0 calc(33.333% - 12px);
     }
     .banner-item img{
       width:100%;
-      height:100%;
+      height:180px;
       object-fit:cover;
       transition:transform .3s ease;
     }
@@ -656,7 +873,7 @@ try {
       color:#ccc;
     }
 
-    /* SIDE CARDS (SPECIAL / FEATURED / TAGS) */
+    /* SIDE CARDS */
     .mini-product{
       display:flex;
       align-items:center;
@@ -793,90 +1010,92 @@ try {
       padding:0 18px 20px;
     }
     .tabs-bar{
-      display:flex;
-      flex-wrap:wrap;
-      margin:-1px -18px 18px;
+      display:grid;
+      grid-template-columns:repeat(4, minmax(0, 1fr));
+      column-gap:18px;
+      margin:0 0 14px;
     }
     .tab-ribbon{
       position:relative;
-      padding:10px 26px;
+      padding:10px 6px;
       font-size:12px;
       text-transform:uppercase;
       background:var(--primary);
       color:#fff;
       font-weight:500;
       cursor:pointer;
-      margin-right:4px;
+      text-align:center;
+      border-radius:3px;
     }
     .tab-ribbon::after{
-      content:'';
-      position:absolute;
-      top:0;
-      right:-16px;
-      width:0;
-      height:0;
-      border-top:20px solid transparent;
-      border-bottom:20px solid transparent;
-      border-left:16px solid var(--primary);
-    }
-    .tab-ribbon:last-child{
-      margin-right:0;
-    }
-    .tab-ribbon:last-child::after{
       display:none;
     }
     .tab-ribbon.inactive{
       background:#f3f3f3;
       color:#333;
     }
-    .tab-ribbon.inactive::after{
-      border-left-color:#f3f3f3;
-    }
 
     .tabbed-columns{
-      display:grid;
-      grid-template-columns:repeat(4,minmax(0,1fr));
-      gap:18px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+      align-items: stretch;
     }
     .tab-column{
-      background:#fff;
+      display: grid;
+      grid-auto-rows: 1fr;
+      gap: 10px;
+      background: #fff;
     }
     .tab-column-card{
-      border:1px solid var(--border);
-      padding:10px 12px 12px;
-      margin-bottom:12px;
-    }
-    .tab-column-card:last-child{
-      margin-bottom:0;
+      margin-bottom: 0 !important;
+      height: 100%;
+      display: flex;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      box-sizing: border-box;
+      background:#fff;
+      border-radius:4px;
     }
     .tab-col-product{
-      display:flex;
-      align-items:center;
-      gap:10px;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      width: 100%;
     }
     .tab-col-product img{
-      width:46px;
-      height:46px;
-      object-fit:cover;
-      border-radius:6px;
-      border:1px solid var(--border);
+      width: 60px;
+      height: 60px;
+      object-fit: contain;
     }
     .tab-col-info{
-      flex:1;
-      font-size:12px;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
     }
     .tab-col-name{
-      margin-bottom:4px;
+      font-family: 'Poppins', sans-serif;
+      font-size: 12.5px;
+      font-weight: 500;
+      line-height: 1.4;
+      color: #2b2b2b;
+      letter-spacing: 0.2px;
+      margin-bottom: 4px;
+      white-space: normal;
+      word-break: break-word;
+      flex: 1;
     }
     .tab-col-price{
-      color:var(--primary);
-      font-weight:600;
-      font-size:12px;
+      font-family: 'Poppins', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      color: #b89026;
+      margin-top:2px;
     }
     .tab-col-stars{
-      font-size:10px;
-      color:#ccc;
-      margin-top:3px;
+      color: #cfcfcf;
+      font-size: 11px;
+      margin-top:2px;
     }
 
     /* BRANDS ROW */
@@ -1013,7 +1232,7 @@ try {
       width:42px;
       height:42px;
       border-radius:50%;
-      background: #A41B42;
+      background:#A41B42;
       display:flex;
       align-items:center;
       justify-content:center;
@@ -1026,20 +1245,16 @@ try {
 
     /* RESPONSIVE */
     @media (max-width:992px){
-      .hero-grid,
-      .content-grid{
+      .page-grid{
         grid-template-columns:1fr;
       }
       .banner-row{
         grid-template-columns:repeat(2,minmax(0,1fr));
       }
       .product-grid{
-        grid-template-columns:repeat(3,minmax(0,1fr));
+        grid-template-columns:repeat(2,minmax(0,1fr));
       }
       .blog-grid{
-        grid-template-columns:1fr;
-      }
-      .tabbed-columns{
         grid-template-columns:repeat(2,minmax(0,1fr));
       }
       .footer-inner{
@@ -1054,7 +1269,10 @@ try {
         gap:15px;
       }
       .banner-row{
-        grid-template-columns:1fr;
+        overflow:hidden;
+      }
+      .banner-item{
+        flex:0 0 100%;
       }
       .product-grid{
         grid-template-columns:repeat(2,minmax(0,1fr));
@@ -1073,6 +1291,18 @@ try {
       .footer-inner{
         grid-template-columns:repeat(2,minmax(0,1fr));
       }
+
+      .side-column{
+        order:2;
+        margin-top:20px;
+      }
+      .main-column{
+        order:1;
+      }
+
+      .hero-section{
+        padding:20px 0 24px;
+      }
     }
 
     @media (max-width:600px){
@@ -1087,36 +1317,746 @@ try {
       }
     }
 
-    /* MOBILE MEGA MENU */
+    /* ===== MOBILE MEGA MENU FIX ===== */
     @media (max-width: 768px){
+
       .nav ul{
         flex-direction:column;
         align-items:flex-start;
         gap:0;
       }
+
       .nav li{
         width:100%;
       }
+
       .mega-menu{
         position:static;
         box-shadow:none;
         display:none;
         padding:15px 0;
       }
+
       .nav li.has-mega.open .mega-menu{
         display:block;
       }
+
       .mega-menu-inner{
         grid-template-columns:1fr;
         gap:20px;
       }
+
       .mega-item-link{
         padding:6px 0;
       }
     }
+
+    /* Ad Poster Card */
+    .ad-card{
+      border:none;
+      background:linear-gradient(135deg, #A41B42, #3B502C);
+      color:#fff;
+      position:relative;
+      overflow:hidden;
+      padding:16px 18px 18px;
+      box-shadow:0 6px 18px rgba(0,0,0,.25);
+    }
+
+    .ad-card::before{
+      content:'';
+      position:absolute;
+      right:-40px;
+      bottom:-40px;
+      width:140px;
+      height:140px;
+      border-radius:50%;
+      background:rgba(212,175,55,0.25);
+    }
+
+    .ad-badge{
+      font-size:10px;
+      text-transform:uppercase;
+      letter-spacing:.18em;
+      opacity:.85;
+      margin-bottom:6px;
+    }
+
+    .ad-title{
+      font-size:15px;
+      font-weight:600;
+      line-height:1.4;
+      max-width:180px;
+      margin-bottom:8px;
+    }
+
+    .ad-text{
+      font-size:11px;
+      opacity:.9;
+      max-width:200px;
+      margin-bottom:14px;
+    }
+
+    .ad-cta{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      font-size:11px;
+      text-transform:uppercase;
+      padding:6px 12px;
+      border-radius:999px;
+      background:rgba(0,0,0,0.25);
+      border:1px solid rgba(255,255,255,0.4);
+      cursor:pointer;
+    }
+
+    .ad-cta i{
+      font-size:10px;
+    }
+
+    /* Left sidebar promo poster */
+    .promo-card{
+      padding:0;
+      border:1px solid var(--border);
+      overflow:hidden;
+      background:#eee;
+    }
+
+    .promo-image{
+      position:relative;
+    }
+
+    .promo-image img{
+      width:100%;
+      height:260px;
+      object-fit:cover;
+      display:block;
+    }
+
+    .promo-overlay{
+      position:absolute;
+      inset:0;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      color:#fff;
+      text-transform:uppercase;
+      letter-spacing:.14em;
+      background:linear-gradient(to bottom,
+        rgba(0,0,0,0.05),
+        rgba(0,0,0,0.45)
+      );
+    }
+
+    .promo-text-top{
+      font-size:13px;
+      font-weight:600;
+      margin-bottom:6px;
+    }
+
+    .promo-text-bottom{
+      font-size:18px;
+      font-weight:600;
+    }
+
+    .promo-text-bottom span{
+      font-size:22px;
+    }
+
+    /* MOBILE BOTTOM NAV */
+    .mobile-bottom-nav{
+      position:fixed;
+      left:0;
+      right:0;
+      bottom:0;
+      height:60px;
+      background:#ffffff;
+      border-top:1px solid #e3e3e3;
+      display:none;
+      align-items:center;
+      justify-content:space-around;
+      font-size:11px;
+      z-index:99;
+    }
+
+    .mobile-bottom-nav a{
+      flex:1;
+      text-align:center;
+      text-decoration:none;
+      color:#3B502C;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:4px;
+    }
+
+    .mobile-bottom-nav a i{
+      font-size:18px;
+    }
+
+    .mobile-bottom-nav .count{
+      font-size:11px;
+      opacity:0.7;
+    }
+
+    /* ===== MOBILE HEADER ===== */
+    .mobile-header{
+      display:none;
+      height:50px;
+      background:#ffffff;
+      border-bottom:1px solid #e3e3e3;
+      padding:0 12px;
+      align-items:center;
+      justify-content:space-between;
+      position:fixed;
+      top:0;
+      left:0;
+      right:0;
+      z-index:110;
+    }
+
+    .mobile-header-title{
+      font-size:14px;
+      font-weight:600;
+      color:#3B502C;
+      text-transform:uppercase;
+    }
+
+    .mobile-menu-toggle,
+    .mobile-cart-btn{
+      background:none;
+      border:none;
+      padding:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:20px;
+      color:#3B502C;
+      cursor:pointer;
+    }
+
+    .mobile-cart-btn{
+      position:relative;
+    }
+
+    .mobile-cart-count{
+      position:absolute;
+      top:-4px;
+      right:-8px;
+      background:#000;
+      color:#fff;
+      font-size:10px;
+      width:16px;
+      height:16px;
+      border-radius:50%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    /* ===== OFF CANVAS MENU ===== */
+    .mobile-menu-overlay{
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,0.55);
+      display:none;
+      z-index:120;
+    }
+
+    .mobile-menu-overlay.open{
+      display:block;
+    }
+
+    .mobile-menu-panel{
+      position:absolute;
+      top:0;
+      left:0;
+      width:80%;
+      max-width:320px;
+      height:100%;
+      background:#ffffff;
+      box-shadow:2px 0 18px rgba(0,0,0,0.3);
+      display:flex;
+      flex-direction:column;
+    }
+
+    .mobile-menu-top{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:12px 14px;
+      background:#4a4a4a;
+      color:#fff;
+      text-transform:uppercase;
+      font-size:14px;
+    }
+
+    .mobile-menu-title{
+      font-weight:600;
+    }
+
+    .mobile-menu-close{
+      background:none;
+      border:none;
+      color:#fff;
+      font-size:18px;
+      cursor:pointer;
+    }
+
+    .mobile-menu-search{
+      display:flex;
+      padding:8px 10px;
+      border-bottom:1px solid #e3e3e3;
+    }
+
+    .mobile-menu-search input{
+      flex:1;
+      border:1px solid #ddd;
+      padding:6px 8px;
+      font-size:12px;
+    }
+
+    .mobile-menu-search button{
+      width:36px;
+      border:none;
+      background:#4a4a4a;
+      color:#fff;
+      font-size:14px;
+    }
+
+    .mobile-menu-list{
+      list-style:none;
+      margin:0;
+      padding:0;
+      flex:1;
+      overflow-y:auto;
+    }
+
+    .mobile-menu-list li{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:12px 14px;
+      font-size:13px;
+      border-bottom:1px solid #f0f0f0;
+    }
+
+    .mobile-menu-list li.active{
+      background:#3B502C;
+      color:#fff;
+    }
+
+    .mobile-menu-list li a{
+      flex:1;
+    }
+
+    .mobile-menu-list .plus{
+      font-weight:700;
+      font-size:16px;
+      color:#777;
+    }
+
+    .mobile-menu-colors{
+      padding:12px 14px 14px;
+      display:flex;
+      gap:8px;
+    }
+
+    .color-box{
+      width:26px;
+      height:26px;
+      display:inline-block;
+    }
+
+    .color-box.c1{ background:#29458b; }
+    .color-box.c2{ background:#2d8ec5; }
+    .color-box.c3{ background:#d54235; }
+    .color-box.c4{ background:#b6328f; }
+
+    @media (max-width:768px){
+      .mobile-header{
+        display:flex;
+      }
+
+      .top-bar,
+      .header,
+      .nav{
+        margin-top:50px;
+      }
+
+      .header-icons{
+        display:none;
+      }
+
+      .nav ul{
+        display:none;
+      }
+
+      body{
+        padding-bottom:70px;
+      }
+
+      .mobile-bottom-nav{
+        display:flex;
+      }
+    }
+
+    /* MOBILE: TABS AS SECTIONS */
+    @media (max-width:768px){
+      .tabs-bar{
+        display:none;
+      }
+
+      .tabbed-columns{
+        grid-template-columns:1fr;
+      }
+
+      .tab-column{
+        margin-bottom:24px;
+      }
+
+      .tab-column:nth-child(1)::before{
+        content:"Latest Products";
+      }
+      .tab-column:nth-child(2)::before{
+        content:"Trendy Products";
+      }
+      .tab-column:nth-child(3)::before{
+        content:"Sale Products";
+      }
+      .tab-column:nth-child(4)::before{
+        content:"Top Rated";
+      }
+
+      .tab-column::before{
+        display:block;
+        background:#D4AF37;
+        color:#fff;
+        padding:10px 14px;
+        font-size:13px;
+        font-weight:600;
+        text-transform:uppercase;
+        margin-bottom:12px;
+      }
+    }
+
+    .hero-banner{
+      /* fallback if no DB banner */
+      background:linear-gradient(90deg,#f7faf8,#ffffff);
+      border:1px solid var(--border);
+      min-height:220px;
+      display:flex;
+      align-items:center;
+      padding:40px 60px;
+      box-shadow:0 4px 18px rgba(0,0,0,.06);
+      position:relative;
+      overflow:hidden;
+    }
+
+    /* when we have a DB banner image */
+    .hero-banner.has-banner{
+      background-size:cover;
+      background-position:center;
+      background-repeat:no-repeat;
+    }
+
+    .hero-text{
+      position:relative;
+      z-index:1;
+    }
+
+    /* HERO SLIDER */
+    .hero-slider{
+      position:relative;
+      border:1px solid var(--border);
+      box-shadow:0 4px 18px rgba(0,0,0,.06);
+      overflow:hidden;
+      border-radius:8px;
+    }
+
+    .hero-slider-track{
+      display:flex;
+      transition:transform .6s ease;
+      will-change:transform;
+    }
+
+    .hero-slide{
+      min-width:100%;
+      height:260px;
+      background-size:cover;
+      background-position:center;
+      position:relative;
+    }
+
+    .hero-slide-link{
+      display:block;
+      width:100%;
+      height:100%;
+      text-decoration:none;
+      color:inherit;
+    }
+
+    .hero-slide-overlay{
+      position:absolute;
+      inset:0;
+      display:flex;
+      align-items:center;
+      padding:40px 60px;
+      box-sizing:border-box;
+    }
+
+    .hero-slide .hero-text{
+      color:#fff;
+    }
+
+    .hero-slide .hero-text small{
+      font-size:11px;
+      letter-spacing:.2em;
+      text-transform:uppercase;
+      color:#f5f5f5;
+      display:block;
+      margin-bottom:10px;
+    }
+
+    .hero-slide .hero-text h1{
+      font-size:30px;
+      letter-spacing:.04em;
+      margin-bottom:10px;
+    }
+
+    .hero-slide .hero-text p{
+      font-size:13px;
+      max-width:380px;
+      margin-bottom:22px;
+      color:#f0f0f0;
+    }
+
+    .hero-slider-dots{
+      position:absolute;
+      left:50%;
+      bottom:14px;
+      transform:translateX(-50%);
+      display:flex;
+      gap:6px;
+    }
+
+    .hero-dot{
+      width:8px;
+      height:8px;
+      border-radius:999px;
+      border:none;
+      background:rgba(255,255,255,0.4);
+      cursor:pointer;
+      padding:0;
+      transition:all .2s ease;
+    }
+
+    .hero-dot.active{
+      width:18px;
+      background:#ffffff;
+    }
+
+    @media (max-width:768px){
+      .hero-slide{
+        height:220px;
+      }
+      .hero-slide-overlay{
+        padding:24px 18px;
+      }
+      .hero-slide .hero-text h1{
+        font-size:20px;
+      }
+    }
+
+    /* ===== SIDEBAR SLIDER ===== */
+    .sidebar-slider{
+      position:relative;
+      overflow:hidden;
+      border:none;
+      background:transparent;
+      box-shadow:none;
+      padding:0;
+      height:260px;
+    }
+
+    .sidebar-slider-track{
+      display:flex;
+      flex-direction:row;
+      transition:transform .6s ease;
+      will-change:transform;
+    }
+
+    .sidebar-slide{
+      min-width:100%;
+      height:100%;
+      position:relative;
+    }
+
+    .sidebar-slide-link{
+      display:block;
+      width:100%;
+      height:100%;
+      text-decoration:none;
+      color:inherit;
+    }
+
+    .sidebar-slider-dots{
+      position:absolute;
+      left:50%;
+      bottom:10px;
+      transform:translateX(-50%);
+      display:flex;
+      gap:4px;
+      z-index:2;
+    }
+
+    .sidebar-dot{
+      width:7px;
+      height:7px;
+      border-radius:999px;
+      border:none;
+      background:rgba(255,255,255,0.4);
+      cursor:pointer;
+      padding:0;
+      transition:all .2s ease;
+    }
+
+    .sidebar-dot.active{
+      width:16px;
+      background:#ffffff;
+    }
+
+    @media (max-width:768px){
+      .sidebar-slider{
+        height:220px;
+      }
+    }
+    .wide-banner{
+  margin-top:30px;
+  border:1px solid var(--border);
+  position:relative;
+  overflow:hidden;
+  background:#eee;
+  border-radius:8px;
+  box-shadow:0 4px 16px rgba(0,0,0,.08);
+  height:260px;              /* 🔑 full banner height */
+}
+
+.wide-banner img{
+  width:100%;
+  height:100%;               /* 🔑 fill the .wide-banner */
+  object-fit:cover;
+  display:block;
+  filter:brightness(.88);
+}
+
+/* optional: a bit shorter on mobile */
+@media (max-width:768px){
+  .wide-banner{
+    height:220px;
+  }
+}
+.search-category{
+  position:relative;
+  padding:12px 18px;
+  border-right:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:13px;
+  color:var(--muted);
+  white-space:nowrap;
+  cursor:pointer;
+}
+
+.search-category-dropdown{
+  position:absolute;
+  top:100%;
+  left:0;
+  right:0;
+  background:#fff;
+  border:1px solid var(--border);
+  box-shadow:0 6px 18px rgba(0,0,0,.15);
+  list-style:none;
+  margin:6px 0 0;
+  padding:4px 0;
+  max-height:260px;
+  overflow-y:auto;
+  z-index:99;
+  display:none;
+}
+
+.search-category-dropdown li{
+  padding:8px 12px;
+  font-size:13px;
+  cursor:pointer;
+}
+
+.search-category-dropdown li:hover{
+  background:#f5f5f5;
+}
+
+/* when open */
+.search-category.open .search-category-dropdown{
+  display:block;
+}
+
   </style>
 </head>
 <body>
+
+  <!-- MOBILE HEADER -->
+  <header class="mobile-header">
+    <button class="mobile-menu-toggle">
+      <i class="fa-solid fa-bars"></i>
+    </button>
+
+    <div class="mobile-header-title">
+      MENU
+    </div>
+
+    <button class="mobile-cart-btn">
+      <i class="fa-solid fa-cart-shopping"></i>
+      <span class="mobile-cart-count">0</span>
+    </button>
+  </header>
+
+  <!-- OFF-CANVAS MOBILE MENU -->
+  <div class="mobile-menu-overlay">
+    <div class="mobile-menu-panel">
+      <div class="mobile-menu-top">
+        <span class="mobile-menu-title">Menu</span>
+        <button class="mobile-menu-close">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="mobile-menu-search">
+        <input type="text" placeholder="Search ..." />
+        <button><i class="fa-solid fa-magnifying-glass"></i></button>
+      </div>
+
+      <ul class="mobile-menu-list">
+        <li class="active"><a href="#">Home</a><span class="plus">+</span></li>
+        <li><a href="#">Shop</a><span class="plus">+</span></li>
+        <li><a href="product.php">Product</a><span class="plus">+</span></li>
+        <li><a href="#">Blog</a><span class="plus">+</span></li>
+        <li><a href="#">Contact</a><span class="plus">+</span></li>
+        <!-- <li><a href="#">Elements</a><span class="plus">+</span></li> -->
+        <li><a href="#">Wishlist (0)</a></li>
+        <li><a href="#">Login</a></li>
+      </ul>
+
+      <div class="mobile-menu-colors">
+        <span class="color-box c1"></span>
+        <span class="color-box c2"></span>
+        <span class="color-box c3"></span>
+        <span class="color-box c4"></span>
+      </div>
+    </div>
+  </div>
 
   <!-- TOP BAR -->
   <div class="top-bar">
@@ -1129,7 +2069,7 @@ try {
         <div class="social">
           <a href="#"><i class="fab fa-facebook-f"></i></a>
           <a href="#"><i class="fab fa-instagram"></i></a>
-          <a href="#"><i class="fab fa-twitter"></i></a>
+          <a href="#"><i classfab fa-twitter"></i></a>
           <a href="#"><i class="fab fa-dribbble"></i></a>
           <a href="#"><i class="fab fa-pinterest-p"></i></a>
           <a href="#"><i class="fab fa-google-plus-g"></i></a>
@@ -1149,11 +2089,40 @@ try {
         </a>
       </div>
 
-      <form class="search-box">
-        <div class="search-category">
-          All categories <i class="fa-solid fa-caret-down"></i>
+      <form class="search-box" action="products.php" method="get">
+        <div class="search-category" id="searchCategoryToggle">
+          <span id="searchCategoryLabel">All categories</span>
+          <i class="fa-solid fa-caret-down"></i>
+
+          <!-- DROPDOWN -->
+          <ul class="search-category-dropdown" id="searchCategoryDropdown">
+            <li data-cat-id="">
+              All categories
+            </li>
+
+            <?php if (!empty($categories)): ?>
+              <?php foreach ($categories as $cat): ?>
+                <li
+                  data-cat-id="<?php echo (int)$cat['id']; ?>"
+                  data-cat-name="<?php echo htmlspecialchars($cat['title'], ENT_QUOTES, 'UTF-8'); ?>"
+                >
+                  <?php echo htmlspecialchars($cat['title'], ENT_QUOTES, 'UTF-8'); ?>
+                </li>
+              <?php endforeach; ?>
+            <?php endif; ?>
+          </ul>
         </div>
-        <input class="search-input" type="text" placeholder="Search herbal products..." />
+
+        <input
+          class="search-input"
+          type="text"
+          name="q"
+          placeholder="Search herbal products..."
+        />
+
+        <!-- hidden category field -->
+        <input type="hidden" name="category" id="searchCategoryInput" value="">
+
         <button class="search-button" type="submit">
           <i class="fa-solid fa-magnifying-glass"></i>
         </button>
@@ -1177,14 +2146,13 @@ try {
     <div class="nav-inner">
       <ul>
         <li class="active">Home</li>
-
-        <!-- SHOP WITH MEGA MENU -->
+        <li>
+          <a href="product.php">Product</a>
+        </li>
         <li class="has-mega">
           <span>Shop</span>
           <div class="mega-menu">
             <div class="mega-menu-inner">
-
-              <!-- Column 1 -->
               <div>
                 <div class="mega-column-title">Hair Care</div>
                 <ul class="mega-list">
@@ -1221,7 +2189,6 @@ try {
                 </ul>
               </div>
 
-              <!-- Column 2 -->
               <div>
                 <div class="mega-column-title">Skin Care</div>
                 <ul class="mega-list">
@@ -1258,7 +2225,6 @@ try {
                 </ul>
               </div>
 
-              <!-- Column 3 -->
               <div>
                 <div class="mega-column-title">Combos &amp; Specials</div>
                 <ul class="mega-list">
@@ -1300,9 +2266,9 @@ try {
         </li>
 
         <li>Blog</li>
-        <li>Pages</li>
-        <li>Portfolios</li>
-        <li>Elements</li>
+        <li>Contact</li>
+        <!-- <li>Portfolios</li> -->
+        <!-- <li>Elements</li> -->
       </ul>
     </div>
   </nav>
@@ -1311,180 +2277,287 @@ try {
   <main class="main">
     <div class="wrapper">
 
-      <!-- HERO WITH CATEGORY SIDEBAR -->
-      <section class="hero-section">
-        <div class="hero-grid">
-          <!-- Categories card -->
-          <div>
-            <div class="card categories-card">
-              <div class="card-header categories-toggle">
-                <div class="label">
-                  <i class="fa-solid fa-bars"></i>
-                  <span>Categories</span>
-                </div>
-                <i class="fa-solid fa-chevron-right toggle-icon"></i>
+      <!-- TWO COLUMN LAYOUT -->
+      <div class="page-grid">
+        <!-- LEFT SIDEBAR -->
+        <aside class="side-column">
+          <div class="card categories-card">
+            <div class="card-header categories-toggle">
+              <div class="label">
+                <i class="fa-solid fa-bars"></i>
+                <span>Categories</span>
               </div>
-              <div class="card-body">
-                <ul class="category-list">
-                  <li><i class="fa-solid fa-leaf"></i>Herbal Hair Oils</li>
-                  <li><i class="fa-solid fa-seedling"></i>Hair Growth Serums</li>
-                  <li><i class="fa-regular fa-face-smile"></i>Face Wash &amp; Cleansers</li>
-                  <li><i class="fa-solid fa-spa"></i>Skin &amp; Body Care</li>
-                  <li><i class="fa-solid fa-bottle-droplet"></i>Aloe Vera &amp; Gels</li>
-                  <li><i class="fa-solid fa-mortar-pestle"></i>Ayurvedic Treatments</li>
-                  <li><i class="fa-solid fa-heart-pulse"></i>Wellness &amp; Immunity</li>
-                  <li><i class="fa-solid fa-gift"></i>Combo Kits &amp; Gifts</li>
-                  <li><i class="fa-solid fa-lemon"></i>Essential Oils &amp; Extras</li>
-                </ul>
-              </div>
+              <i class="fa-solid fa-chevron-right toggle-icon"></i>
             </div>
-
-            <!-- Special: Devilixirs Picks (from DB only) -->
-            <div class="card">
-              <div class="card-header">
-                <div class="label">
-                  <i class="fa-solid fa-trophy"></i>
-                  <span>Devilixirs Picks</span>
-                </div>
-              </div>
-              <div class="card-body">
-                <?php if (!empty($picksProducts)): ?>
-                  <?php foreach ($picksProducts as $p): ?>
-                    <div class="mini-product">
-                      <?php if (!empty($p['image_url'])): ?>
-                        <img src="<?php echo htmlspecialchars($p['image_url']); ?>" alt="<?php echo htmlspecialchars($p['name']); ?>">
-                      <?php else: ?>
-                        <div style="width:56px;height:56px;border-radius:8px;background:#eee;border:1px solid #ddd;"></div>
-                      <?php endif; ?>
-                      <div class="mini-info">
-                        <div class="mini-name"><?php echo htmlspecialchars($p['name']); ?></div>
-                        <div class="product-stars">★★★★★</div>
-                        <div class="mini-price">
-                          ₹<?php echo number_format((float)$p['price'], 2); ?>
-                        </div>
-                      </div>
-                    </div>
+            <div class="card-body">
+              <ul class="category-list">
+                <?php if (!empty($categories)): ?>
+                  <?php foreach ($categories as $cat): ?>
+                    <li>
+                      <i class="fa-solid fa-leaf"></i>
+                      <?php echo htmlspecialchars($cat['title']); ?>
+                    </li>
                   <?php endforeach; ?>
                 <?php else: ?>
-                  <div style="padding:10px 16px; font-size:12px; color:#777;">
-                    No featured products available yet.
-                  </div>
+                  <li style="font-size:12px; color:#777; padding:8px 18px;">
+                    No categories available.
+                  </li>
                 <?php endif; ?>
+              </ul>
+            </div>
+          </div>
+
+          <!-- DEVILIXIRS PICKS – latest products from DB -->
+          <div class="card">
+            <div class="card-header">
+              <div class="label">
+                <i class="fa-solid fa-trophy"></i>
+                <span>Devilixirs Picks</span>
               </div>
             </div>
+            <div class="card-body">
+              <?php if (!empty($picksProducts)): ?>
+                <?php foreach ($picksProducts as $p): ?>
+                  <?php $img = htmlspecialchars(get_first_image($p['images'] ?? '')); ?>
+                  <div class="mini-product">
+                    <img src="<?php echo $img; ?>" alt="Product">
+                    <div class="mini-info">
+                      <div class="mini-name">
+                        <?php echo htmlspecialchars($p['name']); ?>
+                      </div>
+                      <div class="product-stars">★★★★★</div>
+                      <div class="mini-price">
+                        ₹<?php echo number_format((float)$p['price'], 2); ?>
+                      </div>
+                    </div>
+                  </div>
+                <?php endforeach; ?>
+              <?php else: ?>
+                <div style="padding:10px 16px; font-size:12px; color:#777;">
+                  No picks available yet.
+                </div>
+              <?php endif; ?>
+            </div>
+          </div>
 
-            <!-- Tags -->
-            <div class="card">
-              <div class="card-header">
-                <div class="label">
-                  <i class="fa-solid fa-tag"></i>
-                  <span>Popular Tags</span>
+          <div class="card promo-card">
+            <?php if (!empty($homeSidebarBanners)): ?>
+              <div class="card sidebar-slider">
+                <div class="sidebar-slider-track">
+                  <?php foreach ($homeSidebarBanners as $idx => $sb): ?>
+                    <?php
+                      $sidebarSrc  = '/assets/uploads/banners/' . ltrim($sb['filename'] ?? '', '/');
+                      $sidebarAlt  = $sb['alt_text'] ?? '';
+                      $sidebarLink = trim($sb['link'] ?? '');
+                    ?>
+                    <div class="sidebar-slide">
+                      <?php if ($sidebarLink): ?>
+                        <a href="<?php echo htmlspecialchars($sidebarLink, ENT_QUOTES, 'UTF-8'); ?>" class="sidebar-slide-link">
+                      <?php endif; ?>
+
+                        <div class="promo-image">
+                          <img
+                            src="<?php echo htmlspecialchars($sidebarSrc, ENT_QUOTES, 'UTF-8'); ?>"
+                            alt="<?php echo htmlspecialchars($sidebarAlt, ENT_QUOTES, 'UTF-8'); ?>">
+                          <div class="promo-overlay"></div>
+                        </div>
+
+                      <?php if ($sidebarLink): ?>
+                        </a>
+                      <?php endif; ?>
+                    </div>
+                  <?php endforeach; ?>
+                </div>
+
+                <div class="sidebar-slider-dots">
+                  <?php foreach ($homeSidebarBanners as $idx => $sb): ?>
+                    <button
+                      class="sidebar-dot<?php echo $idx === 0 ? ' active' : ''; ?>"
+                      data-slide="<?php echo $idx; ?>">
+                    </button>
+                  <?php endforeach; ?>
                 </div>
               </div>
-              <div class="tags-wrap">
-                <span class="tag-item">Hair fall</span>
-                <span class="tag-item">Dandruff</span>
-                <span class="tag-item">Growth</span>
-                <span class="tag-item">Anti-acne</span>
-                <span class="tag-item">Glow</span>
-                <span class="tag-item">Aloe vera</span>
-                <span class="tag-item">Cold pressed</span>
-                <span class="tag-item">Combo</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Hero banner -->
-          <div class="hero-banner">
-            <div class="hero-text">
-              <small>New Ayurvedic Range 2025</small>
-              <h1>PURE HERBAL HAIR &amp; SKIN CARE</h1>
-              <p>
-                Nourish your routine with cold-pressed oils, aloe-based cleansers and gentle blends
-                crafted to support healthy hair and glowing skin.
-              </p>
-              <button class="btn-primary">Shop Devilixirs</button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- CONTENT GRID -->
-      <section class="content-grid">
-        <div></div> <!-- left col already used above -->
-
-        <div>
-          <!-- Top banners -->
-          <div class="banner-row">
-            <div class="banner-item">
-              <img src="https://images.pexels.com/photos/3738335/pexels-photo-3738335.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
-              <div class="banner-caption">
-                <h4>Herbal Hair Ritual</h4>
-                <span>Under ₹999</span>
-              </div>
-            </div>
-            <div class="banner-item">
-              <img src="https://images.pexels.com/photos/3738342/pexels-photo-3738342.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
-              <div class="banner-caption">
-                <h4>Glow with Aloe</h4>
-                <span>Cleanse • Hydrate • Protect</span>
-              </div>
-            </div>
-            <div class="banner-item">
-              <img src="https://images.pexels.com/photos/3738344/pexels-photo-3738344.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
-              <div class="banner-caption">
-                <h4>Combo Kits</h4>
-                <span>Save up to 30%</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- New Products (DB only) -->
-          <div class="section-header">
-            <h3>New Herbal Products</h3>
-            <div class="section-arrows">
-              <span><i class="fa-solid fa-chevron-left"></i></span>
-              <span><i class="fa-solid fa-chevron-right"></i></span>
-            </div>
-          </div>
-
-          <div class="product-grid">
-            <?php if (!empty($newProducts)): ?>
-              <?php foreach ($newProducts as $p): ?>
-                <div class="product-card">
-                  <div class="product-image">
-                    <?php if (!empty($p['image_url'])): ?>
-                      <img src="<?php echo htmlspecialchars($p['image_url']); ?>"
-                           alt="<?php echo htmlspecialchars($p['name']); ?>">
-                    <?php else: ?>
-                      <div style="width:100%;height:160px;border-radius:6px;background:#eee;"></div>
-                    <?php endif; ?>
-                  </div>
-                  <div class="product-name"><?php echo htmlspecialchars($p['name']); ?></div>
-                  <div class="product-price">
-                    ₹<?php echo number_format((float)$p['price'], 2); ?>
-                  </div>
-                  <div class="product-stars">★★★★★</div>
-                </div>
-              <?php endforeach; ?>
             <?php else: ?>
-              <p style="font-size:12px; color:#777;">No products available yet.</p>
+              <!-- Fallback static image if no DB sidebar banners -->
+              <div class="card promo-card">
+                <div class="promo-image">
+                  <img
+                    src="https://dove.themeftc.com/wp-content/uploads/2021/05/bn-left20.jpg"
+                    alt="Lucky day 50 outfits">
+                  <div class="promo-overlay"></div>
+                </div>
+              </div>
             <?php endif; ?>
           </div>
 
-          <!-- Wide banner -->
-          <div class="wide-banner">
-            <img src="https://images.pexels.com/photos/3738344/pexels-photo-3738344.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="">
-            <div class="wide-banner-text">
-              <h2>We Make It Easy To Choose Clean Beauty</h2>
-              <p>Plant-based formulas, no harsh chemicals – just Devilixirs.</p>
+          <div class="card">
+            <div class="card-header">
+              <div class="label">
+                <i class="fa-solid fa-tag"></i>
+                <span>Popular Tags</span>
+              </div>
             </div>
+              <div class="tags-wrap">
+                <?php if (!empty($popularTags)): ?>
+                  <?php foreach ($popularTags as $tag): ?>
+                    <a
+                      class="tag-item"
+                      href="products.php?tag=<?php echo urlencode($tag['slug']); ?>"
+                    >
+                      <?php echo htmlspecialchars($tag['name'], ENT_QUOTES, 'UTF-8'); ?>
+                    </a>
+                  <?php endforeach; ?>
+                <?php else: ?>
+                  <span style="font-size:12px;color:#777;">
+                    No popular tags yet.
+                  </span>
+                <?php endif; ?>
+              </div>
           </div>
 
-          <!-- Best Seller (DB only) -->
-          <div style="margin-top:30px;">
+          <div class="card ad-card">
+            <?php if (!empty($homeOfferBanner) && !empty($homeOfferBanner['filename'])): ?>
+              <?php
+                $offerSrc  = '/assets/uploads/banners/' . ltrim($homeOfferBanner['filename'], '/');
+                $offerAlt  = $homeOfferBanner['alt_text'] ?? '';
+                $offerLink = trim($homeOfferBanner['link'] ?? '');
+              ?>
+
+              <?php if ($offerLink): ?>
+                <a href="<?php echo htmlspecialchars($offerLink, ENT_QUOTES, 'UTF-8'); ?>" style="display:block;">
+              <?php endif; ?>
+
+                <img
+                  src="<?php echo htmlspecialchars($offerSrc, ENT_QUOTES, 'UTF-8'); ?>"
+                  alt="<?php echo htmlspecialchars($offerAlt, ENT_QUOTES, 'UTF-8'); ?>"
+                  style="width:100%;display:block;border-radius:8px;">
+              <?php if ($offerLink): ?>
+                </a>
+              <?php endif; ?>
+
+            <?php else: ?>
+              <!-- fallback: your old design -->
+              <div class="ad-badge">Limited Offer</div>
+              <div class="ad-title">Flat 25% Off on Hair Ritual Kits</div>
+              <div class="ad-text">
+                Build your complete Devilixirs hair routine – oils, cleansers &amp; serums in one combo.
+              </div>
+              <button class="ad-cta">
+                Shop Offer
+                <i class="fa-solid fa-arrow-right"></i>
+              </button>
+            <?php endif; ?>
+          </div>
+        </aside>
+
+        <!-- RIGHT COLUMN -->
+        <div class="main-column">
+          <!-- HERO -->
+          <section class="hero-section">
+            <?php if (!empty($homeBanners)): ?>
+              <div class="hero-slider">
+                <div class="hero-slider-track">
+                  <?php foreach ($homeBanners as $idx => $b): ?>
+                    <?php
+                      $src  = '/assets/uploads/banners/' . ltrim($b['filename'] ?? '', '/');
+                      $alt  = $b['alt_text'] ?? '';
+                      $link = trim($b['link'] ?? '');
+                    ?>
+                    <div
+                      class="hero-slide"
+                      style="background-image:url('<?php echo htmlspecialchars($src, ENT_QUOTES); ?>');"
+                    >
+                      <?php if ($link): ?>
+                        <a href="<?php echo htmlspecialchars($link); ?>" class="hero-slide-link">
+                      <?php endif; ?>
+
+                        <div class="hero-slide-overlay">
+                          <div class="hero-text">
+                            <!-- optional overlay text -->
+                          </div>
+                        </div>
+
+                      <?php if ($link): ?>
+                        </a>
+                      <?php endif; ?>
+                    </div>
+                  <?php endforeach; ?>
+                </div>
+
+                <!-- Dots (indicators) -->
+                <div class="hero-slider-dots">
+                  <?php foreach ($homeBanners as $idx => $b): ?>
+                    <button
+                      class="hero-dot<?php echo $idx === 0 ? ' active' : ''; ?>"
+                      data-slide="<?php echo $idx; ?>">
+                    </button>
+                  <?php endforeach; ?>
+                </div>
+              </div>
+            <?php else: ?>
+              <!-- Fallback if no banners in DB -->
+              <div class="hero-banner hero-fallback">
+                <div class="hero-text">
+                  <small>New Ayurvedic Range 2025</small>
+                  <h1>PURE HERBAL HAIR &amp; SKIN CARE</h1>
+                  <p>
+                    Nourish your routine with cold-pressed oils, aloe-based cleansers and gentle blends
+                    crafted to support healthy hair and glowing skin.
+                  </p>
+                  <button class="btn-primary">Shop Devilixirs</button>
+                </div>
+              </div>
+            <?php endif; ?>
+          </section>
+
+          <!-- ALL OTHER CONTENT -->
+          <section class="content-grid">
+            <!-- Top banners -->
+            <div class="banner-row">
+              <?php if (!empty($subCategories)): ?>
+                <?php foreach ($subCategories as $sub): ?>
+                  <?php
+                    // Default category image
+                    $catImg = '/assets/images/category-placeholder.jpg';
+
+                    if (!empty($sub['img'])) {
+                        $imgVal = trim($sub['img']);
+
+                        if (preg_match('#^https?://#i', $imgVal) || strpos($imgVal, '/') === 0) {
+                            // full URL or absolute path
+                            $catImg = $imgVal;
+                        } else {
+                            // assume stored as filename under uploads
+                            $catImg = '/assets/uploads/categories/' . ltrim($imgVal, '/');
+                        }
+                    }
+                  ?>
+                  <div class="banner-item">
+                    <img
+                      src="<?php echo htmlspecialchars($catImg, ENT_QUOTES, 'UTF-8'); ?>"
+                      alt="<?php echo htmlspecialchars($sub['title'], ENT_QUOTES, 'UTF-8'); ?>"
+                    >
+                    <div class="banner-caption">
+                      <h4><?php echo htmlspecialchars($sub['title']); ?></h4>
+                    </div>
+                  </div>
+                <?php endforeach; ?>
+              <?php else: ?>
+                <!-- Fallback if no subcategories found -->
+                <div class="banner-item">
+                  <img src="https://images.pexels.com/photos/3738335/pexels-photo-3738335.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
+                  <div class="banner-caption">
+                    <h4>No subcategories</h4>
+                    <span>Add some in admin panel</span>
+                  </div>
+                </div>
+              <?php endif; ?>
+            </div>
+
+            <!-- New Herbal Products (latest products from DB) -->
             <div class="section-header">
-              <h3>Best Sellers</h3>
+              <h3>New Herbal Products</h3>
               <div class="section-arrows">
                 <span><i class="fa-solid fa-chevron-left"></i></span>
                 <span><i class="fa-solid fa-chevron-right"></i></span>
@@ -1492,18 +2565,16 @@ try {
             </div>
 
             <div class="product-grid">
-              <?php if (!empty($bestProducts)): ?>
-                <?php foreach ($bestProducts as $p): ?>
+              <?php if (!empty($newProducts)): ?>
+                <?php foreach ($newProducts as $p): ?>
+                  <?php $img = htmlspecialchars(get_first_image($p['images'] ?? '')); ?>
                   <div class="product-card">
                     <div class="product-image">
-                      <?php if (!empty($p['image_url'])): ?>
-                        <img src="<?php echo htmlspecialchars($p['image_url']); ?>"
-                             alt="<?php echo htmlspecialchars($p['name']); ?>">
-                      <?php else: ?>
-                        <div style="width:100%;height:160px;border-radius:6px;background:#eee;"></div>
-                      <?php endif; ?>
+                      <img src="<?php echo $img; ?>" alt="Product">
                     </div>
-                    <div class="product-name"><?php echo htmlspecialchars($p['name']); ?></div>
+                    <div class="product-name">
+                      <?php echo htmlspecialchars($p['name']); ?>
+                    </div>
                     <div class="product-price">
                       ₹<?php echo number_format((float)$p['price'], 2); ?>
                     </div>
@@ -1511,172 +2582,226 @@ try {
                   </div>
                 <?php endforeach; ?>
               <?php else: ?>
-                <p style="font-size:12px; color:#777;">No best sellers available yet.</p>
+                <p style="font-size:12px; color:#777;">No products available yet.</p>
               <?php endif; ?>
             </div>
-          </div>
 
-          <!-- LATEST BLOG SECTION (still static content) -->
-          <div class="latest-blog-section">
-            <div class="section-header">
-              <h3>Latest Blog</h3>
-              <div class="section-arrows">
-                <span><i class="fa-solid fa-chevron-left"></i></span>
-                <span><i class="fa-solid fa-chevron-right"></i></span>
+            <!-- Wide banner (NOW USING home_center banner) -->
+            <div class="wide-banner">
+              <?php if (!empty($homeCenterBanner) && !empty($homeCenterBanner['filename'])): ?>
+                <?php
+                  $centerSrc  = '/assets/uploads/banners/' . ltrim($homeCenterBanner['filename'], '/');
+                  $centerAlt  = $homeCenterBanner['alt_text'] ?? '';
+                  $centerLink = trim($homeCenterBanner['link'] ?? '');
+                ?>
+                <?php if ($centerLink): ?>
+                  <a href="<?php echo htmlspecialchars($centerLink, ENT_QUOTES, 'UTF-8'); ?>" style="display:block; position:relative;">
+                <?php endif; ?>
+
+                  <img
+                    src="<?php echo htmlspecialchars($centerSrc, ENT_QUOTES, 'UTF-8'); ?>"
+                    alt="<?php echo htmlspecialchars($centerAlt, ENT_QUOTES, 'UTF-8'); ?>"
+                  >
+
+                <?php if ($centerLink): ?>
+                  </a>
+                <?php endif; ?>
+              <?php else: ?>
+                <!-- Fallback static image if no center banner in DB -->
+                <img src="https://images.pexels.com/photos/3738344/pexels-photo-3738344.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="">
+                <div class="wide-banner-text">
+                  <h2>We Make It Easy To Choose Clean Beauty</h2>
+                  <p>Plant-based formulas, no harsh chemicals – just Devilixirs.</p>
+                </div>
+              <?php endif; ?>
+            </div>
+
+            <!-- Best Sellers (from homepage_products -> best_seller) -->
+            <div style="margin-top:30px;">
+              <div class="section-header">
+                <h3>Best Sellers</h3>
+                <div class="section-arrows">
+                  <span><i class="fa-solid fa-chevron-left"></i></span>
+                  <span><i class="fa-solid fa-chevron-right"></i></span>
+                </div>
+              </div>
+
+              <div class="product-grid">
+                <?php if (!empty($bestProducts)): ?>
+                  <?php foreach ($bestProducts as $p): ?>
+                    <?php $img = htmlspecialchars(get_first_image($p['images'] ?? '')); ?>
+                    <div class="product-card">
+                      <div class="product-image">
+                        <img src="<?php echo $img; ?>" alt="Product">
+                      </div>
+                      <div class="product-name">
+                        <?php echo htmlspecialchars($p['name']); ?>
+                      </div>
+                      <div class="product-price">
+                        ₹<?php echo number_format((float)$p['price'], 2); ?>
+                      </div>
+                      <div class="product-stars">★★★★★</div>
+                    </div>
+                  <?php endforeach; ?>
+                <?php else: ?>
+                  <p style="font-size:12px; color:#777;">No best sellers available yet.</p>
+                <?php endif; ?>
               </div>
             </div>
-            <div class="blog-grid">
-              <article class="blog-card">
-                <div class="blog-card-image">
-                  <img src="https://images.pexels.com/photos/3738335/pexels-photo-3738335.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
+
+            <!-- LATEST BLOG SECTION (static) -->
+            <div class="latest-blog-section">
+              <div class="section-header">
+                <h3>Latest Blog</h3>
+                <div class="section-arrows">
+                  <span><i class="fa-solid fa-chevron-left"></i></span>
+                  <span><i class="fa-solid fa-chevron-right"></i></span>
                 </div>
-                <div class="blog-card-body">
-                  <div class="blog-title">5 Herbs That Love Your Scalp</div>
-                  <div class="blog-meta">
-                    <span>January 7, 2025</span>
-                    <span>By <a href="#">Devilixirs</a></span>
+              </div>
+              <div class="blog-grid">
+                <article class="blog-card">
+                  <div class="blog-card-image">
+                    <img src="https://images.pexels.com/photos/3738335/pexels-photo-3738335.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
                   </div>
-                  <p class="blog-excerpt">
-                    Discover how neem, bhringraj, amla, fenugreek and hibiscus work together
-                    to support thicker, healthier-looking hair when used consistently.
-                  </p>
-                </div>
-              </article>
-
-              <article class="blog-card">
-                <div class="blog-card-image">
-                  <img src="https://images.pexels.com/photos/3738342/pexels-photo-3738342.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
-                </div>
-                <div class="blog-card-body">
-                  <div class="blog-title">Building A Clean Skin Routine</div>
-                  <div class="blog-meta">
-                    <span>January 6, 2025</span>
-                    <span>By <a href="#">Devilixirs</a></span>
+                  <div class="blog-card-body">
+                    <div class="blog-title">5 Herbs That Love Your Scalp</div>
+                    <div class="blog-meta">
+                      <span>January 7, 2025</span>
+                      <span>By <a href="#">Devilixirs</a></span>
+                    </div>
+                    <p class="blog-excerpt">
+                      Discover how neem, bhringraj, amla, fenugreek and hibiscus work together
+                      to support thicker, healthier-looking hair when used consistently.
+                    </p>
                   </div>
-                  <p class="blog-excerpt">
-                    A simple three-step ritual with sulfate-free cleansers, hydration boosters
-                    and herbal moisturisers that your skin will thank you for.
-                  </p>
+                </article>
+
+                <article class="blog-card">
+                  <div class="blog-card-image">
+                    <img src="https://images.pexels.com/photos/3738342/pexels-photo-3738342.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
+                  </div>
+                  <div class="blog-card-body">
+                    <div class="blog-title">Building A Clean Skin Routine</div>
+                    <div class="blog-meta">
+                      <span>January 6, 2025</span>
+                      <span>By <a href="#">Devilixirs</a></span>
+                    </div>
+                    <p class="blog-excerpt">
+                      A simple three-step ritual with sulfate-free cleansers, hydration boosters
+                      and herbal moisturisers that your skin will thank you for.
+                    </p>
+                  </div>
+                </article>
+              </div>
+            </div>
+
+            <!-- MULTI COLUMN TABBED PRODUCTS -->
+            <div class="tabbed-products-section">
+              <div class="tabs-bar">
+                <div class="tab-ribbon">Latest Products</div>
+                <div class="tab-ribbon">Trendy Products</div>
+                <div class="tab-ribbon">Sale Products</div>
+                <div class="tab-ribbon">Top Rated</div>
+              </div>
+
+              <div class="tabbed-columns">
+                <!-- Latest -->
+                <div class="tab-column">
+                  <?php if (!empty($tabLatest)): ?>
+                    <?php foreach ($tabLatest as $p): ?>
+                      <?php $img = htmlspecialchars(get_first_image($p['images'] ?? '')); ?>
+                      <div class="tab-column-card">
+                        <div class="tab-col-product">
+                          <img src="<?php echo $img; ?>" alt="Product">
+                          <div class="tab-col-info">
+                            <div class="tab-col-name"><?php echo htmlspecialchars($p['name']); ?></div>
+                            <div class="tab-col-price">
+                              ₹<?php echo number_format((float)$p['price'], 2); ?>
+                            </div>
+                            <div class="tab-col-stars">★★★★★</div>
+                          </div>
+                        </div>
+                      </div>
+                    <?php endforeach; ?>
+                  <?php else: ?>
+                    <p style="font-size:11px; color:#777; padding:8px 0;">No latest products.</p>
+                  <?php endif; ?>
                 </div>
-              </article>
+
+                <!-- Trendy -->
+                <div class="tab-column">
+                  <?php if (!empty($tabTrendy)): ?>
+                    <?php foreach ($tabTrendy as $p): ?>
+                      <?php $img = htmlspecialchars(get_first_image($p['images'] ?? '')); ?>
+                      <div class="tab-column-card">
+                        <div class="tab-col-product">
+                          <img src="<?php echo $img; ?>" alt="Product">
+                          <div class="tab-col-info">
+                            <div class="tab-col-name"><?php echo htmlspecialchars($p['name']); ?></div>
+                            <div class="tab-col-price">
+                              ₹<?php echo number_format((float)$p['price'], 2); ?>
+                            </div>
+                            <div class="tab-col-stars">★★★★★</div>
+                          </div>
+                        </div>
+                      </div>
+                    <?php endforeach; ?>
+                  <?php else: ?>
+                    <p style="font-size:11px; color:#777; padding:8px 0;">No trendy products.</p>
+                  <?php endif; ?>
+                </div>
+
+                <!-- Sale -->
+                <div class="tab-column">
+                  <?php if (!empty($tabSale)): ?>
+                    <?php foreach ($tabSale as $p): ?>
+                      <?php $img = htmlspecialchars(get_first_image($p['images'] ?? '')); ?>
+                      <div class="tab-column-card">
+                        <div class="tab-col-product">
+                          <img src="<?php echo $img; ?>" alt="Product">
+                          <div class="tab-col-info">
+                            <div class="tab-col-name"><?php echo htmlspecialchars($p['name']); ?></div>
+                            <div class="tab-col-price">
+                              ₹<?php echo number_format((float)$p['price'], 2); ?>
+                            </div>
+                            <div class="tab-col-stars">★★★★★</div>
+                          </div>
+                        </div>
+                      </div>
+                    <?php endforeach; ?>
+                  <?php else: ?>
+                    <p style="font-size:11px; color:#777; padding:8px 0;">No sale products.</p>
+                  <?php endif; ?>
+                </div>
+
+                <!-- Top rated -->
+                <div class="tab-column">
+                  <?php if (!empty($tabTop)): ?>
+                    <?php foreach ($tabTop as $p): ?>
+                      <?php $img = htmlspecialchars(get_first_image($p['images'] ?? '')); ?>
+                      <div class="tab-column-card">
+                        <div class="tab-col-product">
+                          <img src="<?php echo $img; ?>" alt="Product">
+                          <div class="tab-col-info">
+                            <div class="tab-col-name"><?php echo htmlspecialchars($p['name']); ?></div>
+                            <div class="tab-col-price">
+                              ₹<?php echo number_format((float)$p['price'], 2); ?>
+                            </div>
+                            <div class="tab-col-stars">★★★★★</div>
+                          </div>
+                        </div>
+                      </div>
+                    <?php endforeach; ?>
+                  <?php else: ?>
+                    <p style="font-size:11px; color:#777; padding:8px 0;">No top rated products.</p>
+                  <?php endif; ?>
+                </div>
+
+              </div>
             </div>
-          </div>
 
-          <!-- MULTI COLUMN TABBED PRODUCTS (from DB only) -->
-          <div class="tabbed-products-section">
-            <div class="tabs-bar">
-              <div class="tab-ribbon">Latest Products</div>
-              <div class="tab-ribbon inactive">Trendy Products</div>
-              <div class="tab-ribbon inactive">Sale Products</div>
-              <div class="tab-ribbon inactive">Top Rated</div>
-            </div>
-
-            <div class="tabbed-columns">
-              <!-- Latest Products Column -->
-              <div class="tab-column">
-                <?php if (!empty($tabLatest)): ?>
-                  <?php foreach ($tabLatest as $p): ?>
-                    <div class="tab-column-card">
-                      <div class="tab-col-product">
-                        <?php if (!empty($p['image_url'])): ?>
-                          <img src="<?php echo htmlspecialchars($p['image_url']); ?>" alt="<?php echo htmlspecialchars($p['name']); ?>">
-                        <?php else: ?>
-                          <div style="width:46px;height:46px;border-radius:6px;background:#eee;"></div>
-                        <?php endif; ?>
-                        <div class="tab-col-info">
-                          <div class="tab-col-name"><?php echo htmlspecialchars($p['name']); ?></div>
-                          <div class="tab-col-price">₹<?php echo number_format((float)$p['price'], 2); ?></div>
-                        </div>
-                      </div>
-                    </div>
-                  <?php endforeach; ?>
-                <?php else: ?>
-                  <p style="font-size:11px; color:#777; padding:8px 0;">No latest products yet.</p>
-                <?php endif; ?>
-              </div>
-
-              <!-- Trendy Products Column -->
-              <div class="tab-column">
-                <?php if (!empty($tabTrendy)): ?>
-                  <?php foreach ($tabTrendy as $p): ?>
-                    <div class="tab-column-card">
-                      <div class="tab-col-product">
-                        <?php if (!empty($p['image_url'])): ?>
-                          <img src="<?php echo htmlspecialchars($p['image_url']); ?>" alt="<?php echo htmlspecialchars($p['name']); ?>">
-                        <?php else: ?>
-                          <div style="width:46px;height:46px;border-radius:6px;background:#eee;"></div>
-                        <?php endif; ?>
-                        <div class="tab-col-info">
-                          <div class="tab-col-name"><?php echo htmlspecialchars($p['name']); ?></div>
-                          <div class="tab-col-price">₹<?php echo number_format((float)$p['price'], 2); ?></div>
-                        </div>
-                      </div>
-                    </div>
-                  <?php endforeach; ?>
-                <?php else: ?>
-                  <p style="font-size:11px; color:#777; padding:8px 0;">No trendy products yet.</p>
-                <?php endif; ?>
-              </div>
-
-              <!-- Sale Products Column -->
-              <div class="tab-column">
-                <?php if (!empty($tabSale)): ?>
-                  <?php foreach ($tabSale as $p): ?>
-                    <div class="tab-column-card">
-                      <div class="tab-col-product">
-                        <?php if (!empty($p['image_url'])): ?>
-                          <img src="<?php echo htmlspecialchars($p['image_url']); ?>" alt="<?php echo htmlspecialchars($p['name']); ?>">
-                        <?php else: ?>
-                          <div style="width:46px;height:46px;border-radius:6px;background:#eee;"></div>
-                        <?php endif; ?>
-                        <div class="tab-col-info">
-                          <div class="tab-col-name"><?php echo htmlspecialchars($p['name']); ?></div>
-                          <div class="tab-col-price">₹<?php echo number_format((float)$p['price'], 2); ?></div>
-                        </div>
-                      </div>
-                    </div>
-                  <?php endforeach; ?>
-                <?php else: ?>
-                  <p style="font-size:11px; color:#777; padding:8px 0;">No sale products yet.</p>
-                <?php endif; ?>
-              </div>
-
-              <!-- Top Rated Column -->
-              <div class="tab-column">
-                <?php if (!empty($tabTop)): ?>
-                  <?php foreach ($tabTop as $p): ?>
-                    <div class="tab-column-card">
-                      <div class="tab-col-product">
-                        <?php if (!empty($p['image_url'])): ?>
-                          <img src="<?php echo htmlspecialchars($p['image_url']); ?>" alt="<?php echo htmlspecialchars($p['name']); ?>">
-                        <?php else: ?>
-                          <div style="width:46px;height:46px;border-radius:6px;background:#eee;"></div>
-                        <?php endif; ?>
-                        <div class="tab-col-info">
-                          <div class="tab-col-name"><?php echo htmlspecialchars($p['name']); ?></div>
-                          <div class="tab-col-price">₹<?php echo number_format((float)$p['price'], 2); ?></div>
-                        </div>
-                      </div>
-                    </div>
-                  <?php endforeach; ?>
-                <?php else: ?>
-                  <p style="font-size:11px; color:#777; padding:8px 0;">No top rated products yet.</p>
-                <?php endif; ?>
-              </div>
-
-            </div>
-          </div>
-
+          </section>
         </div>
-      </section>
-
-      <!-- BRANDS ROW -->
-      <div class="brands-row">
-        <div class="brand-item">photodune</div>
-        <div class="brand-item">themeforest</div>
-        <div class="brand-item">codecanyon</div>
-        <div class="brand-item">audiojungle</div>
-        <div class="brand-item">activeden</div>
       </div>
 
     </div>
@@ -1773,12 +2898,32 @@ try {
     </div>
   </footer>
 
-  <!-- Back to top button (static icon) -->
+  <!-- Back to top button -->
   <div class="back-top">
     <i class="fa-solid fa-angle-up"></i>
   </div>
 
-  <!-- Simple JS -->
+  <!-- MOBILE BOTTOM NAV -->
+  <nav class="mobile-bottom-nav">
+    <a href="#">
+      <i class="fa-solid fa-house"></i>
+      <span>Home</span>
+    </a>
+    <a href="#">
+      <i class="fa-solid fa-cart-shopping"></i>
+      <span>Cart (0)</span>
+    </a>
+    <a href="#">
+      <i class="fa-regular fa-heart"></i>
+      <span>Wishlist (0)</span>
+    </a>
+    <a href="#">
+      <i class="fa-regular fa-user"></i>
+      <span>Login</span>
+    </a>
+  </nav>
+
+  <!-- JS -->
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       const catCard = document.querySelector('.categories-card');
@@ -1789,9 +2934,13 @@ try {
           catCard.classList.toggle('collapsed');
         });
       }
+    });
+  </script>
 
-      // mobile mega menu
+  <script>
+    document.addEventListener('DOMContentLoaded', function(){
       const shopMenu = document.querySelector('.nav li.has-mega');
+
       if(window.innerWidth <= 768 && shopMenu){
         shopMenu.addEventListener('click', function(e){
           e.stopPropagation();
@@ -1800,6 +2949,210 @@ try {
       }
     });
   </script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const overlay = document.querySelector('.mobile-menu-overlay');
+      const openBtn  = document.querySelector('.mobile-menu-toggle');
+      const closeBtn = document.querySelector('.mobile-menu-close');
+
+      if(openBtn && overlay){
+        openBtn.addEventListener('click', function(){
+          overlay.classList.add('open');
+        });
+      }
+
+      if(closeBtn && overlay){
+        closeBtn.addEventListener('click', function(){
+          overlay.classList.remove('open');
+        });
+      }
+
+      if(overlay){
+        overlay.addEventListener('click', function(e){
+          if(!e.target.closest('.mobile-menu-panel')){
+            overlay.classList.remove('open');
+          }
+        });
+      }
+    });
+  </script>
+
+  <!-- Auto scroll banner -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const row = document.querySelector('.banner-row');
+      if (!row) return;
+
+      const items = Array.from(row.querySelectorAll('.banner-item'));
+      const itemCount = items.length;
+      if (itemCount === 0) return;
+
+      // if only one subcategory, no need to clone or scroll
+      if (itemCount === 1) return;
+
+      // duplicate items to make loop seamless
+      items.forEach(item => {
+        const clone = item.cloneNode(true);
+        row.appendChild(clone);
+      });
+
+      let index = 0;
+      const speed = 2000;
+
+      function getItemWidth() {
+        return items[0].offsetWidth;
+      }
+
+      setInterval(() => {
+        const itemWidth = getItemWidth();
+        index++;
+
+        if (index > itemCount) {
+          row.scrollLeft -= itemWidth * itemCount;
+          index -= itemCount;
+        }
+
+        row.scrollTo({
+          left: itemWidth * index,
+          behavior: 'smooth'
+        });
+      }, speed);
+    });
+  </script>
+
+  <!-- Hero slider auto -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const track = document.querySelector('.hero-slider-track');
+      if (!track) return;
+
+      const slides = Array.from(document.querySelectorAll('.hero-slide'));
+      const dots   = Array.from(document.querySelectorAll('.hero-dot'));
+
+      if (slides.length <= 1) return; // nothing to slide
+
+      let index = 0;
+      const total = slides.length;
+      const delay = 3000;
+
+      function goToSlide(i){
+        index = i;
+        track.style.transform = 'translateX(' + (-index * 100) + '%)';
+        dots.forEach(d => d.classList.remove('active'));
+        if (dots[index]) dots[index].classList.add('active');
+      }
+
+      dots.forEach(function(dot){
+        dot.addEventListener('click', function(){
+          const s = parseInt(dot.getAttribute('data-slide') || '0', 10);
+          goToSlide(s);
+          resetTimer();
+        });
+      });
+
+      let timer = null;
+      function startTimer(){
+        timer = setInterval(function(){
+          const next = (index + 1) % total;
+          goToSlide(next);
+        }, delay);
+      }
+      function resetTimer(){
+        if (timer) clearInterval(timer);
+        startTimer();
+      }
+
+      startTimer();
+    });
+  </script>
+
+  <!-- Sidebar slider auto -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const sTrack = document.querySelector('.sidebar-slider-track');
+      if (!sTrack) return;
+
+      const sSlides = Array.from(sTrack.querySelectorAll('.sidebar-slide'));
+      const sDots   = Array.from(document.querySelectorAll('.sidebar-dot'));
+
+      if (sSlides.length <= 1) return; // nothing to slide
+
+      let sIndex = 0;
+      const sTotal = sSlides.length;
+      const sDelay = 3000;
+
+      function sidebarGoTo(i){
+        sIndex = i;
+        const slideWidth = sSlides[0].offsetWidth;
+        sTrack.style.transform = 'translateX(' + (-sIndex * slideWidth) + 'px)';
+
+        sDots.forEach(d => d.classList.remove('active'));
+        if (sDots[sIndex]) sDots[sIndex].classList.add('active');
+      }
+
+      sDots.forEach(function(dot){
+        dot.addEventListener('click', function(){
+          const s = parseInt(dot.getAttribute('data-slide') || '0', 10);
+          sidebarGoTo(s);
+          sidebarResetTimer();
+        });
+      });
+
+      let sTimer = null;
+      function sidebarStartTimer(){
+        sTimer = setInterval(function(){
+          const next = (sIndex + 1) % sTotal;
+          sidebarGoTo(next);
+        }, sDelay);
+      }
+
+      function sidebarResetTimer(){
+        if (sTimer) clearInterval(sTimer);
+        sidebarStartTimer();
+      }
+
+      sidebarGoTo(0);
+      sidebarStartTimer();
+    });
+  </script>
+
+  <script>
+document.addEventListener('DOMContentLoaded', function () {
+  const toggle   = document.getElementById('searchCategoryToggle');
+  const dropdown = document.getElementById('searchCategoryDropdown');
+  const label    = document.getElementById('searchCategoryLabel');
+  const input    = document.getElementById('searchCategoryInput');
+
+  if (!toggle || !dropdown || !label || !input) return;
+
+  // open / close dropdown
+  toggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    toggle.classList.toggle('open');
+  });
+
+  // clicking on an item
+  dropdown.querySelectorAll('li').forEach(function (li) {
+    li.addEventListener('click', function (e) {
+      e.stopPropagation();
+      const catId   = this.getAttribute('data-cat-id') || '';
+      const catName = this.getAttribute('data-cat-name') || 'All categories';
+
+      // update label + hidden input
+      input.value = catId;
+      label.textContent = catId ? catName : 'All categories';
+
+      toggle.classList.remove('open');
+    });
+  });
+
+  // click outside closes
+  document.addEventListener('click', function () {
+    toggle.classList.remove('open');
+  });
+});
+</script>
 
 </body>
 </html>
