@@ -1,0 +1,1500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>My Account – Devilixirs</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Google Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --primary:#2874f0;
+      --primary-dark:#225fc0;
+      --bg:#f1f3f6;
+      --text:#111;
+      --muted:#555;
+      --border:#e0e0e0;
+    }
+
+    *{
+      margin:0;
+      padding:0;
+      box-sizing:border-box;
+    }
+
+    body{
+      font-family:'Poppins',sans-serif;
+      background:var(--bg);
+      color:var(--text);
+      padding-top:60px; /* match navbar height */
+    }
+
+    a{
+      color:inherit;
+      text-decoration:none;
+    }
+
+    /* PAGE WRAP */
+    .account-wrapper{
+      max-width:1180px;
+      margin:30px auto 40px;
+      padding:0 15px;
+      display:flex;
+      gap:18px;
+    }
+
+    /* LEFT SIDEBAR */
+    .account-sidebar{
+      width:280px;
+      flex:0 0 280px;
+      flex-shrink:0;
+      background:#fff;
+      border-radius:2px;
+      box-shadow:0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .sidebar-header{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:16px 18px;
+      background:#fff;
+      border-bottom:1px solid var(--border);
+    }
+
+    .avatar{
+      width:42px;
+      height:42px;
+      border-radius:50%;
+      background:#ffe2b3;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:600;
+      font-size:18px;
+      color:#9b4b00;
+    }
+
+    .sidebar-header-text{
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+    }
+    .sidebar-header-text span{
+      font-size:13px;
+      color:#757575;
+    }
+    .sidebar-header-text strong{
+      font-size:15px;
+      color:#212121;
+    }
+
+    .sidebar-section{
+      border-top:8px solid #f5f5f5;
+      padding:10px 0;
+    }
+
+    .sidebar-title{
+      font-size:12px;
+      font-weight:600;
+      text-transform:uppercase;
+      padding:0 18px 6px;
+      color:#878787;
+    }
+
+    .sidebar-link{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:10px 18px;
+      font-size:13px;
+      cursor:pointer;
+    }
+    .sidebar-link:hover{
+      background:#f5f5f5;
+    }
+    .sidebar-link.active{
+      color:var(--primary);
+      font-weight:500;
+    }
+    .sidebar-link span:last-child{
+      font-size:11px;
+      color:#878787;
+    }
+
+    /* RIGHT CONTENT */
+    .account-main{
+      flex:1 1 auto;
+      min-width:0;
+      background:#fff;
+      border-radius:2px;
+      box-shadow:0 1px 3px rgba(0,0,0,0.08);
+      padding:20px 24px 30px;
+      min-height:500px;
+    }
+
+    .section-heading-row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      margin-bottom:12px;
+    }
+
+    .section-heading-row h2{
+      font-size:18px;
+      font-weight:600;
+    }
+
+    .section-heading-row a{
+      font-size:12px;
+      color:var(--primary);
+      font-weight:500;
+      cursor:pointer;
+    }
+
+    .section-subtext{
+      font-size:12px;
+      color:#878787;
+      margin-bottom:18px;
+    }
+
+    /* FORM GRID */
+    .form-row{
+      display:flex;
+      gap:18px;
+      margin-bottom:18px;
+    }
+    .form-field{
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+
+    .form-label{
+      font-size:12px;
+      color:#878787;
+    }
+
+    .form-input{
+      padding:10px 12px;
+      border:1px solid #d0d0d0;
+      border-radius:2px;
+      font-size:13px;
+      outline:none;
+    }
+    .form-input:focus{
+      border-color:var(--primary);
+      box-shadow:0 0 0 1px rgba(40,116,240,.2);
+    }
+
+    .edit-link-inline{
+      font-size:12px;
+      color:var(--primary);
+      margin-left:8px;
+      cursor:pointer;
+    }
+
+    .gender-row{
+      display:flex;
+      align-items:center;
+      gap:16px;
+      font-size:13px;
+      margin-bottom:24px;
+    }
+    .gender-row input{
+      margin-right:4px;
+    }
+
+    .divider{
+      height:1px;
+      background:#f0f0f0;
+      margin:24px 0;
+    }
+
+    /* FAQ SECTION */
+    .faq-title{
+      font-size:14px;
+      font-weight:600;
+      margin-bottom:10px;
+    }
+
+    .faq-item{
+      margin-bottom:16px;
+    }
+    .faq-q{
+      font-size:13px;
+      font-weight:600;
+      margin-bottom:4px;
+    }
+    .faq-a{
+      font-size:12px;
+      color:#555;
+      line-height:1.6;
+    }
+
+    .danger-links{
+      margin-top:24px;
+      font-size:12px;
+    }
+    .danger-links a{
+      display:inline-block;
+      margin-right:20px;
+      color:var(--primary);
+    }
+    .danger-links a.delete{
+      color:#d32f2f;
+    }
+
+    /* RESPONSIVE (base) */
+    @media (max-width:900px){
+      .account-wrapper{
+        flex-direction:column;
+      }
+      .account-sidebar{
+        width:100%;
+      }
+    }
+
+    @media (max-width:600px){
+      .account-wrapper{
+        padding:0 8px 20px;
+      }
+      .account-main{
+        padding:16px 12px 24px;
+      }
+      .form-row{
+        flex-direction:column;
+      }
+    }
+
+    /* ========== ORDERS PAGE ========== */
+
+    .orders-header-row{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:18px;
+    }
+
+    .orders-header-row h2{
+      font-size:18px;
+      font-weight:600;
+    }
+
+    .orders-search{
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+
+    .orders-search input{
+      padding:8px 10px;
+      border:1px solid var(--border);
+      border-radius:2px;
+      font-size:13px;
+      min-width:260px;
+    }
+
+    .orders-search button{
+      padding:8px 14px;
+      border:none;
+      border-radius:2px;
+      background:var(--primary);
+      color:#fff;
+      font-size:13px;
+      cursor:pointer;
+    }
+    .orders-search button:hover{
+      background:var(--primary-dark);
+    }
+
+    .orders-main{
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+
+    .order-card{
+      border:1px solid var(--border);
+      border-radius:2px;
+      padding:14px 16px;
+      display:flex;
+      justify-content:space-between;
+      gap:16px;
+      background:#fff;
+    }
+
+    .order-left{
+      display:flex;
+      gap:12px;
+      flex:1;
+    }
+
+    .order-product-img img{
+      width:80px;
+      height:80px;
+      object-fit:cover;
+    }
+
+    .order-product-details{
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      gap:4px;
+    }
+
+    .order-product-name{
+      font-size:14px;
+      font-weight:500;
+    }
+
+    .order-meta{
+      font-size:12px;
+      color:#777;
+    }
+
+    .order-price{
+      font-size:14px;
+      font-weight:600;
+      margin-top:4px;
+    }
+
+    .order-right{
+      min-width:210px;
+      text-align:left;
+      font-size:12px;
+    }
+
+    .order-status{
+      font-size:12px;
+      font-weight:600;
+      margin-bottom:4px;
+    }
+
+    .order-status.delivered{
+      color:#388e3c;
+    }
+
+    .order-status.cancelled{
+      color:#d32f2f;
+    }
+
+    .order-status-text{
+      font-size:12px;
+      color:#555;
+      margin-bottom:8px;
+    }
+
+    .order-link-btn{
+      border:none;
+      background:none;
+      padding:0;
+      font-size:12px;
+      color:var(--primary);
+      cursor:pointer;
+    }
+
+    .order-refund-note{
+      margin-top:10px;
+      font-size:12px;
+      color:#555;
+      padding-top:8px;
+      border-top:1px solid #f0f0f0;
+    }
+
+    @media (max-width:600px){
+      .orders-header-row{
+        flex-direction:column;
+        align-items:flex-start;
+        gap:10px;
+      }
+      .orders-search input{
+        min-width:0;
+        width:100%;
+      }
+      .orders-search{
+        width:100%;
+      }
+      .order-card{
+        flex-direction:column;
+      }
+      .order-right{
+        min-width:0;
+      }
+    }
+
+    /* ========== TOP NAVBAR ========== */
+    .site-navbar{
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+      background:#fff;
+      box-shadow:0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .main-header{
+      max-width:1180px;
+      margin:0 auto;
+      padding:12px 15px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+    }
+
+    .logo{
+      font-weight:600;
+      font-size:18px;
+    }
+
+    .main-header nav a{
+      margin-left:18px;
+      font-size:13px;
+    }
+
+    /* ---------- Mobile slide layout like Flipkart ---------- */
+@media (max-width:900px){
+  .account-wrapper{
+    position:relative;
+    overflow:hidden;
+  }
+
+  .account-sidebar,
+  .account-main{
+    width:100%;
+    max-width:100%;
+    transition:transform .3s ease;
+  }
+
+  /* stack but make main slide from right */
+  .account-main{
+    position:absolute;
+    top:0;
+    left:0;
+    transform:translateX(100%); /* hidden to the right initially */
+  }
+
+  /* when we add .show-main on wrapper, slide both */
+  .account-wrapper.show-main .account-sidebar{
+    transform:translateX(-100%);
+  }
+  .account-wrapper.show-main .account-main{
+    transform:translateX(0%);
+  }
+
+  /* back row visible only on mobile */
+  .mobile-back-row{
+  display:none;
+  align-items:center;
+  gap:8px;
+  margin-bottom:10px;
+}
+
+}
+
+/* desktop: hide back row */
+@media (min-width:901px){
+  .mobile-back-row{
+    display:none;
+  }
+}
+
+/* button style (you already have most of this, keep or merge) */
+.mobile-back-btn{
+  border:none;
+  background:none;
+  padding:4px 0 8px;
+  font-size:14px;
+  font-weight:500;
+  color:var(--primary);
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  gap:4px;
+}
+
+
+    /* ========== MANAGE ADDRESSES ========== */
+
+    .address-header-row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      margin-bottom:14px;
+    }
+
+    .address-header-row h2{
+      font-size:16px;
+      font-weight:600;
+    }
+
+    .address-add-btn{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      font-size:13px;
+      font-weight:500;
+      color:var(--primary);
+      border:1px solid var(--border);
+      background:#fafafa;
+      padding:8px 12px;
+      cursor:pointer;
+      border-radius:2px;
+    }
+
+    .address-add-btn span.plus{
+      font-size:18px;
+      line-height:1;
+    }
+
+    .address-list{
+      margin-top:10px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+
+    .address-card{
+      border:1px solid var(--border);
+      background:#fff;
+      padding:12px 14px;
+      font-size:13px;
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+    }
+
+    .address-main{
+      max-width:90%;
+    }
+
+    .address-name-line{
+      font-weight:600;
+      margin-bottom:4px;
+    }
+
+    .address-name-line span.phone{
+      font-weight:500;
+      margin-left:16px;
+    }
+
+    .address-text{
+      color:#555;
+      line-height:1.6;
+    }
+
+    .address-text span.pincode{
+      font-weight:600;
+    }
+
+    .address-actions{
+      font-size:18px;
+      cursor:pointer;
+      line-height:1;
+      color:#555;
+    }
+
+    /* ========== SAVED UPI ========== */
+
+    .upi-header-row{
+      margin-bottom:12px;
+    }
+
+    .upi-header-row h2{
+      font-size:16px;
+      font-weight:600;
+    }
+
+    .upi-box{
+      border:1px solid var(--border);
+      background:#fff;
+    }
+
+    .upi-row{
+      display:flex;
+      align-items:center;
+      padding:10px 14px;
+      border-bottom:1px solid var(--border);
+      font-size:13px;
+    }
+
+    .upi-row:last-child{
+      border-bottom:none;
+    }
+
+    .upi-logo{
+      width:32px;
+      height:32px;
+      border-radius:50%;
+      background:#fff;
+      border:1px solid #eee;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      margin-right:12px;
+    }
+
+    .upi-logo img{
+      width:24px;
+      height:24px;
+      object-fit:contain;
+    }
+
+    .upi-info{
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+    }
+
+    .upi-info-title{
+      font-weight:500;
+    }
+
+    .upi-info-id{
+      color:#555;
+      font-size:13px;
+    }
+
+    .upi-delete{
+      font-size:16px;
+      cursor:pointer;
+      color:#c0c0c0;
+    }
+
+    .upi-delete:hover{
+      color:#a0a0a0;
+    }
+
+    /* UPI FAQ */
+    .upi-faq-title{
+      margin-top:24px;
+      font-size:14px;
+      font-weight:600;
+    }
+
+    .upi-faq-q{
+      margin-top:12px;
+      font-size:13px;
+      font-weight:600;
+    }
+
+    .upi-faq-a{
+      margin-top:4px;
+      font-size:12px;
+      color:#555;
+      line-height:1.6;
+    }
+
+    /* ========== COUPONS ========== */
+
+    .coupons-header{
+      margin-bottom:12px;
+    }
+
+    .coupons-header h2{
+      font-size:16px;
+      font-weight:600;
+    }
+
+    .coupon-list{
+      display:flex;
+      flex-direction:column;
+      gap:0;
+    }
+
+    .coupon-card{
+      border:1px solid var(--border);
+      background:#fff;
+      padding:12px 16px;
+      font-size:13px;
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      border-bottom:none;
+    }
+
+    .coupon-card:last-child{
+      border-bottom:1px solid var(--border);
+    }
+
+    .coupon-left{
+      max-width:70%;
+    }
+
+    .coupon-title{
+      font-weight:600;
+      color:#388e3c;
+      margin-bottom:4px;
+    }
+
+    .coupon-desc{
+      font-size:12px;
+      color:#555;
+    }
+
+    .coupon-right{
+      text-align:right;
+      font-size:12px;
+    }
+
+    .coupon-valid{
+      color:#555;
+      margin-bottom:6px;
+    }
+
+    .coupon-tnc{
+      color:var(--primary);
+      font-weight:500;
+      font-size:12px;
+    }
+
+    @media (max-width:600px){
+      .coupon-card{
+        flex-direction:column;
+        gap:6px;
+      }
+      .coupon-left{
+        max-width:100%;
+      }
+      .coupon-right{
+        text-align:left;
+      }
+    }
+
+    /* ========== REVIEWS & RATINGS ========== */
+
+    .reviews-empty-wrap{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      padding:60px 0 40px;
+      text-align:center;
+    }
+
+    .reviews-empty-illustration{
+      margin-bottom:16px;
+    }
+
+    .reviews-empty-illustration img{
+      width:140px;
+      max-width:100%;
+    }
+
+    .reviews-empty-title{
+      font-size:16px;
+      font-weight:600;
+      margin-bottom:4px;
+    }
+
+    .reviews-empty-text{
+      font-size:12px;
+      color:#777;
+    }
+
+    .reviews-suggest{
+      margin-top:20px;
+      padding-top:16px;
+      border-top:1px solid #f0f0f0;
+    }
+
+    .reviews-suggest h3{
+      font-size:12px;
+      font-weight:600;
+      color:#555;
+      margin-bottom:10px;
+    }
+
+    .review-order-card{
+      display:flex;
+      align-items:flex-start;
+      gap:10px;
+      font-size:12px;
+    }
+
+    .review-order-thumb img{
+      width:48px;
+      height:48px;
+      object-fit:cover;
+      border:1px solid #eee;
+    }
+
+    .review-order-body{
+      display:flex;
+      flex-direction:column;
+      gap:3px;
+    }
+
+    .review-order-name{
+      font-size:12px;
+      font-weight:600;
+      color:#2874f0;
+    }
+
+    .review-stars{
+      font-size:14px;
+      color:#ffb400;
+    }
+
+    .review-write-link{
+      font-size:12px;
+      color:#2874f0;
+      font-weight:500;
+      text-decoration:none;
+    }
+    .review-write-link:hover{
+      text-decoration:underline;
+    }
+
+    /* ========== WISHLIST ========== */
+
+    .wishlist-header{
+      margin-bottom:12px;
+    }
+
+    .wishlist-header h2{
+      font-size:16px;
+      font-weight:600;
+    }
+
+    .wishlist-list{
+      display:flex;
+      flex-direction:column;
+      gap:0;
+    }
+
+    .wishlist-item{
+      border:1px solid var(--border);
+      background:#fff;
+      padding:14px 16px;
+      display:flex;
+      align-items:flex-start;
+      gap:18px;
+      border-bottom:none;
+    }
+
+    .wishlist-item:last-child{
+      border-bottom:1px solid var(--border);
+    }
+
+    .wishlist-thumb img{
+      width:90px;
+      height:90px;
+      object-fit:cover;
+    }
+
+    .wishlist-info{
+      flex:1;
+    }
+
+    .wishlist-title{
+      font-size:14px;
+      font-weight:500;
+      margin-bottom:4px;
+    }
+
+    .wishlist-meta{
+      font-size:12px;
+      color:#777;
+      margin-bottom:6px;
+    }
+
+    .wishlist-price-row{
+      display:flex;
+      align-items:baseline;
+      gap:8px;
+      font-size:14px;
+    }
+
+    .wishlist-price{
+      font-weight:600;
+    }
+
+    .wishlist-old-price{
+      font-size:13px;
+      text-decoration:line-through;
+      color:#777;
+    }
+
+    .wishlist-discount{
+      font-size:13px;
+      color:#388e3c;
+      font-weight:500;
+    }
+
+    .wishlist-delete{
+      margin-left:auto;
+      font-size:18px;
+      cursor:pointer;
+      color:#c0c0c0;
+    }
+
+    .wishlist-delete:hover{
+      color:#a0a0a0;
+    }
+
+    @media (max-width:600px){
+      .wishlist-item{
+        padding:12px;
+        gap:10px;
+      }
+      .wishlist-thumb img{
+        width:72px;
+        height:72px;
+      }
+      .wishlist-title{
+        font-size:13px;
+      }
+      .wishlist-price-row{
+        font-size:13px;
+      }
+    }
+    /* Mobile-only back button in Orders */
+.mobile-back-row{
+  display:none;
+  margin-bottom:10px;
+}
+
+.mobile-back-btn{
+  border:none;
+  background:none;
+  padding:0;
+  font-size:14px;
+  font-weight:500;
+  color:var(--primary);
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  gap:4px;
+}
+
+/* Show back button only on small screens */
+@media (max-width:900px){
+  .mobile-back-row{
+    display:block;
+  }
+}
+@media (max-width:900px){
+  .account-wrapper{
+    position: relative;
+    /* let it scroll vertically, hide only horizontal overflow */
+    overflow-x: hidden;
+    overflow-y: visible;   /* or just remove overflow lines entirely */
+  }
+
+  .account-sidebar,
+  .account-main{
+    width:100%;
+    max-width:100%;
+    transition:transform .3s ease;
+  }
+}
+</style>
+</head>
+<body>
+
+<header class="site-navbar">
+  <div class="main-header">
+    <div class="logo">Devilixirs</div>
+    <nav>
+      <a href="#">Home</a>
+      <a href="#">Shop</a>
+      <a href="#">Account</a>
+      <a href="#">Orders</a>
+    </nav>
+  </div>
+</header>
+
+<div class="account-wrapper">
+  <aside class="account-sidebar">
+
+    <div class="sidebar-header">
+      <div class="avatar">H</div>
+      <div class="sidebar-header-text">
+        <span>Hello,</span>
+        <strong>Customer Name</strong>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-title">My Orders</div>
+      <a href="#" class="sidebar-link" data-section="orders">
+        <span>All Orders</span>
+        <span>&gt;</span>
+      </a>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-title">Account Settings</div>
+      <a href="#" class="sidebar-link active" data-section="profile">
+        <span>Profile Information</span>
+        <span>&gt;</span>
+      </a>
+      <a href="#" class="sidebar-link" data-section="addresses">
+        <span>Manage Addresses</span>
+        <span>&gt;</span>
+      </a>
+      <!-- Saved Cards & Wallet removed -->
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-title">Payments</div>
+      <a href="#" class="sidebar-link" data-section="giftcards">
+        <span>Gift Cards</span>
+        <span>₹0</span>
+      </a>
+      <a href="#" class="sidebar-link" data-section="upi">
+        <span>Saved UPI</span>
+        <span>&gt;</span>
+      </a>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-title">My Stuff</div>
+      <a href="#" class="sidebar-link" data-section="coupons">
+        <span>My Coupons</span>
+        <span>&gt;</span>
+      </a>
+      <a href="#" class="sidebar-link" data-section="reviews">
+        <span>My Reviews & Ratings</span>
+        <span>&gt;</span>
+      </a>
+      <a href="#" class="sidebar-link" data-section="notifications">
+        <span>All Notifications</span>
+        <span>&gt;</span>
+      </a>
+      <a href="#" class="sidebar-link" data-section="wishlist">
+        <span>My Wishlist</span>
+        <span>&gt;</span>
+      </a>
+    </div>
+
+  </aside>
+
+  <main class="account-main">
+
+  <!-- MOBILE BACK BUTTON (ADD HERE) -->
+<div class="mobile-back-row">
+  <button type="button" class="mobile-back-btn">←</button>
+  <span class="mobile-section-label">Account Settings</span>
+</div>
+
+
+    <!-- PROFILE SECTION -->
+    <section class="account-section active" id="section-profile">
+      <div class="section-heading-row">
+        <h2>Personal Information</h2>
+        <a href="#">Edit</a>
+      </div>
+      <p class="section-subtext">
+        Update your name and gender details here.
+      </p>
+
+      <div class="form-row">
+        <div class="form-field">
+          <label class="form-label">First Name</label>
+          <input type="text" class="form-input" value="Customer" readonly>
+        </div>
+        <div class="form-field">
+          <label class="form-label">Last Name</label>
+          <input type="text" class="form-input" value="Name" readonly>
+        </div>
+      </div>
+
+      <div class="form-label" style="margin-bottom:4px;">Your Gender</div>
+      <div class="gender-row">
+        <label>
+          <input type="radio" name="gender" value="male" disabled> Male
+        </label>
+        <label>
+          <input type="radio" name="gender" value="female" disabled> Female
+        </label>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="section-heading-row">
+        <h2>Email Address</h2>
+        <a href="#">Edit</a>
+      </div>
+      <p class="section-subtext">
+        Your email address is used for login and important communication.
+      </p>
+
+      <div class="form-row">
+        <div class="form-field">
+          <label class="form-label">Email Address</label>
+          <input type="email" class="form-input" value="customer@example.com" readonly>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="section-heading-row">
+        <h2>Mobile Number</h2>
+        <a href="#">Edit</a>
+      </div>
+      <p class="section-subtext">
+        Your mobile number is used for OTP and order updates.
+      </p>
+
+      <div class="form-row">
+        <div class="form-field">
+          <label class="form-label">Mobile Number</label>
+          <input type="tel" class="form-input" value="+91 93630 76177" readonly>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <h3 class="faq-title">FAQs</h3>
+
+      <div class="faq-item">
+        <div class="faq-q">What happens when I update my email address (or mobile number)?</div>
+        <div class="faq-a">
+          Your login email id (or mobile number) changes, likewise. You'll receive all your
+          account related communication on your updated email address (or mobile number).
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">When will my account be updated with the new email address (or mobile number)?</div>
+        <div class="faq-a">
+          It happens as soon as you confirm the verification code sent to your email (or mobile)
+          and save the changes.
+        </div>
+      </div>
+
+      <div class="danger-links">
+        <a href="#" class="delete">Deactivate Account</a>
+        <a href="#">Logout</a>
+      </div>
+
+    </section>
+
+    <!-- ORDERS SECTION -->
+    <section class="account-section" id="section-orders" style="display:none;">
+
+      <div class="orders-header-row">
+        <h2>My Orders</h2>
+        <div class="orders-search">
+          <input type="text" placeholder="Search your orders here" />
+          <button>Search Orders</button>
+        </div>
+      </div>
+
+      <div class="orders-main">
+        <!-- sample orders -->
+        <article class="order-card">
+          <div class="order-left">
+            <div class="order-product-img">
+              <img src="https://images.pexels.com/photos/2529148/pexels-photo-2529148.jpeg?auto=compress&cs=tinysrgb&w=400" alt="">
+            </div>
+            <div class="order-product-details">
+              <div class="order-product-name">BRSACHE Men Sports Sandals</div>
+              <div class="order-meta">
+                Color: Beige • Size: 10
+              </div>
+              <div class="order-price">₹452</div>
+            </div>
+          </div>
+          <div class="order-right">
+            <div class="order-status delivered">● Delivered on Aug 23</div>
+            <div class="order-status-text">Your item has been delivered</div>
+            <button class="order-link-btn">Rate &amp; Review Product</button>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- MANAGE ADDRESSES -->
+    <section class="account-section" id="section-addresses" style="display:none;">
+      <div class="address-header-row">
+        <h2>Manage Addresses</h2>
+        <button class="address-add-btn">
+          <span class="plus">+</span>
+          <span>ADD A NEW ADDRESS</span>
+        </button>
+      </div>
+
+      <div class="address-list">
+        <div class="address-card">
+          <div class="address-main">
+            <div class="address-name-line">
+              Harish <span class="phone">9363076177</span>
+            </div>
+            <div class="address-text">
+              18/4, balgangathira thilagar st pichanoor, Gudiyatham, Tamil Nadu –
+              <span class="pincode">632602</span>
+            </div>
+          </div>
+          <div class="address-actions">⋮</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- NO CARDS SECTION ANYMORE -->
+
+    <section class="account-section" id="section-giftcards" style="display:none;">
+      <h2>Gift Cards</h2>
+      <p style="font-size:13px;color:#777;">No gift cards linked to this account.</p>
+    </section>
+
+    <section class="account-section" id="section-upi" style="display:none;">
+      <div class="upi-header-row">
+        <h2>Manage Saved UPI</h2>
+      </div>
+
+      <div class="upi-box">
+        <div class="upi-row">
+          <div class="upi-logo">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/Google_Pay_Logo.svg/512px-Google_Pay_Logo.svg.png" alt="GPay">
+          </div>
+          <div class="upi-info">
+            <div class="upi-info-title">Google Pay UPI</div>
+            <div class="upi-info-id">imayaraj2001@okhdfcbank</div>
+          </div>
+          <div class="upi-delete">&#128465;</div>
+        </div>
+
+        <div class="upi-row">
+          <div class="upi-logo">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/Google_Pay_Logo.svg/512px-Google_Pay_Logo.svg.png" alt="GPay">
+          </div>
+          <div class="upi-info">
+            <div class="upi-info-title">Google Pay UPI</div>
+            <div class="upi-info-id">akharish46@oksbi</div>
+          </div>
+          <div class="upi-delete">&#128465;</div>
+        </div>
+      </div>
+
+      <div class="upi-faq-title">FAQs</div>
+      <div class="upi-faq-q">Why is my UPI being saved on Devilixirs?</div>
+      <div class="upi-faq-a">
+        It's quicker. You can save the hassle of typing the complete UPI information every time
+        you shop by saving your UPI details. You can make your payment by selecting the saved
+        UPI ID of your choice at checkout. While this is obviously faster, it is also very secure.
+      </div>
+    </section>
+
+    <section class="account-section" id="section-coupons" style="display:none;">
+      <div class="coupons-header">
+        <h2>Available Coupons</h2>
+      </div>
+
+      <div class="coupon-list">
+        <div class="coupon-card">
+          <div class="coupon-left">
+            <div class="coupon-title">Get products at Re.1</div>
+            <div class="coupon-desc">
+              Get products at Re.1 (Valid till: 11:59 PM, 31 Dec)
+            </div>
+          </div>
+          <div class="coupon-right">
+            <div class="coupon-valid">Valid till 31 Dec, 2025</div>
+            <a href="#" class="coupon-tnc">View T&amp;C</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="account-section" id="section-reviews" style="display:none;">
+      <div class="reviews-empty-wrap">
+        <div class="reviews-empty-illustration">
+          <img src="https://cdn-icons-png.flaticon.com/512/748/748113.png" alt="No reviews">
+        </div>
+        <div class="reviews-empty-title">No Reviews &amp; Ratings</div>
+        <div class="reviews-empty-text">
+          You have not rated or reviewed any product yet!
+        </div>
+      </div>
+
+      <div class="reviews-suggest">
+        <h3>Orders you might be interested reviewing</h3>
+        <div class="review-order-card">
+          <div class="review-order-thumb">
+            <img src="https://images.pexels.com/photos/2529148/pexels-photo-2529148.jpeg?auto=compress&cs=tinysrgb&w=400" alt="">
+          </div>
+          <div class="review-order-body">
+            <div class="review-order-name">BRSACHE Men Sports Sandals</div>
+            <div class="review-stars">★★★★★</div>
+            <a href="#" class="review-write-link">Write a Review</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="account-section" id="section-notifications" style="display:none;">
+      <h2>All Notifications</h2>
+      <p style="font-size:13px;color:#777;">No new notifications.</p>
+    </section>
+
+    <section class="account-section" id="section-wishlist" style="display:none;">
+      <div class="wishlist-header">
+        <h2>My Wishlist (36)</h2>
+      </div>
+
+      <div class="wishlist-list">
+        <div class="wishlist-item">
+          <div class="wishlist-thumb">
+            <img src="https://images.pexels.com/photos/3990849/pexels-photo-3990849.jpeg?auto=compress&cs=tinysrgb&w=400" alt="Charger">
+          </div>
+          <div class="wishlist-info">
+            <div class="wishlist-title">
+              CMF 33W Adapter with 1m Type C to C Cable 3.1 A Mobile Charger with Detachable Cable
+            </div>
+            <div class="wishlist-meta">
+              Colour: White
+            </div>
+            <div class="wishlist-price-row">
+              <span class="wishlist-price">₹245</span>
+              <span class="wishlist-old-price">₹2,499</span>
+              <span class="wishlist-discount">90% off</span>
+            </div>
+          </div>
+          <div class="wishlist-delete">&#128465;</div>
+        </div>
+
+        <div class="wishlist-item">
+          <div class="wishlist-thumb">
+            <img src="https://images.pexels.com/photos/404280/pexels-photo-404280.jpeg?auto=compress&cs=tinysrgb&w=400" alt="Phone cover">
+          </div>
+          <div class="wishlist-info">
+            <div class="wishlist-title">
+              Ringke Back Cover for Nothing Phone (2a) 5G
+            </div>
+            <div class="wishlist-meta">
+              Assured
+            </div>
+            <div class="wishlist-price-row">
+              <span class="wishlist-price">₹1,349</span>
+              <span class="wishlist-old-price">₹2,399</span>
+              <span class="wishlist-discount">43% off</span>
+            </div>
+          </div>
+          <div class="wishlist-delete">&#128465;</div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const sidebarLinks = document.querySelectorAll('.sidebar-link');
+    const sections = document.querySelectorAll('.account-section');
+    const wrapper = document.querySelector('.account-wrapper');
+    const mobileBackBtn = document.querySelector('.mobile-back-btn');
+    const mobileSectionLabel = document.querySelector('.mobile-section-label');
+
+    function isMobile() {
+      return window.innerWidth <= 900;
+    }
+
+    // Sidebar navigation
+    sidebarLinks.forEach(link => {
+      link.addEventListener('click', function(e) {
+        e.preventDefault();
+
+        sidebarLinks.forEach(l => l.classList.remove('active'));
+        this.classList.add('active');
+
+        const sectionKey = this.getAttribute('data-section');
+        if (!sectionKey) return;
+
+        // show correct section
+        sections.forEach(sec => {
+          sec.style.display = (sec.id === 'section-' + sectionKey) ? 'block' : 'none';
+        });
+
+        // find which group this link belongs to (My Orders / Account Settings / Payments / My Stuff)
+        const sectionTitleEl = this.closest('.sidebar-section')?.querySelector('.sidebar-title');
+        const groupTitle = sectionTitleEl ? sectionTitleEl.textContent.trim() : 'Account';
+
+        // on mobile: slide to main panel and show group title
+        if (isMobile()) {
+          wrapper.classList.add('show-main');
+          if (mobileSectionLabel) {
+            mobileSectionLabel.textContent = groupTitle;
+          }
+        }
+      });
+    });
+
+    // Mobile back button → slide back to list (profile view)
+    if (mobileBackBtn) {
+      mobileBackBtn.addEventListener('click', function () {
+        wrapper.classList.remove('show-main');
+
+        // show profile section, hide others
+        sections.forEach(sec => {
+          sec.style.display = (sec.id === 'section-profile') ? 'block' : 'none';
+        });
+
+        // highlight "Profile Information"
+        sidebarLinks.forEach(link => {
+          if (link.getAttribute('data-section') === 'profile') {
+            link.classList.add('active');
+          } else {
+            link.classList.remove('active');
+          }
+        });
+
+        // reset label
+        if (mobileSectionLabel) {
+          mobileSectionLabel.textContent = 'Account Settings';
+        }
+      });
+    }
+
+    // ===== Edit buttons toggle disabled/readonly state (your old code) =====
+    const profileSection = document.getElementById('section-profile');
+    const editLinks = profileSection.querySelectorAll('.section-heading-row a');
+
+    editLinks.forEach(editLink => {
+      editLink.addEventListener('click', function(e) {
+        e.preventDefault();
+
+        const title = this.previousElementSibling?.textContent?.trim() || '';
+
+        if (title === 'Personal Information') {
+          toggleInputs(profileSection.querySelectorAll('input[type="text"], input[name="gender"]'));
+        } else if (title === 'Email Address') {
+          toggleInputs(profileSection.querySelectorAll('input[type="email"]'));
+        } else if (title === 'Mobile Number') {
+          toggleInputs(profileSection.querySelectorAll('input[type="tel"]'));
+        }
+      });
+    });
+
+    function toggleInputs(inputs) {
+      inputs.forEach(input => {
+        if (input.type === 'radio') {
+          input.disabled = !input.disabled;
+        } else {
+          const isReadOnly = input.hasAttribute('readonly');
+          if (isReadOnly) {
+            input.removeAttribute('readonly');
+            input.style.backgroundColor = '#fff';
+          } else {
+            input.setAttribute('readonly', 'readonly');
+            input.style.backgroundColor = '#f9f9f9';
+          }
+        }
+      });
+    }
+  });
+</script>
+
+
+
+</body>
+</html>

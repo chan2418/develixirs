@@ -441,6 +441,25 @@
         gap:8px;
       }
     }
+
+    @media(max-width:768px){
+  .layout{
+    grid-template-columns:1fr;
+  }
+
+  .blog-grid{
+    grid-template-columns:repeat(2, 1fr); /* 2 per row on mobile */
+    gap:15px;
+  }
+
+  .footer-inner{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  .brand-strip-inner{
+    justify-content:center;
+  }
+}
+
   </style>
 </head>
 <body>
@@ -496,27 +515,10 @@
 
     <!-- SIDEBAR LEFT -->
     <aside>
-      <!-- Categories -->
-      <div class="sidebar-box">
-        <div class="sidebar-title"><span>—</span> Categories</div>
-        <div class="sidebar-content">
-          <ul class="cat-list">
-            <li><span>Audio Post</span><span>(1)</span></li>
-            <li><span>Fashion’s Star</span><span>(4)</span></li>
-            <li><span>Forida</span><span>(6)</span></li>
-            <li><span>Gallery</span><span>(3)</span></li>
-            <li><span>Home18</span><span>(4)</span></li>
-            <li><span>Home20</span><span>(4)</span></li>
-            <li><span>Kid’s Clothing</span><span>(3)</span></li>
-            <li><span>Quote</span><span>(3)</span></li>
-            <li><span>Uncategorized</span><span>(3)</span></li>
-            <li><span>Video Post</span><span>(1)</span></li>
-            <li><span>What’s New</span><span>(2)</span></li>
-          </ul>
-        </div>
-      </div>
 
-      <!-- Recent Posts -->
+
+
+     <!-- Recent Posts -->
       <div class="sidebar-box">
         <div class="sidebar-title"><span>—</span> Recent Posts</div>
         <div class="sidebar-content">
