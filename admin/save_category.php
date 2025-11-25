@@ -1,137 +1,195 @@
 <?php
 // admin/save_category.php
+
 require_once __DIR__ . '/_auth.php';
 require_once __DIR__ . '/../includes/db.php';
 
-// simple flash helper
-function flash_set($k, $v) { $_SESSION[$k] = $v; }
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
-// check method
+/* ---------- FLASH HELPERS ---------- */
+function flash_set($k, $v) {
+    $_SESSION[$k] = $v;
+}
+function redirect_back() {
+    header('Location: categories.php');
+    exit;
+}
+
+/* ---------- CSRF ---------- */
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header('Location: categories.php');
-    exit;
+    redirect_back();
 }
 
-// CSRF check (if you use it)
-if (empty($_POST['csrf_token']) || empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
-    flash_set('form_errors', ['Invalid CSRF token.']);
-    header('Location: categories.php');
-    exit;
+if (
+    empty($_POST['csrf_token']) ||
+    empty($_SESSION['csrf_token']) ||
+    !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])
+) {
+    flash_set('form_errors', ['Invalid form token, please try again.']);
+    redirect_back();
 }
 
-// sanitize inputs
-$id = !empty($_POST['id']) ? (int)$_POST['id'] : null;
-$title = trim((string)($_POST['title'] ?? ''));
-$parent_id = isset($_POST['parent_id']) && $_POST['parent_id'] !== '' ? (int)$_POST['parent_id'] : null;
-$description = isset($_POST['description']) ? trim((string)$_POST['description']) : null;
-$slug = trim((string)($_POST['slug'] ?? ''));
+/* ---------- INPUTS ---------- */
+$id          = isset($_POST['id']) ? (int)$_POST['id'] : 0;    // 0 => insert
+$title       = trim($_POST['title'] ?? '');
+$parent_raw  = trim($_POST['parent_id'] ?? '');
+$description = trim($_POST['description'] ?? '');
 
-// basic validation
+$old = [
+    'title'       => $title,
+    'parent_id'   => $parent_raw,
+    'description' => $description,
+];
+
 $errors = [];
+
+/* ---------- BASIC VALIDATION ---------- */
 if ($title === '') {
     $errors[] = 'Title is required.';
 }
 
-if (!empty($parent_id) && $id && $parent_id === $id) {
-    $errors[] = 'Category cannot be its own parent.';
+$parent_id = null;
+if ($parent_raw !== '') {
+    if (!ctype_digit($parent_raw)) {
+        $errors[] = 'Invalid parent category.';
+    } else {
+        $parent_id = (int)$parent_raw;
+    }
 }
 
-if (!empty($errors)) {
+/* ---------- STOP IF BASIC ERRORS ---------- */
+if ($errors) {
     flash_set('form_errors', $errors);
-    // preserve old input for repopulation (categories.php doesn't currently use this, but safe)
-    $_SESSION['old'] = $_POST;
-    header('Location: ' . ($id ? "categories.php?edit={$id}" : 'categories.php'));
-    exit;
+    flash_set('old', $old);
+    redirect_back();
 }
 
-// create slug if missing
-function slugify($s) {
-    $s = mb_strtolower($s, 'UTF-8');
-    $s = preg_replace('/[^\p{L}\p{N}\-]+/u','-', $s);
-    $s = preg_replace('/\-{2,}/','-', $s);
+/* ---------- SLUG ---------- */
+function slugify($str) {
+    $s = strtolower($str);
+    $s = preg_replace('/[^a-z0-9]+/i', '-', $s);
     $s = trim($s, '-');
-    return $s ?: 'cat-' . substr(md5(uniqid('', true)),0,6);
+    if ($s === '') {
+        $s = 'cat-' . time();
+    }
+    return $s;
 }
-if ($slug === '') {
-    $slug = slugify($title);
+$slug = slugify($title);
+
+/* ---------- HANDLE IMAGE UPLOAD (OPTIONAL) ---------- */
+$imageFilename = null;
+$uploadDir = __DIR__ . '/../assets/uploads/categories/';
+if (!is_dir($uploadDir)) {
+    @mkdir($uploadDir, 0755, true);
 }
 
-// determine which columns exist in categories table to avoid SQL errors
-$stmt = $pdo->prepare("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'categories'");
-$stmt->execute();
-$cols = $stmt->fetchAll(PDO::FETCH_COLUMN);
-$has_name = in_array('name', $cols);
-$has_title = in_array('title', $cols);
-$has_parent = in_array('parent_id', $cols);
-$has_description = in_array('description', $cols);
-$has_slug = in_array('slug', $cols);
+if (!empty($_FILES['image']) && $_FILES['image']['error'] !== UPLOAD_ERR_NO_FILE) {
+    $f = $_FILES['image'];
 
-// we will always ensure 'name' gets a value (DB expects it). We'll map $title -> name if needed
-$now = date('Y-m-d H:i:s');
+    if ($f['error'] !== UPLOAD_ERR_OK) {
+        $errors[] = 'Image upload failed.';
+    } else {
+        if ($f['size'] > 5 * 1024 * 1024) {
+            $errors[] = 'Image is too large (max 5MB).';
+        } else {
+            $allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+            $finfo   = finfo_open(FILEINFO_MIME_TYPE);
+            $mime    = finfo_file($finfo, $f['tmp_name']);
+            finfo_close($finfo);
 
+            if (!in_array($mime, $allowed, true)) {
+                $errors[] = 'Invalid image type. Use JPG, PNG, WEBP or GIF.';
+            } else {
+                $ext = pathinfo($f['name'], PATHINFO_EXTENSION);
+                $ext = $ext ? strtolower($ext) : 'jpg';
+                $imageFilename = time() . '-' . bin2hex(random_bytes(5)) . '.' . $ext;
+                $dest          = $uploadDir . $imageFilename;
+
+                if (!move_uploaded_file($f['tmp_name'], $dest)) {
+                    $errors[] = 'Could not save uploaded image.';
+                }
+            }
+        }
+    }
+}
+
+/* ---------- STOP IF IMAGE ERRORS ---------- */
+if ($errors) {
+    flash_set('form_errors', $errors);
+    flash_set('old', $old);
+    redirect_back();
+}
+
+/* ---------- ALWAYS FIXED PARAM COUNTS ---------- */
 try {
-    if ($id) {
-        // UPDATE
-        $parts = [];
-        $params = [];
+    if ($id > 0) {
+        // ===== UPDATE EXISTING CATEGORY =====
 
-        // set name (if exists)
-        if ($has_name) { $parts[] = "name = ?"; $params[] = $title; }
-        // set title (if exists)
-        if ($has_title) { $parts[] = "title = ?"; $params[] = $title; }
-        if ($has_slug) { $parts[] = "slug = ?"; $params[] = $slug; }
-        if ($has_parent) { $parts[] = "parent_id = ?"; $params[] = $parent_id; }
-        if ($has_description) { $parts[] = "description = ?"; $params[] = $description; }
-
-        if (empty($parts)) {
-            throw new Exception('No writable columns found in categories table.');
+        // 1) If no new image uploaded, fetch existing image so we still bind something
+        if ($imageFilename === null) {
+            $stmtOld = $pdo->prepare("SELECT image FROM categories WHERE id = ?");
+            $stmtOld->execute([$id]);
+            $rowOld = $stmtOld->fetch(PDO::FETCH_ASSOC);
+            $imageFilename = $rowOld['image'] ?? null;
         }
 
-        $params[] = $id;
-        $sql = "UPDATE categories SET " . implode(', ', $parts) . " WHERE id = ?";
+        // 2) Fixed UPDATE with 7 placeholders, always
+        $sql = "
+            UPDATE categories
+            SET
+                name        = ?,   -- required
+                title       = ?,   -- optional label
+                slug        = ?,   -- required
+                parent_id   = ?,   -- can be null
+                description = ?,   -- text
+                image       = ?    -- can be null
+            WHERE id = ?
+        ";
+        $params = [
+            $title,         // name
+            $title,         // title
+            $slug,          // slug
+            $parent_id,     // parent_id (null or int)
+            $description,   // description
+            $imageFilename, // image (null or string)
+            $id             // id
+        ];
+
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
 
         flash_set('success_msg', 'Category updated successfully.');
-        header('Location: categories.php');
-        exit;
+
     } else {
-        // INSERT
-        $cols_to_insert = [];
-        $placeholders = [];
-        $params = [];
+        // ===== INSERT NEW CATEGORY =====
+        // Fixed INSERT with 6 placeholders, always
+        $sql = "
+            INSERT INTO categories
+                (name, title, slug, parent_id, description, image)
+            VALUES
+                (?,    ?,     ?,    ?,         ?,           ?)
+        ";
+        $params = [
+            $title,         // name (NOT NULL)
+            $title,         // title
+            $slug,          // slug (NOT NULL)
+            $parent_id,     // parent_id (null or int)
+            $description,   // description
+            $imageFilename  // image (null or string)
+        ];
 
-        // ensure name exists and is set
-        if ($has_name) { $cols_to_insert[] = 'name'; $placeholders[] = '?'; $params[] = $title; }
-        if ($has_title) { $cols_to_insert[] = 'title'; $placeholders[] = '?'; $params[] = $title; }
-        if ($has_slug) { $cols_to_insert[] = 'slug'; $placeholders[] = '?'; $params[] = $slug; }
-        if ($has_parent) { $cols_to_insert[] = 'parent_id'; $placeholders[] = '?'; $params[] = $parent_id; }
-        if ($has_description) { $cols_to_insert[] = 'description'; $placeholders[] = '?'; $params[] = $description; }
-
-        // If DB doesn't have 'name' but has 'title' then ensure at least one column exists
-        if (empty($cols_to_insert)) {
-            throw new Exception('No writable columns found in categories table.');
-        }
-
-        $sql = "INSERT INTO categories (" . implode(', ', $cols_to_insert) . ") VALUES (" . implode(', ', $placeholders) . ")";
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
 
-        flash_set('success_msg', 'Category added successfully.');
-        header('Location: categories.php');
-        exit;
+        flash_set('success_msg', 'Category created successfully.');
     }
-} catch (PDOException $ex) {
-    // handle duplicate slug or other db errors
-    $errMsg = $ex->getMessage();
-    // if MySQL duplicate slug (UNIQUE), give user-friendly message
-    if (strpos($errMsg, 'Duplicate entry') !== false && strpos($errMsg, 'slug') !== false) {
-        $errors[] = 'Slug already exists — please choose another slug.';
-    } else {
-        $errors[] = 'DB error: ' . $errMsg;
-    }
-    flash_set('form_errors', $errors);
-    $_SESSION['old'] = $_POST;
-    header('Location: ' . ($id ? "categories.php?edit={$id}" : 'categories.php'));
-    exit;
+
+} catch (PDOException $e) {
+    // If anything DB-related explodes, push message to UI
+    flash_set('form_errors', ['Database error: ' . $e->getMessage()]);
+    flash_set('old', $old);
 }
+
+redirect_back();

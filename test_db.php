@@ -50,3 +50,46 @@ docker exec -it <mysql-container> mysql -u root -p -e "SHOW DATABASES;"
 
 
 $2y$10$abcdefgABCDEFG1234567890abcdefgABCDEFG1234567890
+
+
+
+    SELECT *
+    FROM your_table_name;
+
+
+
+ALTER TABLE banners
+  ADD COLUMN page_slot VARCHAR(32) NOT NULL DEFAULT 'home';
+
+
+
+
+
+ALTER TABLE `banners`
+  ADD COLUMN `category_id` INT NULL AFTER `page_slot`;
+
+
+
+
+
+  -- All possible tags (New, Trending, Sale, etc.)
+CREATE TABLE tags (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  slug VARCHAR(120) NOT NULL UNIQUE,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Link table: which product has which tags
+CREATE TABLE product_tags (
+  product_id INT NOT NULL,
+  tag_id INT NOT NULL,
+  PRIMARY KEY (product_id, tag_id),
+  CONSTRAINT fk_product_tags_product
+    FOREIGN KEY (product_id) REFERENCES products(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_product_tags_tag
+    FOREIGN KEY (tag_id) REFERENCES tags(id)
+    ON DELETE CASCADE
+);
