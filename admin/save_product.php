@@ -51,9 +51,13 @@ $sku              = trim($_POST['sku'] ?? '');
 $price            = $_POST['price'] ?? '';
 $compare_price    = $_POST['compare_price'] ?? null; // may not exist in table, we handle later
 $currency         = 'INR';
-$category_id      = $_POST['category_id'] ?? null;
-$stock            = isset($_POST['stock']) ? (int)$_POST['stock'] : 0;
-$is_published     = (isset($_POST['is_published']) && ($_POST['is_published'] === '1' || $_POST['is_published'] === 1)) ? 1 : 0;
+
+// NEW: main + sub category
+$parent_category_id = $_POST['parent_category_id'] ?? null;
+$category_id        = $_POST['category_id'] ?? null;
+
+$stock        = isset($_POST['stock']) ? (int)$_POST['stock'] : 0;
+$is_published = (isset($_POST['is_published']) && ($_POST['is_published'] === '1' || $_POST['is_published'] === 1)) ? 1 : 0;
 
 /** New: collect tags (multi-select) **/
 $tagIdsRaw = $_POST['tags'] ?? [];
@@ -76,13 +80,29 @@ if ($title === '') {
 if ($price === '' || !is_numeric($price) || (float)$price < 0) {
     $err[] = "Valid price is required.";
 }
+
+// validate main & sub category as numeric (if provided)
+if (!empty($parent_category_id) && !ctype_digit((string)$parent_category_id)) {
+    $parent_category_id = null;
+}
 if (!empty($category_id) && !ctype_digit((string)$category_id)) {
     $category_id = null;
 }
 
+// Decide final category_id to save: prefer sub category, else main
+$category_id_final = null;
+if (!empty($category_id)) {
+    $category_id_final = (int)$category_id;
+} elseif (!empty($parent_category_id)) {
+    $category_id_final = (int)$parent_category_id;
+}
+
+// normalize parent_category_id as int or null
+$parent_category_id_final = !empty($parent_category_id) ? (int)$parent_category_id : null;
+
 if (!empty($err)) {
     flash_set('form_errors', $err);
-    flash_set('old', $_POST); // includes tags[]
+    flash_set('old', $_POST); // includes tags[], parent_category_id, category_id
     header('Location: add_product.php');
     exit;
 }
@@ -101,22 +121,59 @@ try {
     exit;
 }
 
-$hasSlug          = in_array('slug', $productCols, true);
-$hasShortDesc     = in_array('short_description', $productCols, true);
-$hasComparePrice  = in_array('compare_price', $productCols, true);
-$hasCurrency      = in_array('currency', $productCols, true);
-$hasCategoryId    = in_array('category_id', $productCols, true);
-$hasImages        = in_array('images', $productCols, true);
-$hasVariants      = in_array('variants', $productCols, true);
-$hasStock         = in_array('stock', $productCols, true);
-$hasIsActive      = in_array('is_active', $productCols, true);
-$hasIsFeatured    = in_array('is_featured', $productCols, true);
-$hasMetaTitle     = in_array('meta_title', $productCols, true);
-$hasMetaDesc      = in_array('meta_description', $productCols, true);
-$hasCreatedAt     = in_array('created_at', $productCols, true);
-$hasSku           = in_array('sku', $productCols, true);
-$hasName          = in_array('name', $productCols, true);
-$hasDescription   = in_array('description', $productCols, true);
+$hasSlug            = in_array('slug', $productCols, true);
+$hasShortDesc       = in_array('short_description', $productCols, true);
+$hasComparePrice    = in_array('compare_price', $productCols, true);
+$hasCurrency        = in_array('currency', $productCols, true);
+$hasCategoryId      = in_array('category_id', $productCols, true);
+$hasParentCategory  = in_array('parent_category_id', $productCols, true); // NEW
+$hasImages          = in_array('images', $productCols, true);
+$hasCategoryName    = in_array('category_name', $productCols, true);   // 👈 category_name support
+$hasVariants        = in_array('variants', $productCols, true);
+$hasStock           = in_array('stock', $productCols, true);
+$hasIsActive        = in_array('is_active', $productCols, true);
+$hasIsFeatured      = in_array('is_featured', $productCols, true);
+$hasMetaTitle       = in_array('meta_title', $productCols, true);
+$hasMetaDesc        = in_array('meta_description', $productCols, true);
+$hasCreatedAt       = in_array('created_at', $productCols, true);
+$hasSku             = in_array('sku', $productCols, true);
+$hasName            = in_array('name', $productCols, true);
+$hasDescription     = in_array('description', $productCols, true);
+
+/** 🔹 Resolve category_name from categories table (parent-level name like "Men Care") **/
+$categoryNameVal = null;
+
+if ($hasCategoryName && $category_id_final !== null) {
+    try {
+        $stmtCat = $pdo->prepare("
+            SELECT c.name AS cat_name,
+                   c.parent_id,
+                   p.name AS parent_name
+            FROM categories c
+            LEFT JOIN categories p ON c.parent_id = p.id
+            WHERE c.id = :cid
+            LIMIT 1
+        ");
+        $stmtCat->execute([':cid' => $category_id_final]);
+        $row = $stmtCat->fetch(PDO::FETCH_ASSOC);
+
+        if ($row) {
+            // If category has a parent → use parent name as category_name (Men Care, Baby Care etc.)
+            if (!empty($row['parent_id'])) {
+                $categoryNameVal = $row['parent_name'];
+                // If parent_category_id not already set, sync it from DB
+                if ($parent_category_id_final === null) {
+                    $parent_category_id_final = (int)$row['parent_id'];
+                }
+            } else {
+                // Top-level category: use its own name
+                $categoryNameVal = $row['cat_name'];
+            }
+        }
+    } catch (Exception $e) {
+        // If it fails, just leave categoryNameVal as null
+    }
+}
 
 /** Handle images upload **/
 $upload_debug = [];
@@ -236,9 +293,20 @@ try {
     if ($hasCurrency) {
         $addField('currency', ':currency', $currency);
     }
-    if ($hasCategoryId) {
-        $addField('category_id', ':category_id', $category_id ?: null);
+
+    // NEW: save main + sub category (if columns exist)
+    if ($hasParentCategory) {
+        $addField('parent_category_id', ':parent_category_id', $parent_category_id_final ?: null);
     }
+    if ($hasCategoryId) {
+        $addField('category_id', ':category_id', $category_id_final ?: null);
+    }
+
+    // 🔹 NEW: save category_name (top-level name like "Men Care") if column exists
+    if ($hasCategoryName) {
+        $addField('category_name', ':category_name', $categoryNameVal);
+    }
+
     if ($hasImages) {
         $addField('images', ':images', $images_json);
     }
