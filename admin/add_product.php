@@ -1,5 +1,5 @@
 <?php
-// admin/add_product.php - upgraded to new admin layout & style with tags
+// admin/add_product.php - upgraded to new admin layout & style with tags + parent/sub categories
 require_once __DIR__ . '/_auth.php';
 require_once __DIR__ . '/../includes/db.php';
 
@@ -57,21 +57,35 @@ $price_val            = old_val('price', '');
 $stock_val            = old_val('stock', '10');
 $short_desc_val       = old_val('short_desc', old_val('short_description', ''));
 $description_val      = old_val('description', '');
-$category_id_val      = old_val('category_id', '');
+$parent_category_id_val = old_val('parent_category_id', '');
+$category_id_val        = old_val('category_id', '');
 $is_published_val     = old_val('is_published', old_val('is_active', '1'));
 $meta_title_val       = old_val('meta_title', '');
 $meta_description_val = old_val('meta_description', '');
 
-// Load categories for select
-$categories = [];
+// Load categories: split into parent + subcategories
+$parentCategories = [];
+$subCategories    = []; // flat list of all subcats
 try {
-    $categories = $pdo->query("
-        SELECT id, COALESCE(title, name) AS title
+    $rows = $pdo->query("
+        SELECT id, COALESCE(title, name) AS title, parent_id
         FROM categories
         ORDER BY COALESCE(title, name) ASC
     ")->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($rows as $row) {
+        $row['id']        = (int)$row['id'];
+        $row['parent_id'] = $row['parent_id'] !== null ? (int)$row['parent_id'] : null;
+
+        if (empty($row['parent_id'])) {
+            $parentCategories[] = $row;        // top level
+        } else {
+            $subCategories[]    = $row;        // children
+        }
+    }
 } catch(Exception $e) {
-    // ignore if categories table missing
+    $parentCategories = [];
+    $subCategories    = [];
 }
 
 // Load tags for multi-select
@@ -84,7 +98,7 @@ try {
         ORDER BY name ASC
     ")->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
-    // ignore if tags table missing
+    $tags = [];
 }
 
 // ensure CSRF token
@@ -194,18 +208,40 @@ include __DIR__ . '/layout/header.php';
     <!-- RIGHT COLUMN -->
     <div class="bg-white border border-gray-200 rounded-xl p-6 shadow-sm space-y-4">
 
-      <!-- Category -->
+      <!-- Main + Sub Category -->
       <div>
-        <label class="block text-sm font-semibold mb-2">Category</label>
-        <select id="category_id" name="category_id" class="w-full p-3 border rounded-lg">
-          <option value="">-- Select category --</option>
-          <?php foreach($categories as $c): ?>
+        <label class="block text-sm font-semibold mb-2">Main Category (Top Level)</label>
+        <select id="parent_category_id" name="parent_category_id" class="w-full p-3 border rounded-lg">
+          <option value="">-- Select main category --</option>
+          <?php foreach ($parentCategories as $c): ?>
             <option value="<?php echo (int)$c['id']; ?>"
+              <?php echo ((string)$parent_category_id_val === (string)$c['id']) ? 'selected' : ''; ?>>
+              <?php echo htmlspecialchars($c['title'], ENT_QUOTES, 'UTF-8'); ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+        <p class="text-xs text-slate-500 mt-1">
+          Example: Men Care, Baby care, Hair Care, etc.
+        </p>
+      </div>
+
+      <div>
+        <label class="block text-sm font-semibold mb-2">Sub Category</label>
+        <select id="category_id" name="category_id" class="w-full p-3 border rounded-lg">
+          <option value="">-- Select sub category (optional) --</option>
+          <?php foreach ($subCategories as $c): ?>
+            <option
+              value="<?php echo (int)$c['id']; ?>"
+              data-parent-id="<?php echo (int)$c['parent_id']; ?>"
               <?php echo ((string)$category_id_val === (string)$c['id']) ? 'selected' : ''; ?>>
               <?php echo htmlspecialchars($c['title'], ENT_QUOTES, 'UTF-8'); ?>
             </option>
           <?php endforeach; ?>
         </select>
+        <p class="text-xs text-slate-500 mt-1">
+          Example: Hair Wash, Hair oil, Face wash under Men Care.  
+          If you leave this empty, the product will only be attached to the main category.
+        </p>
       </div>
 
       <!-- Tags (multi-select) -->
@@ -300,10 +336,10 @@ include __DIR__ . '/layout/header.php';
   </form>
 </div>
 
-<!-- image preview script -->
+<!-- image preview + subcategory filtering script -->
 <script>
 (function(){
-  const input = document.getElementById('images_input');
+  const input   = document.getElementById('images_input');
   const preview = document.getElementById('preview');
 
   // If server returned uploaded files (upload_debug), show them as well
@@ -324,40 +360,88 @@ include __DIR__ . '/layout/header.php';
     })();
   <?php endif; ?>
 
-  if (!input) return;
-  input.addEventListener('change', function(){
-    preview.innerHTML = '';
-    const files = Array.from(input.files).slice(0,5);
-    files.forEach(function(f){
-      if (!f.type.startsWith('image/')) return;
-      const url = URL.createObjectURL(f);
-      const wrapper = document.createElement('div');
-      wrapper.className = 'w-20 h-20 rounded overflow-hidden border';
-      const img = document.createElement('img');
-      img.src = url;
-      img.alt = '';
-      img.className = 'object-cover w-full h-full';
-      wrapper.appendChild(img);
-      preview.appendChild(wrapper);
+  if (input) {
+    input.addEventListener('change', function(){
+      preview.innerHTML = '';
+      const files = Array.from(input.files).slice(0,5);
+      files.forEach(function(f){
+        if (!f.type.startsWith('image/')) return;
+        const url = URL.createObjectURL(f);
+        const wrapper = document.createElement('div');
+        wrapper.className = 'w-20 h-20 rounded overflow-hidden border';
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = '';
+        img.className = 'object-cover w-full h-full';
+        wrapper.appendChild(img);
+        preview.appendChild(wrapper);
+      });
     });
-  });
+  }
 
   const dropBox = document.querySelector('.group');
-  if (!dropBox) return;
-  ['dragenter','dragover','dragleave','drop'].forEach(evt =>
-    dropBox.addEventListener(evt, e => e.preventDefault())
-  );
-  dropBox.addEventListener('drop', function(e){
-    const dt = e.dataTransfer;
-    if (!dt) return;
-    const files = Array.from(dt.files).slice(0,5);
-    if (typeof DataTransfer !== 'undefined') {
-      const dtObj = new DataTransfer();
-      files.forEach(f => dtObj.items.add(f));
-      input.files = dtObj.files;
+  if (dropBox && input) {
+    ['dragenter','dragover','dragleave','drop'].forEach(evt =>
+      dropBox.addEventListener(evt, e => e.preventDefault())
+    );
+    dropBox.addEventListener('drop', function(e){
+      const dt = e.dataTransfer;
+      if (!dt) return;
+      const files = Array.from(dt.files).slice(0,5);
+      if (typeof DataTransfer !== 'undefined') {
+        const dtObj = new DataTransfer();
+        files.forEach(f => dtObj.items.add(f));
+        input.files = dtObj.files;
+      }
+      input.dispatchEvent(new Event('change'));
+    });
+  }
+
+  // ====== Parent/Subcategory dynamic filtering ======
+  const parentSelect = document.getElementById('parent_category_id');
+  const subSelect    = document.getElementById('category_id');
+
+  if (parentSelect && subSelect) {
+    const allSubOptions = Array.from(subSelect.querySelectorAll('option[data-parent-id]'));
+
+    function refreshSubOptions() {
+      const currentParent = parentSelect.value;
+      const currentSub    = subSelect.value;
+
+      // reset list
+      subSelect.innerHTML = '';
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = '-- Select sub category (optional) --';
+      subSelect.appendChild(placeholder);
+
+      if (!currentParent) {
+        // if no main category: either show all subs OR keep it empty
+        // here we choose to show NONE until a main category is chosen
+        return;
+      }
+
+      allSubOptions.forEach(function(opt){
+        if (opt.getAttribute('data-parent-id') === currentParent) {
+          subSelect.appendChild(opt.cloneNode(true));
+        }
+      });
+
+      // try restore previous selection (if it still matches)
+      if (currentSub) {
+        subSelect.value = currentSub;
+      }
     }
-    input.dispatchEvent(new Event('change'));
-  });
+
+    // Initial load (for old values, edit form, or validation fail)
+    refreshSubOptions();
+
+    parentSelect.addEventListener('change', function(){
+      // when main category changes, clear sub and rebuild
+      subSelect.value = '';
+      refreshSubOptions();
+    });
+  }
 })();
 </script>
 

@@ -55,12 +55,20 @@ $isProductArea = in_array($req_file, [
                     'edit_product.php',
                     'product_reviews.php',
                     'product_inventory.php',
-                    'tags.php'                // 👈 NEW
+                    'tags.php',
+                    'filter_groups.php',        // 👈 add
+                    'filter_group_add.php',     // 👈 add
+                    'filter_group_edit.php',    // 👈 add
+                    'filter_options.php',       // 👈 add
+                    'filter_option_add.php',    // 👈 add
+                    'filter_option_edit.php'    // 👈 add
                 ]) ||
                 stripos($req_path, '/admin/products') === 0 ||
                 stripos($req_path, '/admin/product_reviews') === 0 ||
                 stripos($req_path, '/admin/product_inventory') === 0 ||
-                stripos($req_path, '/admin/tags') === 0;   // 👈 NEW
+                stripos($req_path, '/admin/tags') === 0 ||
+                stripos($req_path, '/admin/filter_groups') === 0 ||   // 👈 add
+                stripos($req_path, '/admin/filter_options') === 0;    // 👈 add
 
 $isOrdersArea = in_array($req_file, ['orders.php','order_view.php','invoices.php','invoice_view.php','shipments.php']) ||
                 stripos($req_path, '/admin/orders') === 0 ||
@@ -169,11 +177,26 @@ $isAppearanceArea = in_array($req_file, ['banner.php','appearance.php','product_
           <span class="text-sm">Products</span>
         </a>
 
-        <!-- 👇 NEW: Product Tags -->
         <a href="/admin/tags.php"
           class="<?php echo is_active_link(['tags','tags.php','product_tags']); ?> block px-3 py-2 rounded-md">
           <span class="text-slate-500">•</span>
           <span class="text-sm">Product Tags</span>
+        </a>
+
+        <!-- ✅ New menu item -->
+        <a href="/admin/filter_groups.php"
+          class="<?php echo is_active_link([
+              'filter_groups',
+              'filter_groups.php',
+              'filter_options',
+              'filter_options.php',
+              'filter_group_add',
+              'filter_group_edit',
+              'filter_option_add',
+              'filter_option_edit'
+          ]); ?> block px-3 py-2 rounded-md">
+          <span class="text-slate-500">•</span>
+          <span class="text-sm">Product Filters</span>
         </a>
 
         <a href="/admin/product_reviews.php" class="<?php echo is_active_link(['product_reviews','product_reviews.php']); ?> block px-3 py-2 rounded-md">
@@ -185,8 +208,7 @@ $isAppearanceArea = in_array($req_file, ['banner.php','appearance.php','product_
           <span class="text-slate-500">•</span>
           <span class="text-sm">Product Inventory</span>
         </a>
-    </div>
-
+      </div>
     <!-- Orders parent (collapsible) with Invoices + Shipments -->
     <?php
       $ordersParentActive = $isOrdersArea ? 'sidebar-link active' : 'sidebar-link';
