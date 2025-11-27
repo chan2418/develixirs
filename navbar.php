@@ -1,15 +1,48 @@
 <?php
+// navbar.php
 
-// Make sure $categories exists so navbar won't break on pages without categories query
-if (!isset($categories)) {
+// --- SESSION ---
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// --- DATABASE CONNECTION ---
+if (!isset($pdo)) {
+    require_once __DIR__ . '/includes/db.php';
+}
+
+// --- FETCH CATEGORIES ---
+$categories = [];
+try {
+    // Check which field exists in categories table
+    $cols = $pdo->query("SHOW COLUMNS FROM categories")->fetchAll(PDO::FETCH_ASSOC);
+    $fields = array_column($cols, 'Field');
+    
+    $labelField = in_array('title', $fields) ? 'title' : (in_array('name', $fields) ? 'name' : null);
+    
+    if ($labelField !== null) {
+        $catSql = "
+            SELECT id, {$labelField} AS title
+            FROM categories
+            WHERE parent_id = 0 OR parent_id IS NULL
+            ORDER BY title ASC
+        ";
+        $catStmt = $pdo->query($catSql);
+        $categories = $catStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+} catch (PDOException $e) {
     $categories = [];
 }
+
+// --- USER INFO ---
+$isLoggedIn = isset($_SESSION['user_id']);
+$userName   = $isLoggedIn ? ($_SESSION['user_name'] ?? 'User') : null;
+$userLetter = $isLoggedIn ? strtoupper(substr($userName, 0, 1)) : null;
 ?>
+<link rel="stylesheet" href="assets/css/navbar.css">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
 
-<!-- NAVBAR STYLES -->
-<link rel="stylesheet" href="assets/css/navbar.css">
 <!-- MOBILE HEADER -->
 <header class="mobile-header">
   <button class="mobile-menu-toggle">
@@ -43,12 +76,19 @@ if (!isset($categories)) {
 
     <ul class="mobile-menu-list">
       <li class="active"><a href="index.php">Home</a><span class="plus">+</span></li>
-      <li><a href="product.php">Product</a><span class="plus">+</span></li>
       <li><a href="#">Shop</a><span class="plus">+</span></li>
+      <li><a href="product.php">Product</a><span class="plus">+</span></li>
       <li><a href="#">Blog</a><span class="plus">+</span></li>
       <li><a href="#">Contact</a><span class="plus">+</span></li>
       <li><a href="#">Wishlist (0)</a></li>
-      <li><a href="#">Login</a></li>
+      
+      <?php if ($isLoggedIn): ?>
+        <li><a href="users.php">Users</a></li>
+        <li><a href="my-profile.php">My Profile</a></li>
+        <li><a href="logout.php" class="logout-link">Logout</a></li>
+      <?php else: ?>
+        <li><a href="login.php">Login / Register</a></li>
+      <?php endif; ?>
     </ul>
 
     <div class="mobile-menu-colors">
@@ -61,13 +101,15 @@ if (!isset($categories)) {
 </div>
 
 <!-- TOP BAR -->
-<div class="top-bar">
+<div class="abc">
   <div class="top-bar-inner">
     <div class="top-left">
       <span>USD <i class="fa-solid fa-caret-down"></i></span>
       <span>ENGLISH <i class="fa-solid fa-caret-down"></i></span>
     </div>
-    <div class="top-right">
+
+    <!-- CENTER: social icons -->
+    <div class="top-center">
       <div class="social">
         <a href="#"><i class="fab fa-facebook-f"></i></a>
         <a href="#"><i class="fab fa-instagram"></i></a>
@@ -77,7 +119,28 @@ if (!isset($categories)) {
         <a href="#"><i class="fab fa-google-plus-g"></i></a>
         <a href="#"><i class="fab fa-behance"></i></a>
       </div>
-      <a href="#">Login / Register</a>
+    </div>
+
+    <div class="top-right">
+      <?php if ($isLoggedIn): ?>
+        <div class="user-profile user-dropdown">
+          <div class="user-circle">
+            <?php echo htmlspecialchars($userLetter); ?>
+          </div>
+          <span class="user-name">
+            <?php echo htmlspecialchars($userName); ?>
+          </span>
+          <i class="fa-solid fa-caret-down user-caret"></i>
+
+          <!-- dropdown menu -->
+          <div class="user-menu">
+            <a href="my-profile.php">My Profile</a>
+            <a href="logout.php">Logout</a>
+          </div>
+        </div>
+      <?php else: ?>
+        <a href="login.php">Login / Register</a>
+      <?php endif; ?>
     </div>
   </div>
 </div>
@@ -98,10 +161,7 @@ if (!isset($categories)) {
 
         <!-- DROPDOWN -->
         <ul class="search-category-dropdown" id="searchCategoryDropdown">
-          <li data-cat-id="">
-            All categories
-          </li>
-
+          <li data-cat-id="">All categories</li>
           <?php if (!empty($categories)): ?>
             <?php foreach ($categories as $cat): ?>
               <li
@@ -143,12 +203,11 @@ if (!isset($categories)) {
   </div>
 </header>
 
-<!-- DESKTOP NAV -->
+<!-- NAV -->
 <nav class="nav">
   <div class="nav-inner">
     <ul>
       <li class="active"><a href="index.php">Home</a></li>
-
       <li><a href="product.php">Product</a></li>
 
       <li class="has-mega">
@@ -269,6 +328,13 @@ if (!isset($categories)) {
 
       <li><a href="#">Blog</a></li>
       <li><a href="#">Contact</a></li>
+
+      <?php if ($isLoggedIn): ?>
+        <li><a href="my-profile.php">My Account</a></li>
+        <li><a href="logout.php">Logout</a></li>
+      <?php else: ?>
+        <li><a href="login.php">Login</a></li>
+      <?php endif; ?>
     </ul>
   </div>
 </nav>
@@ -287,10 +353,105 @@ if (!isset($categories)) {
     <i class="fa-regular fa-heart"></i>
     <span>Wishlist (0)</span>
   </a>
-  <a href="#">
-    <i class="fa-regular fa-user"></i>
-    <span>Login</span>
-  </a>
+
+  <?php if ($isLoggedIn): ?>
+    <a href="my-profile.php">
+      <i class="fa-regular fa-user"></i>
+      <span>Account</span>
+    </a>
+  <?php else: ?>
+    <a href="login.php">
+      <i class="fa-regular fa-user"></i>
+      <span>Login</span>
+    </a>
+  <?php endif; ?>
 </nav>
-<!-- NAVBAR JS -->
-<script src="assets/js/navbar.js"></script>
+
+<script>
+// Mobile menu open/close
+document.addEventListener('DOMContentLoaded', function () {
+  const overlay = document.querySelector('.mobile-menu-overlay');
+  const openBtn  = document.querySelector('.mobile-menu-toggle');
+  const closeBtn = document.querySelector('.mobile-menu-close');
+
+  if (openBtn && overlay) {
+    openBtn.addEventListener('click', function () {
+      overlay.classList.add('open');
+    });
+  }
+
+  if (closeBtn && overlay) {
+    closeBtn.addEventListener('click', function () {
+      overlay.classList.remove('open');
+    });
+  }
+
+  if (overlay) {
+    overlay.addEventListener('click', function (e) {
+      if (!e.target.closest('.mobile-menu-panel')) {
+        overlay.classList.remove('open');
+      }
+    });
+  }
+});
+
+// Mobile mega menu for "Shop"
+document.addEventListener('DOMContentLoaded', function () {
+  const shopMenu = document.querySelector('.nav li.has-mega');
+
+  if (window.innerWidth <= 768 && shopMenu) {
+    shopMenu.addEventListener('click', function (e) {
+      e.stopPropagation();
+      this.classList.toggle('open');
+    });
+  }
+});
+
+// Search category dropdown
+document.addEventListener('DOMContentLoaded', function () {
+  const toggle   = document.getElementById('searchCategoryToggle');
+  const dropdown = document.getElementById('searchCategoryDropdown');
+  const label    = document.getElementById('searchCategoryLabel');
+  const input    = document.getElementById('searchCategoryInput');
+
+  if (!toggle || !dropdown || !label || !input) return;
+
+  toggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    toggle.classList.toggle('open');
+  });
+
+  dropdown.querySelectorAll('li').forEach(function (li) {
+    li.addEventListener('click', function (e) {
+      e.stopPropagation();
+      const catId   = this.getAttribute('data-cat-id') || '';
+      const catName = this.getAttribute('data-cat-name') || 'All categories';
+
+      input.value = catId;
+      label.textContent = catId ? catName : 'All categories';
+
+      toggle.classList.remove('open');
+    });
+  });
+
+  document.addEventListener('click', function () {
+    toggle.classList.remove('open');
+  });
+});
+
+// User dropdown (top-right)
+document.addEventListener('DOMContentLoaded', function () {
+  const userDropdown = document.querySelector('.user-dropdown');
+
+  if (userDropdown) {
+    userDropdown.addEventListener('click', function (e) {
+      e.stopPropagation();
+      this.classList.toggle('open');
+    });
+
+    document.addEventListener('click', function () {
+      userDropdown.classList.remove('open');
+    });
+  }
+});
+</script>

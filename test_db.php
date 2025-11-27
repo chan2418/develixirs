@@ -8,6 +8,9 @@ develixirs_pass
 
 USE develixirs_db;
 
+DESC users;
+
+
 UPDATE users
 SET password = '$2y$10$wB0xNxGr6nqPivhmTdQWxeGfK9iUlW129N4.hO.V1HQ0i5R9vIjXi'
 WHERE email = 'admin@admin.com';

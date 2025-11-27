@@ -33,6 +33,7 @@ try {
 
   <!-- Shared navbar styles -->
   <link rel="stylesheet" href="assets/css/navbar.css">
+  <?php include __DIR__ . '/navbar.php'; ?>
   
   <style>
 :root{
@@ -778,7 +779,6 @@ ul{
 <body>
 
   <!-- 🔹 SHARED NAVBAR (top bar + header + nav + mobile bottom nav) -->
-  <?php include 'navbar.php'; ?>
 
   <!-- HERO -->
   <section class="shop-hero">
