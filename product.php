@@ -529,6 +529,9 @@ function renderProductResults($products, $totalPages, $page, $sort) { ?>
       <div class="products-grid">
         <?php foreach ($products as $p): ?>
           <?php
+            $productId = (int)($p['id'] ?? 0);                           // 🔹 get product id
+            $detailUrl = 'product_view.php?id=' . $productId;            // 🔹 build URL
+
             $name  = $p['name'] ?? 'Product';
             $price = isset($p['price']) ? (float)$p['price'] : 0;
             $oldPrice = (isset($p['old_price']) && $p['old_price'] > $price)
@@ -542,38 +545,41 @@ function renderProductResults($products, $totalPages, $page, $sort) { ?>
             $stars       = $rating > 0 ? str_repeat('★', round($rating)) : '★★★★★';
           ?>
           <article class="product-card">
-            <div class="product-image-wrap">
-              <?php if ($oldPrice): ?>
-                <span class="product-badge sale">Sale</span>
-              <?php else: ?>
-                <span class="product-badge">New</span>
-              <?php endif; ?>
-
-              <img
-                src="<?php echo htmlspecialchars($img, ENT_QUOTES); ?>"
-                alt="<?php echo htmlspecialchars($name, ENT_QUOTES); ?>">
-
-              <div class="product-actions">
-                <span><i class="fa-regular fa-heart"></i></span>
-                <span><i class="fa-regular fa-eye"></i></span>
-                <span><i class="fa-solid fa-bag-shopping"></i></span>
-              </div>
-            </div>
-            <div class="product-info">
-              <div class="product-name">
-                <?php echo htmlspecialchars($name, ENT_QUOTES); ?>
-              </div>
-              <div class="product-price">
+            <!-- 🔹 Wrap clickable area with <a> -->
+            <a href="<?php echo htmlspecialchars($detailUrl, ENT_QUOTES); ?>" class="product-link" style="display:block;">
+              <div class="product-image-wrap">
                 <?php if ($oldPrice): ?>
-                  <span class="old">₹<?php echo number_format($oldPrice, 2); ?></span>
+                  <span class="product-badge sale">Sale</span>
+                <?php else: ?>
+                  <span class="product-badge">New</span>
                 <?php endif; ?>
-                ₹<?php echo number_format($price, 2); ?>
+
+                <img
+                  src="<?php echo htmlspecialchars($img, ENT_QUOTES); ?>"
+                  alt="<?php echo htmlspecialchars($name, ENT_QUOTES); ?>">
+
+                <div class="product-actions">
+                  <span><i class="fa-regular fa-heart"></i></span>
+                  <span><i class="fa-regular fa-eye"></i></span>
+                  <span><i class="fa-solid fa-bag-shopping"></i></span>
+                </div>
               </div>
-              <div class="product-stars">
-                <?php echo $stars; ?>
-                <span>(<?php echo $ratingCount; ?>)</span>
+              <div class="product-info">
+                <div class="product-name">
+                  <?php echo htmlspecialchars($name, ENT_QUOTES); ?>
+                </div>
+                <div class="product-price">
+                  <?php if ($oldPrice): ?>
+                    <span class="old">₹<?php echo number_format($oldPrice, 2); ?></span>
+                  <?php endif; ?>
+                  ₹<?php echo number_format($price, 2); ?>
+                </div>
+                <div class="product-stars">
+                  <?php echo $stars; ?>
+                  <span>(<?php echo $ratingCount; ?>)</span>
+                </div>
               </div>
-            </div>
+            </a>
           </article>
         <?php endforeach; ?>
       </div>

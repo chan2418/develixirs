@@ -53,8 +53,9 @@ $allowedSlots = [
     'home_center',
     'home_offer',   // child slot for home
     'product',
-    'product_sidebar', // 👈 NEW: child slot for product listing sidebar
+    'product_sidebar', // child slot for product listing sidebar
     'product_detail',
+    'product_detail_sidebar', // child slot for product detail sidebar
     'blog',
     'category',
     'top_category',
@@ -130,7 +131,8 @@ $childParents = [
     'home_sidebar'    => 'home',
     'home_center'     => 'home',
     'home_offer'      => 'home',
-    'product_sidebar' => 'product',  // 👈 NEW: product child slot
+    'product_sidebar' => 'product',
+    'product_detail_sidebar' => 'product_detail',  // product detail child slot
 ];
 if (!empty($_SESSION['form_errors'])) {
     $parentSlot = $childParents[$page_slot] ?? $page_slot;

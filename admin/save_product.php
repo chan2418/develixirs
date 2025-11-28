@@ -190,7 +190,7 @@ try {
 
 if (isset($_FILES['images']) && is_array($_FILES['images']['name'])) {
     $count = count($_FILES['images']['name']);
-    $limit = min(5, $count);
+    $limit = min(10, $count);
     for ($i = 0; $i < $limit; $i++) {
         $name    = $_FILES['images']['name'][$i];
         $tmp     = $_FILES['images']['tmp_name'][$i];
@@ -278,6 +278,13 @@ try {
     if ($hasDescription) {
         $addField('description', ':description', $description ?: null);
     }
+    // NEW: ingredients and how_to_use
+    if (in_array('ingredients', $productCols, true)) {
+        $addField('ingredients', ':ingredients', trim($_POST['ingredients'] ?? '') ?: null);
+    }
+    if (in_array('how_to_use', $productCols, true)) {
+        $addField('how_to_use', ':how_to_use', trim($_POST['how_to_use'] ?? '') ?: null);
+    }
     if (in_array('price', $productCols, true)) {
         $addField('price', ':price', number_format((float)$price, 2, '.', ''));
     }
@@ -321,6 +328,10 @@ try {
     }
     if ($hasIsFeatured) {
         $addField('is_featured', ':is_featured', 0);
+    }
+    // NEW: variant_label
+    if (in_array('variant_label', $productCols, true)) {
+        $addField('variant_label', ':variant_label', $_POST['variant_label'] ?? 'Size');
     }
     if ($hasMetaTitle) {
         $addField('meta_title', ':meta_title', $meta_title ?: null);
@@ -376,6 +387,114 @@ try {
         }
     }
 
+    /** ================== INSERT PRODUCT VARIANTS ================== */
+    $variantsRaw = $_POST['variants'] ?? [];
+    if (!empty($variantsRaw) && is_array($variantsRaw) && $newId > 0) {
+        try {
+            $stmtVar = $pdo->prepare("
+                INSERT INTO product_variants (product_id, variant_name, price, stock, sku, custom_title, custom_description, images, image, is_active)
+                VALUES (:pid, :name, :price, :stock, :sku, :custom_title, :custom_desc, :images, :image, 1)
+            ");
+            
+            // Prepare variant FAQ statement
+            $stmtVarFaq = $pdo->prepare("
+                INSERT INTO variant_faqs (variant_id, question, answer)
+                VALUES (:vid, :question, :answer)
+            ");
+
+            foreach ($variantsRaw as $idx => $v) {
+                $vName  = trim($v['name'] ?? '');
+                $vPrice = (float)($v['price'] ?? 0);
+                $vStock = (int)($v['stock'] ?? 0);
+                $vSku   = trim($v['sku'] ?? '');
+                $vCustomTitle = trim($v['custom_title'] ?? '');
+                $vCustomDesc = trim($v['custom_description'] ?? '');
+
+                if ($vName === '') continue;
+
+                // Handle Multiple Variant Images (stored as JSON)
+                $variantImages = [];
+                if (!empty($_FILES['variants']['name'][$idx]['images'])) {
+                    $fileCount = count($_FILES['variants']['name'][$idx]['images']);
+                    for ($i = 0; $i < min($fileCount, 10); $i++) {
+                        $fName = $_FILES['variants']['name'][$idx]['images'][$i] ?? '';
+                        $fTmp  = $_FILES['variants']['tmp_name'][$idx]['images'][$i] ?? '';
+                        $fErr  = $_FILES['variants']['error'][$idx]['images'][$i] ?? UPLOAD_ERR_NO_FILE;
+
+                        if ($fErr === UPLOAD_ERR_OK && is_uploaded_file($fTmp)) {
+                            $ext = pathinfo($fName, PATHINFO_EXTENSION) ?: 'jpg';
+                            $ext = preg_replace('/[^a-zA-Z0-9]/', '', $ext);
+                            $newName = 'var_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+                            $dest = $uploadDir . $newName;
+                            if (move_uploaded_file($fTmp, $dest)) {
+                                $variantImages[] = $newName;
+                            }
+                        }
+                    }
+                }
+                $imagesJson = !empty($variantImages) ? json_encode($variantImages) : null;
+                $legacyImage = !empty($variantImages) ? $variantImages[0] : null; // First image for backward compat
+
+                // Insert variant
+                $stmtVar->execute([
+                    ':pid'   => $newId,
+                    ':name'  => $vName,
+                    ':price' => $vPrice,
+                    ':stock' => $vStock,
+                    ':sku'   => $vSku,
+                    ':custom_title' => $vCustomTitle ?: null,
+                    ':custom_desc'  => $vCustomDesc ?: null,
+                    ':images' => $imagesJson,
+                    ':image'  => $legacyImage,
+                ]);
+                
+                $variantId = (int)$pdo->lastInsertId();
+                
+                // Insert variant FAQs
+                if (!empty($v['faqs']) && is_array($v['faqs'])) {
+                    foreach ($v['faqs'] as $faq) {
+                        $q = trim($faq['question'] ?? '');
+                        $a = trim($faq['answer'] ?? '');
+                        if ($q && $a) {
+                            $stmtVarFaq->execute([
+                                ':vid' => $variantId,
+                                ':question' => $q,
+                                ':answer' => $a
+                            ]);
+                        }
+                    }
+                }
+            }
+        } catch (Exception $e) {
+            $upload_debug[] = 'variant-insert-error: ' . $e->getMessage();
+        }
+    }
+
+    /** ================== INSERT PRODUCT FAQS ================== */
+    $faqsRaw = $_POST['faqs'] ?? [];
+    if (!empty($faqsRaw) && is_array($faqsRaw) && $newId > 0) {
+        try {
+            $stmtFaq = $pdo->prepare("
+                INSERT INTO product_faqs (product_id, question, answer)
+                VALUES (:pid, :question, :answer)
+            ");
+
+            foreach ($faqsRaw as $f) {
+                $q = trim($f['question'] ?? '');
+                $a = trim($f['answer'] ?? '');
+
+                if ($q === '' || $a === '') continue;
+
+                $stmtFaq->execute([
+                    ':pid'      => $newId,
+                    ':question' => $q,
+                    ':answer'   => $a,
+                ]);
+            }
+        } catch (Exception $e) {
+            $upload_debug[] = 'faq-insert-error: ' . $e->getMessage();
+        }
+    }
     /** ========================================================= */
 
     flash_set('success_msg', 'Product created successfully.');

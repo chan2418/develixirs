@@ -45,6 +45,8 @@ $homeOfferBanners  = [];
 $homeOfferLatest   = null;
 $productSideBanners = [];
 $productSideLatest  = null;
+$productDetailSideBanners = [];
+$productDetailSideLatest  = null;
 
 if ($currentSlot === 'home') {
     // LEFT SIDEBAR
@@ -70,6 +72,12 @@ if ($currentSlot === 'product') {
     $stmtP->execute();
     $productSideBanners = $stmtP->fetchAll(PDO::FETCH_ASSOC) ?: [];
     $productSideLatest  = $productSideBanners[0] ?? null;
+}
+if ($currentSlot === 'product_detail') {
+    $stmtPD = $pdo->prepare("SELECT * FROM banners WHERE page_slot = 'product_detail_sidebar' ORDER BY id DESC");
+    $stmtPD->execute();
+    $productDetailSideBanners = $stmtPD->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    $productDetailSideLatest  = $productDetailSideBanners[0] ?? null;
 }
 
 /* ---------- FETCH CATEGORIES FOR DROPDOWN (SUB / TOP) ---------- */
@@ -1039,6 +1047,147 @@ unset($_SESSION['form_errors'], $_SESSION['success_msg']);
 </div>
 
 <?php endif; // end if ($currentSlot === 'product') ?>
+
+<?php if ($currentSlot === 'product_detail'): ?>
+  <!-- PRODUCT DETAIL SIDEBAR BANNER: UPLOAD + PREVIEW -->
+  <div class="card" style="padding:18px;margin-top:24px;">
+    <h2 style="font-size:16px;font-weight:700;margin-bottom:6px;">Product Detail Sidebar Banner</h2>
+    <p style="font-size:12px;color:#64748b;margin-bottom:12px;">
+      This banner appears in the right sidebar of individual product detail pages (product_view.php).
+    </p>
+
+    <form action="save_banner.php" method="post" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="<?php echo $csrf; ?>">
+      <input type="hidden" name="page_slot" value="product_detail_sidebar">
+
+      <div class="banner-upload-row">
+        <div class="banner-upload-left">
+          <label style="font-weight:700;display:block;margin-bottom:6px;">Sidebar banner image</label>
+          <label style="display:block;border:2px dashed #d8e1f0;padding:14px;border-radius:10px;cursor:pointer;background:#fbfdff;text-align:center;">
+            <div style="font-weight:700;">Click to choose file or drag &amp; drop</div>
+            <input
+              type="file"
+              name="banners[]"
+              accept="image/*"
+              style="display:none;"
+              data-preview-target="bannerPreviewProductDetailSidebar">
+          </label>
+        </div>
+
+        <div class="banner-upload-right">
+          <label style="font-weight:700;display:block;margin-bottom:6px;">Alt text</label>
+          <input
+            name="alt_text"
+            value="<?php echo htmlspecialchars($productDetailSideLatest['alt_text'] ?? '', ENT_QUOTES); ?>"
+            style="width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef7;">
+
+          <label style="font-weight:700;display:block;margin-top:10px;margin-bottom:6px;">Optional Link</label>
+          <input
+            name="link"
+            value="<?php echo htmlspecialchars($productDetailSideLatest['link'] ?? '', ENT_QUOTES); ?>"
+            style="width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef7;">
+
+          <div style="margin-top:10px;display:flex;align-items:center;gap:8px;">
+            <label style="font-size:13px;">
+              <input
+                type="checkbox"
+                name="is_active"
+                value="1"
+                <?php if (empty($productDetailSideLatest) || (int)($productDetailSideLatest['is_active'] ?? 1) === 1) echo 'checked'; ?>>
+              Active
+            </label>
+
+            <button
+              type="submit"
+              style="margin-left:auto;padding:8px 16px;border-radius:8px;background:#2563eb;color:#fff;border:none;font-size:13px;cursor:pointer;">
+              Save sidebar banner
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="banner-preview-wrapper">
+        <div style="font-weight:700;margin-bottom:8px;">Sidebar banner preview</div>
+        <?php if (!empty($productDetailSideLatest) && !empty($productDetailSideLatest['filename'])):
+          $srcPD = '/assets/uploads/banners/' . ltrim($productDetailSideLatest['filename'], '/');
+        ?>
+          <img
+            id="bannerPreviewProductDetailSidebar"
+            src="<?php echo htmlspecialchars($srcPD, ENT_QUOTES, 'UTF-8'); ?>"
+            alt="<?php echo htmlspecialchars($productDetailSideLatest['alt_text'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+            style="width:100%;max-height:260px;object-fit:cover;border-radius:10px;border:1px solid #eef2f7;">
+        <?php else: ?>
+          <div
+            id="bannerPreviewProductDetailSidebar"
+            style="width:100%;height:180px;border-radius:10px;background:#f3f6fb;display:flex;align-items:center;justify-content:center;color:#64748b;">
+            No sidebar banner yet.
+          </div>
+        <?php endif; ?>
+      </div>
+    </form>
+  </div>
+
+  <!-- Existing product detail sidebar banners -->
+  <div class="card" style="padding:18px;margin-top:20px;">
+    <div style="font-weight:700;margin-bottom:10px;">Existing sidebar banners – Product Detail Page</div>
+
+    <?php if (empty($productDetailSideBanners)): ?>
+      <div style="color:#64748b;font-size:14px;">No sidebar banners found for Product Detail Page.</div>
+    <?php else: ?>
+      <div class="banner-existing-grid">
+        <?php foreach ($productDetailSideBanners as $b):
+          $src = '/assets/uploads/banners/' . ltrim($b['filename'] ?? '', '/');
+        ?>
+          <div class="banner-existing-item">
+            <div class="banner-existing-thumb banner-list-thumb">
+              <img
+                src="<?php echo htmlspecialchars($src, ENT_QUOTES, 'UTF-8'); ?>"
+                alt="<?php echo htmlspecialchars($b['alt_text'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+            </div>
+            <div class="banner-existing-body">
+              <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                <?php echo htmlspecialchars($b['alt_text'] ?: 'No alt text', ENT_QUOTES, 'UTF-8'); ?>
+              </div>
+
+              <?php if (!empty($b['link'])): ?>
+                <div style="font-size:11px;color:#2563eb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">
+                  <?php echo htmlspecialchars($b['link'], ENT_QUOTES, 'UTF-8'); ?>
+                </div>
+              <?php endif; ?>
+
+              <div style="margin-top:6px;font-size:11px;color:#64748b;display:flex;justify-content:space-between;align-items:center;">
+                <span>ID: <?php echo (int)$b['id']; ?></span>
+                <?php if (!empty($b['is_active'])): ?>
+                  <span style="padding:2px 6px;border-radius:999px;background:#dcfce7;color:#166534;">Active</span>
+                <?php else: ?>
+                  <span style="padding:2px 6px;border-radius:999px;background:#f3f4f6;color:#4b5563;">Inactive</span>
+                <?php endif; ?>
+              </div>
+
+              <div style="margin-top:6px; display:flex; justify-content:space-between; align-items:center;">
+                <form
+                  action="delete_banner.php"
+                  method="post"
+                  onsubmit="return confirm('Delete this product detail sidebar banner permanently?');"
+                  style="margin-left:auto;">
+                  <input type="hidden" name="csrf_token" value="<?php echo $csrf; ?>">
+                  <input type="hidden" name="id" value="<?php echo (int)$b['id']; ?>">
+                  <button
+                    type="submit"
+                    style="border:none;background:#dc2626;color:#fff;padding:4px 8px;border-radius:6px;font-size:11px;cursor:pointer;">
+                    Delete
+                  </button>
+                </form>
+              </div>
+
+            </div>
+          </div>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
+  </div>
+
+<?php endif; // end if ($currentSlot === 'product_detail') ?>
 </div>
 
 <script>
