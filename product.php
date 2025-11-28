@@ -1,23 +1,618 @@
 <?php
-require_once __DIR__ . '/includes/db.php';   // make sure this sets $pdo
+require_once __DIR__ . '/includes/db.php';   // must set $pdo
 
-$productBanners = [];
+// 🔹 Detect AJAX filter request and map POST "filters" → $_GET
+$isAjax = isset($_GET['ajax']) && $_GET['ajax'] === '1';
+
+if ($isAjax && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    // "filters" = serialized query string from JS: color[]=Red&price_min=100...
+    $raw = $_POST['filters'] ?? '';
+    $parsed = [];
+    parse_str($raw, $parsed);
+
+    // Overwrite $_GET so all existing code below (price, groups, sort...) works
+    $_GET = $parsed;
+}
+
+// ===== LOAD ALL FILTER GROUPS + OPTIONS =====
+$filterGroups = [];   // each group has its options inside
+
+try {
+    // load groups
+    $stmt = $pdo->prepare("
+        SELECT *
+        FROM filter_groups
+        WHERE is_active = 1
+        ORDER BY sort_order ASC, name ASC
+    ");
+    $stmt->execute();
+    $groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // load all options once
+    $stmtOpt = $pdo->prepare("
+        SELECT *
+        FROM filter_options
+        WHERE is_active = 1
+        ORDER BY sort_order ASC, label ASC
+    ");
+    $stmtOpt->execute();
+    $options = $stmtOpt->fetchAll(PDO::FETCH_ASSOC);
+
+    // attach options to groups
+    foreach ($groups as $g) {
+        $g['options'] = [];
+        foreach ($options as $opt) {
+            if ((int)$opt['group_id'] === (int)$g['id']) {
+                $g['options'][] = $opt;
+            }
+        }
+        $filterGroups[] = $g;
+    }
+} catch (PDOException $e) {
+    $filterGroups = [];
+}
+
+// active values to keep checkboxes checked
+$activeFilterValues = [];   // [param_key => [values]]
+
+function get_first_image($images) {
+    // same default as index.php
+    $default = '/assets/images/avatar-default.png';
+
+    if (!$images) return $default;
+
+    // try JSON first
+    $maybe = @json_decode($images, true);
+    if (is_array($maybe) && !empty($maybe[0])) {
+        $val = $maybe[0];
+    } else {
+        // then comma-separated
+        if (strpos($images, ',') !== false) {
+            $parts = array_map('trim', explode(',', $images));
+            $val = $parts[0] ?? '';
+        } else {
+            $val = trim($images);
+        }
+    }
+
+    if (!$val) return $default;
+
+    // if full URL or absolute path
+    if (preg_match('#^https?://#i', $val) || strpos($val, '/') === 0) {
+        return $val;
+    }
+
+    // else assume file in uploads
+    return '/assets/uploads/products/' . ltrim($val, '/');
+}
+
+/* ==================== PRODUCT FILTERS / SORT / PAGINATION ==================== */
+
+// Read filters from query string (for price + sort)
+$priceMin = isset($_GET['price_min']) && $_GET['price_min'] !== ''
+    ? (float)$_GET['price_min']
+    : null;
+
+$priceMax = isset($_GET['price_max']) && $_GET['price_max'] !== ''
+    ? (float)$_GET['price_max']
+    : null;
+
+// category filter from URL (?cat=4)
+$categoryId = isset($_GET['cat']) && $_GET['cat'] !== ''
+    ? (int)$_GET['cat']
+    : null;
+// 🔹 category NAME from ?category[]=Mens+Care (index.php link)
+// 🔹 category from filters (can be "Men Care" OR "Men Care / Face Wash")
+$selectedCategoryName = null; // parent-only name -> "Men Care"
+$selectedCategoryFull = null; // full path        -> "Men Care / Face Wash"
+
+if (isset($_GET['category'])) {
+    $rawVals = is_array($_GET['category'])
+        ? $_GET['category']
+        : [$_GET['category']];
+
+    foreach ($rawVals as $rawVal) {
+        $val = trim($rawVal);
+        if ($val === '') {
+            continue;
+        }
+
+        // If it is a subcategory: "Parent / Sub"
+        if (strpos($val, '/') !== false) {
+            if ($selectedCategoryFull === null) {
+                $selectedCategoryFull = $val;
+
+                // also extract the parent name
+                $parts = explode('/', $val, 2);
+                $parentName = trim($parts[0] ?? '');
+                if ($parentName !== '' && $selectedCategoryName === null) {
+                    $selectedCategoryName = $parentName;
+                }
+            }
+        } else {
+            // just parent category like "Men Care"
+            if ($selectedCategoryName === null) {
+                $selectedCategoryName = $val;
+            }
+        }
+    }
+}
+$sort = $_GET['sort'] ?? 'default';
+$page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+$perPage = 9; // products per page
+$offset  = ($page - 1) * $perPage;
+
+/**
+ * Build WHERE parts:
+ *   - always: (is_active = 1 OR is_active IS NULL)
+ *   - dynamic filter groups (color/size/etc.) from filter_groups
+ *   - category_id (from ?cat=)
+ *   - price range
+ */
+$whereParts = ["(is_active = 1 OR is_active IS NULL)"];
+$params     = [];      // named params like [':color1' => 'Black']
+$paramIndex = 1;       // to create unique param names
+
+// 1) Dynamic filters from filter_groups
+// 1) Dynamic filters from filter_groups
+// 1) Dynamic filters from filter_groups
+foreach ($filterGroups as $g) {
+    $paramKey   = $g['param_key'];   // e.g. 'color', 'category', 'range'
+    $columnName = $g['column_name']; // e.g. 'color', 'category', 'category_name'
+
+    if (!isset($_GET[$paramKey]) || !is_array($_GET[$paramKey])) {
+        continue;
+    }
+
+    // Raw values from GET (e.g. "Men Care", "Men Care / Face wash")
+    $vals = array_filter($_GET[$paramKey], 'strlen');
+    if (empty($vals)) {
+        continue;
+    }
+
+    // Keep original selection for checked state
+    $activeFilterValues[$paramKey] = $vals;
+
+    // ---------- SPECIAL CASE: CATEGORY ----------
+    if ($paramKey === 'category') {
+        $orParts = [];
+
+        foreach ($vals as $val) {
+            $val = trim($val);
+            if ($val === '') {
+                continue;
+            }
+
+            // If it's a PARENT like "Men Care"
+            if (strpos($val, '/') === false) {
+                // exact match
+                $phEq   = ':' . $paramKey . '_eq_'   . $paramIndex;
+                $phLike = ':' . $paramKey . '_like_' . $paramIndex;
+                $paramIndex++;
+
+                $params[$phEq]   = $val;             // "Men Care"
+                $params[$phLike] = $val . ' /%';     // "Men Care /%"
+
+                // (category = 'Men Care' OR category LIKE 'Men Care /%')
+                $orParts[] = "({$columnName} = {$phEq} OR {$columnName} LIKE {$phLike})";
+            }
+            // If it's a FULL (parent / sub) like "Men Care / Face wash"
+            else {
+                $ph = ':' . $paramKey . '_full_' . $paramIndex;
+                $paramIndex++;
+
+                $params[$ph] = $val;
+                $orParts[]   = "{$columnName} = {$ph}";
+            }
+        }
+
+        if (!empty($orParts)) {
+            // Wrap all category conditions into one big OR block
+            $whereParts[] = '(' . implode(' OR ', $orParts) . ')';
+        }
+
+        continue; // important: skip the default IN() logic below
+    }
+    // ---------- END CATEGORY SPECIAL CASE ----------
+
+    // Default: simple IN() for non-category filters
+    $phList = [];
+    foreach ($vals as $val) {
+        $ph = ':' . $paramKey . $paramIndex;
+        $paramIndex++;
+
+        $phList[]    = $ph;
+        $params[$ph] = $val;
+    }
+
+    $whereParts[] = "{$columnName} IN (" . implode(',', $phList) . ")";
+}
+
+// 2) Category filter (from cat= in URL – optional)
+// 2) Category filter (from cat= in URL – optional)
+// If a parent category is clicked, include all its subcategories too.
+// 2) Category filter (from cat= in URL – optional)
+// Only if there is NO "category[]" filter present (i.e. not coming from Men Care filter / sidebar)
+$hasCategoryFilter = !empty($_GET['category']);
+
+if ($categoryId !== null && $categoryId > 0 && !$hasCategoryFilter) {
+    // 👉 here you can keep either the simple version:
+    // $whereParts[]           = "category_id = :category_id";
+    // $params[':category_id'] = $categoryId;
+
+    // or the extended parent+children logic if you want for ?cat= links
+    $categoryIdsForFilter = [$categoryId];
+
+    try {
+        $stmtCat = $pdo->prepare("
+            SELECT id 
+            FROM categories 
+            WHERE parent_id = :pid
+        ");
+        $stmtCat->execute([':pid' => $categoryId]);
+        $childIds = $stmtCat->fetchAll(PDO::FETCH_COLUMN);
+
+        if (!empty($childIds)) {
+            foreach ($childIds as $cid) {
+                $categoryIdsForFilter[] = (int)$cid;
+            }
+        }
+    } catch (PDOException $e) {
+        // fallback: only clicked category
+    }
+
+    $placeholders = [];
+    foreach ($categoryIdsForFilter as $idx => $cid) {
+        $ph = ":cat{$idx}";
+        $placeholders[] = $ph;
+        $params[$ph] = $cid;
+    }
+
+    if (!empty($placeholders)) {
+        $whereParts[] = "category_id IN (" . implode(',', $placeholders) . ")";
+    }
+}
+
+// 3) Price filter
+if ($priceMin !== null) {
+    $whereParts[]         = "price >= :price_min";
+    $params[':price_min'] = $priceMin;
+}
+if ($priceMax !== null) {
+    $whereParts[]         = "price <= :price_max";
+    $params[':price_max'] = $priceMax;
+}
+
+// 4) Final WHERE SQL
+$whereSql = '';
+if (!empty($whereParts)) {
+    $whereSql = 'WHERE ' . implode(' AND ', $whereParts);
+}
+
+/* ----- sorting ----- */
+switch ($sort) {
+    case 'popularity':
+        $orderBy = 'sold_count DESC';
+        break;
+    case 'latest':
+        $orderBy = 'created_at DESC';
+        break;
+    case 'price_asc':
+        $orderBy = 'price ASC';
+        break;
+    case 'price_desc':
+        $orderBy = 'price DESC';
+        break;
+    default:
+        $orderBy = 'id DESC'; // default sorting
+}
+
+/* ----- total count for pagination ----- */
+$totalProducts = 0;
+try {
+    $sqlCount = "SELECT COUNT(*) FROM products {$whereSql}";
+    $stmtCount = $pdo->prepare($sqlCount);
+    $stmtCount->execute($params);
+    $totalProducts = (int)$stmtCount->fetchColumn();
+} catch (PDOException $e) {
+    $totalProducts = 0;
+}
+
+$totalPages = $totalProducts > 0 ? (int)ceil($totalProducts / $perPage) : 1;
+
+/* ----- fetch products for current page ----- */
+$products = [];
+try {
+    $sqlProducts = "
+        SELECT *
+        FROM products
+        {$whereSql}
+        ORDER BY {$orderBy}
+        LIMIT :limit OFFSET :offset
+    ";
+    $stmtProducts = $pdo->prepare($sqlProducts);
+
+    // bind named params for filters (color/size/category/price)
+    foreach ($params as $name => $val) {
+        $stmtProducts->bindValue($name, $val);
+    }
+
+    // bind limit & offset
+    $stmtProducts->bindValue(':limit',  $perPage, PDO::PARAM_INT);
+    $stmtProducts->bindValue(':offset', $offset,  PDO::PARAM_INT);
+
+    $stmtProducts->execute();
+    $products = $stmtProducts->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    $products = [];
+}
+
+/* ==================== BANNERS FOR PRODUCT PAGE (CATEGORY AWARE) ==================== */
+
+/* ==================== BANNERS FOR PRODUCT PAGE (CATEGORY AWARE) ==================== */
+
+/* ==================== BANNERS FOR PRODUCT PAGE (CATEGORY AWARE) ==================== */
+
+/* ==================== BANNERS FOR PRODUCT PAGE (CATEGORY AWARE) ==================== */
+
+$heroBanners = [];
+
+// Try to detect which column is used for category label: 'title' or 'name'
+$categoryLabelField = null;
+try {
+    $cols   = $pdo->query("SHOW COLUMNS FROM categories")->fetchAll(PDO::FETCH_ASSOC);
+    $fields = array_column($cols, 'Field');
+
+    if (in_array('title', $fields, true)) {
+        $categoryLabelField = 'title';
+    } elseif (in_array('name', $fields, true)) {
+        $categoryLabelField = 'name';
+    }
+} catch (Exception $e) {
+    $categoryLabelField = null;
+}
+
+// Resolve parent + sub category IDs from selected filters
+$resolvedParentId = null;
+$resolvedSubId    = null;
+
+if ($categoryLabelField !== null) {
+    try {
+        // 1️⃣ If we have a FULL subcategory like "Men Care / Face Wash"
+        if (!empty($selectedCategoryFull)) {
+            $parts      = explode('/', $selectedCategoryFull, 2);
+            $parentName = trim($parts[0] ?? '');
+            $childName  = trim($parts[1] ?? '');
+
+            if ($parentName !== '' && $childName !== '') {
+                $sql = "
+                    SELECT parent.id AS parent_id, child.id AS child_id
+                    FROM categories parent
+                    JOIN categories child ON child.parent_id = parent.id
+                    WHERE parent.{$categoryLabelField} = :pname
+                      AND child.{$categoryLabelField}  = :cname
+                    LIMIT 1
+                ";
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([
+                    ':pname' => $parentName,
+                    ':cname' => $childName,
+                ]);
+                if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                    $resolvedParentId = (int)$row['parent_id'];
+                    $resolvedSubId    = (int)$row['child_id'];
+                }
+            }
+        }
+
+        // 2️⃣ If no sub found but we have a parent name like "Men Care"
+        if ($resolvedParentId === null && $selectedCategoryName !== null && $selectedCategoryName !== '') {
+            $sql = "
+                SELECT id
+                FROM categories
+                WHERE {$categoryLabelField} = :pname
+                  AND (parent_id IS NULL OR parent_id = 0)
+                LIMIT 1
+            ";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([':pname' => $selectedCategoryName]);
+            if ($id = $stmt->fetchColumn()) {
+                $resolvedParentId = (int)$id;
+            }
+        }
+
+    } catch (PDOException $e) {
+        error_log('Category name→ID resolve error: ' . $e->getMessage());
+        $resolvedParentId = null;
+        $resolvedSubId    = null;
+    }
+}
+
+// 3️⃣ Choose which category_id to use for banners, in priority:
+//
+//    a) Subcategory ID (most specific)
+//    b) Parent ID from name
+//    c) Numeric ?cat= from URL
+//
+$bannerCategoryId = null;
+
+if ($resolvedSubId !== null) {
+    $bannerCategoryId = $resolvedSubId;
+} elseif ($resolvedParentId !== null) {
+    $bannerCategoryId = $resolvedParentId;
+} elseif ($categoryId !== null && $categoryId > 0) {
+    $bannerCategoryId = $categoryId;
+}
+
+// 4️⃣ Load banners based on resolved category_id (if any)
+if ($bannerCategoryId !== null) {
+    try {
+        $stmt = $pdo->prepare("
+            SELECT *
+            FROM banners
+            WHERE is_active = 1
+              AND page_slot IN ('category','top_category')
+              AND category_id = :cid
+            ORDER BY id DESC
+        ");
+        $stmt->execute([':cid' => $bannerCategoryId]);
+        $heroBanners = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (PDOException $e) {
+        $heroBanners = [];
+        error_log('Category banner query error: ' . $e->getMessage());
+    }
+}
+
+// 5️⃣ Fallback – generic product banners
+if (empty($heroBanners)) {
+    try {
+        $stmt = $pdo->prepare("
+            SELECT *
+            FROM banners
+            WHERE is_active = 1
+              AND page_slot = 'product'
+            ORDER BY id DESC
+        ");
+        $stmt->execute();
+        $heroBanners = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (PDOException $e) {
+        $heroBanners = [];
+        error_log('Product fallback banner query error: ' . $e->getMessage());
+    }
+}
+// Sidebar banner for product listing page
+$productSidebarBanner = null;
 
 try {
     $stmt = $pdo->prepare("
         SELECT *
         FROM banners
         WHERE is_active = 1
-          AND page_slot = :slot
+          AND page_slot = 'product_sidebar'
         ORDER BY id DESC
+        LIMIT 1
     ");
-    $stmt->execute(['slot' => 'product']);   // 🔑 this matches admin's page_slot
-    $productBanners = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt->execute();
+    $productSidebarBanner = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
 } catch (PDOException $e) {
-    $productBanners = [];
+    $productSidebarBanner = null;
+}
+
+/* ========== RENDER FUNCTION FOR PRODUCTS AREA (used by normal + AJAX) ========== */
+function renderProductResults($products, $totalPages, $page, $sort) { ?>
+  <div id="productResults">
+    <div class="shop-toolbar">
+      <div class="shop-view-toggle">
+        <!-- filter button (desktop + mobile) -->
+        <button class="filter-toggle" type="button">
+          <i class="fa-solid fa-sliders"></i>
+          <span>Filter</span>
+        </button>
+      </div>
+
+      <div class="shop-sort">
+        <span>Sort by:</span>
+        <select name="sort" id="sortSelect">
+          <option value="default"    <?php echo $sort === 'default'    ? 'selected' : ''; ?>>Default sorting</option>
+          <option value="popularity" <?php echo $sort === 'popularity' ? 'selected' : ''; ?>>Sort by popularity</option>
+          <option value="latest"     <?php echo $sort === 'latest'     ? 'selected' : ''; ?>>Sort by latest</option>
+          <option value="price_asc"  <?php echo $sort === 'price_asc'  ? 'selected' : ''; ?>>Sort by price: low to high</option>
+          <option value="price_desc" <?php echo $sort === 'price_desc' ? 'selected' : ''; ?>>Sort by price: high to low</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- PRODUCTS GRID -->
+    <?php if (empty($products)): ?>
+      <p style="font-size:14px;color:#777;">No products found with these filters.</p>
+    <?php else: ?>
+      <div class="products-grid">
+        <?php foreach ($products as $p): ?>
+          <?php
+            $name  = $p['name'] ?? 'Product';
+            $price = isset($p['price']) ? (float)$p['price'] : 0;
+            $oldPrice = (isset($p['old_price']) && $p['old_price'] > $price)
+                ? (float)$p['old_price']
+                : null;
+
+            $img = get_first_image($p['images'] ?? '');
+
+            $rating      = isset($p['rating']) ? (float)$p['rating'] : 0;
+            $ratingCount = isset($p['rating_count']) ? (int)$p['rating_count'] : 0;
+            $stars       = $rating > 0 ? str_repeat('★', round($rating)) : '★★★★★';
+          ?>
+          <article class="product-card">
+            <div class="product-image-wrap">
+              <?php if ($oldPrice): ?>
+                <span class="product-badge sale">Sale</span>
+              <?php else: ?>
+                <span class="product-badge">New</span>
+              <?php endif; ?>
+
+              <img
+                src="<?php echo htmlspecialchars($img, ENT_QUOTES); ?>"
+                alt="<?php echo htmlspecialchars($name, ENT_QUOTES); ?>">
+
+              <div class="product-actions">
+                <span><i class="fa-regular fa-heart"></i></span>
+                <span><i class="fa-regular fa-eye"></i></span>
+                <span><i class="fa-solid fa-bag-shopping"></i></span>
+              </div>
+            </div>
+            <div class="product-info">
+              <div class="product-name">
+                <?php echo htmlspecialchars($name, ENT_QUOTES); ?>
+              </div>
+              <div class="product-price">
+                <?php if ($oldPrice): ?>
+                  <span class="old">₹<?php echo number_format($oldPrice, 2); ?></span>
+                <?php endif; ?>
+                ₹<?php echo number_format($price, 2); ?>
+              </div>
+              <div class="product-stars">
+                <?php echo $stars; ?>
+                <span>(<?php echo $ratingCount; ?>)</span>
+              </div>
+            </div>
+          </article>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
+
+    <!-- PAGINATION -->
+    <?php if ($totalPages > 1): ?>
+      <div class="pagination">
+        <?php for ($p = 1; $p <= $totalPages; $p++): ?>
+          <a
+            href="#"
+            class="page-item<?php echo $p === $page ? ' active' : ''; ?>"
+            data-page="<?php echo $p; ?>"
+          >
+            <?php echo $p; ?>
+          </a>
+        <?php endfor; ?>
+
+        <?php if ($page < $totalPages): ?>
+          <a
+            href="#"
+            class="page-item"
+            data-page="<?php echo $page + 1; ?>"
+          >
+            <i class="fa-solid fa-angle-right"></i>
+          </a>
+        <?php endif; ?>
+      </div>
+    <?php endif; ?>
+  </div>
+<?php
+}
+
+// 🔹 If this is an AJAX request, just return this block and stop
+if ($isAjax) {
+    renderProductResults($products, $totalPages, $page, $sort);
+    exit;
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -36,6 +631,7 @@ try {
   <?php include __DIR__ . '/navbar.php'; ?>
   
   <style>
+/* === CSS (same as yours) === */
 :root{
   --primary:#D4AF37;
   --primary-dark:#B89026;
@@ -83,14 +679,11 @@ ul{
 }
 
 /* ================= HERO / PRODUCT BANNER ================ */
-
-/* push hero below fixed navbar – tuned, not too much space */
 .shop-hero{
-  margin-top:15px;         /* desktop/tablet gap */
+  margin-top:15px;
   margin-bottom:40px;
 }
 
-/* slider wrapper */
 .shop-hero-slider{
   position:relative;
   overflow:hidden;
@@ -99,30 +692,26 @@ ul{
   box-shadow:0 4px 18px rgba(0,0,0,.06);
 }
 
-/* track for slides */
 .shop-hero-track{
   display:flex;
   transition:transform .6s ease;
   will-change:transform;
 }
 
-/* each slide uses DB banner as background */
 .shop-hero-slide{
   min-width:100%;
-  height:360px;            /* shows banner nicely */
+  height:360px;
   background-size:cover;
   background-position:center;
   position:relative;
 }
 
-/* clickable whole slide if link exists */
 .shop-hero-slide-link{
   display:block;
   width:100%;
   height:100%;
 }
 
-/* gradient overlay so white text visible */
 .shop-hero-overlay{
   position:absolute;
   inset:0;
@@ -130,7 +719,6 @@ ul{
   align-items:center;
 }
 
-/* text inside hero */
 .shop-hero-inner{
   position:relative;
   z-index:2;
@@ -152,7 +740,6 @@ ul{
   max-width:420px;
 }
 
-/* dots navigation */
 .shop-hero-dots{
   position:absolute;
   left:50%;
@@ -193,21 +780,34 @@ ul{
   opacity:1;
 }
 
+/* Filter toggle button (desktop + mobile) */
+.filter-toggle{
+  display:None;
+  align-items:center;
+  gap:6px;
+  padding:6px 10px;
+  border:1px solid var(--border);
+  background:#fff;
+  font-size:12px;
+  border-radius:4px;
+  cursor:pointer;
+}
+.filter-toggle i{
+  font-size:12px;
+}
+
 /* mobile tweaks for hero */
 @media (max-width:768px){
   .shop-hero{
-    margin-top:60px;        /* slightly smaller gap on mobile */
+    margin-top:60px;
     margin-bottom:30px;
   }
-
   .shop-hero-slide{
-    height:260px;           /* taller than default mobile but not huge */
+    height:260px;
   }
-
   .shop-hero-inner{
     padding:20px 18px;
   }
-
   .shop-hero-inner h1{
     font-size:20px;
   }
@@ -303,8 +903,9 @@ ul{
 }
 .side-banner img{
   width:100%;
-  height:220px;
-  object-fit:cover;
+  height:auto;
+  display:block;
+  object-fit:contain;
 }
 .side-banner-text{
   position:absolute;
@@ -588,25 +1189,8 @@ ul{
     grid-template-columns:repeat(2,minmax(0,1fr));
   }
 
-  /* hide sidebar on mobile, use filter sheet instead */
   aside{
     display:none;
-  }
-
-  .filter-toggle{
-    display:inline-flex;
-    align-items:center;
-    gap:6px;
-    padding:6px 10px;
-    border:1px solid var(--border);
-    background:#fff;
-    font-size:12px;
-    border-radius:4px;
-    cursor:pointer;
-  }
-
-  .filter-toggle i{
-    font-size:12px;
   }
 }
 
@@ -778,14 +1362,15 @@ ul{
 </head>
 <body>
 
-  <!-- 🔹 SHARED NAVBAR (top bar + header + nav + mobile bottom nav) -->
+  <!-- 🔹 SHARED NAVBAR -->
+  <?php include 'navbar.php'; ?>
 
   <!-- HERO -->
   <section class="shop-hero">
-  <?php if (!empty($productBanners)): ?>
+  <?php if (!empty($heroBanners)): ?>
     <div class="shop-hero-slider">
       <div class="shop-hero-track">
-        <?php foreach ($productBanners as $idx => $b): ?>
+        <?php foreach ($heroBanners as $idx => $b): ?>
           <?php
             $src  = '/assets/uploads/banners/' . ltrim($b['filename'] ?? '', '/');
             $alt  = $b['alt_text'] ?? '';
@@ -802,7 +1387,6 @@ ul{
                   <?php if (!empty($b['alt_text'])): ?>
                     <h1><?php echo htmlspecialchars($b['alt_text'], ENT_QUOTES, 'UTF-8'); ?></h1>
                   <?php endif; ?>
-                  <!-- you can later add subtitle/title columns in DB if you want -->
                 </div>
               </div>
 
@@ -813,9 +1397,9 @@ ul{
         <?php endforeach; ?>
       </div>
 
-      <?php if (count($productBanners) > 1): ?>
+      <?php if (count($heroBanners) > 1): ?>
         <div class="shop-hero-dots">
-          <?php foreach ($productBanners as $idx => $b): ?>
+          <?php foreach ($heroBanners as $idx => $b): ?>
             <button
               class="shop-hero-dot<?php echo $idx === 0 ? ' active' : ''; ?>"
               data-slide="<?php echo $idx; ?>">
@@ -825,256 +1409,206 @@ ul{
       <?php endif; ?>
     </div>
   <?php else: ?>
-    <!-- Fallback if no product banners in DB -->
     <div class="shop-hero-inner">
       <div class="shop-breadcrumb"></div>
     </div>
   <?php endif; ?>
 </section>
-  <!-- CATEGORY ICON BAR -->
-  <!-- <section class="shop-category-row">
-    <div class="shop-category-inner">
-      <div class="shop-cat-item">
-        <i class="fa-solid fa-heart-pulse"></i>
-        <span>Hair Care <small>(13)</small></span>
-      </div>
-      <div class="shop-cat-item">
-        <i class="fa-solid fa-spa"></i>
-        <span>Skin &amp; Body <small>(14)</small></span>
-      </div>
-      <div class="shop-cat-item">
-        <i class="fa-solid fa-seedling"></i>
-        <span>Wellness <small>(11)</small></span>
-      </div>
-      <div class="shop-cat-item">
-        <i class="fa-solid fa-gift"></i>
-        <span>Combos <small>(22)</small></span>
-      </div>
-    </div>
-  </section> -->
 
   <!-- MAIN SHOP CONTENT -->
-  <section class="shop-wrapper">
+  <form id="productFilterForm" onsubmit="return false;">
 
-    <!-- SIDEBAR -->
-    <aside>
-      <div class="filter-card">
-        <div class="filter-card-title">
-          <i class="fa-solid fa-sliders"></i>
-          <span>Filter By</span>
-        </div>
-        <div class="filter-body">
-          <!-- Color -->
-          <div class="filter-group">
-            <div class="filter-group-title">Color</div>
-            <ul class="filter-options">
-              <li><input type="checkbox"> <span>Beige</span></li>
-              <li><input type="checkbox"> <span>Black</span></li>
-              <li><input type="checkbox"> <span>Green</span></li>
-              <li><input type="checkbox"> <span>Rose</span></li>
-            </ul>
-          </div>
+    <section class="shop-wrapper">
 
-          <!-- Size -->
-          <div class="filter-group">
-            <div class="filter-group-title">Size</div>
-            <ul class="filter-options">
-              <li><input type="checkbox"> <span>Mini</span></li>
-              <li><input type="checkbox"> <span>Standard</span></li>
-              <li><input type="checkbox"> <span>Large</span></li>
-            </ul>
-          </div>
-
-          <!-- Brand -->
-          <div class="filter-group">
-            <div class="filter-group-title">Range</div>
-            <ul class="filter-options">
-              <li><input type="checkbox"> <span>Onion Series</span></li>
-              <li><input type="checkbox"> <span>Glow Care</span></li>
-              <li><input type="checkbox"> <span>Aloe Rituals</span></li>
-            </ul>
-          </div>
-
-          <!-- Price -->
-          <div class="filter-group">
-            <div class="filter-group-title">Price</div>
-            <div class="price-row">
-              <input type="number" placeholder="₹10">
-              <span>–</span>
-              <input type="number" placeholder="₹2000">
-            </div>
-            <button class="btn-filter" type="button">Filter</button>
-          </div>
-
-        </div>
-      </div>
-
-      <!-- Small banner -->
-      <div class="side-banner">
-        <img src="https://images.pexels.com/photos/3738335/pexels-photo-3738335.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
-        <div class="side-banner-text">
-          <h4>Living Room Vibes</h4>
-          <p>Soft fragrances &amp; calm decor picks.</p>
-        </div>
-      </div>
-    </aside>
-
-    <!-- PRODUCTS AREA -->
-    <div>
-      <div class="shop-toolbar">
-        <div class="shop-view-toggle">
-          <!-- mobile filter button (opens sheet) -->
-          <button class="filter-toggle">
+      <!-- SIDEBAR (desktop filters) -->
+      <aside>
+        <div class="filter-card">
+          <div class="filter-card-title">
             <i class="fa-solid fa-sliders"></i>
-            <span>Filter</span>
+            <span>Filter By</span>
+          </div>
+          <div class="filter-body">
+            <?php foreach ($filterGroups as $g): ?>
+              <div class="filter-group">
+                <div class="filter-group-title">
+                  <?php echo htmlspecialchars($g['name'], ENT_QUOTES, 'UTF-8'); ?>
+                </div>
+                <ul class="filter-options">
+                  <?php
+                    $paramKey = $g['param_key'];
+                    $selectedValues = $activeFilterValues[$paramKey] ?? [];
+                  ?>
+                  <?php foreach ($g['options'] as $opt): ?>
+                    <?php
+                      $val   = $opt['value'];
+                      $label = $opt['label'];
+                    ?>
+                    <li>
+                      <label>
+                        <input
+                          type="checkbox"
+                          name="<?php echo htmlspecialchars($paramKey, ENT_QUOTES); ?>[]"
+                          value="<?php echo htmlspecialchars($val, ENT_QUOTES); ?>"
+                          <?php echo in_array($val, $selectedValues, true) ? 'checked' : ''; ?>
+                        >
+                        <span><?php echo htmlspecialchars($label, ENT_QUOTES); ?></span>
+                      </label>
+                    </li>
+                  <?php endforeach; ?>
+                </ul>
+              </div>
+            <?php endforeach; ?>
+
+            <!-- Price filter (desktop) -->
+            <div class="filter-group">
+              <div class="filter-group-title">Price</div>
+              <div class="price-row">
+                <input
+                  type="number"
+                  name="price_min"
+                  value="<?php echo $priceMin !== null ? htmlspecialchars($priceMin, ENT_QUOTES) : ''; ?>"
+                  placeholder="Min">
+                <span>–</span>
+                <input
+                  type="number"
+                  name="price_max"
+                  value="<?php echo $priceMax !== null ? htmlspecialchars($priceMax, ENT_QUOTES) : ''; ?>"
+                  placeholder="Max">
+              </div>
+
+              <div style="display:flex; gap:8px; margin-top:8px;">
+                <button class="btn-filter btn-apply-desktop" type="button">Apply</button>
+                <button class="btn-filter btn-clear-desktop" type="button">Clear</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sidebar banner -->
+        <?php if (!empty($productSidebarBanner) && !empty($productSidebarBanner['filename'])): ?>
+          <?php
+            $sbSrc  = '/assets/uploads/banners/' . ltrim($productSidebarBanner['filename'], '/');
+            $sbAlt  = $productSidebarBanner['alt_text'] ?? '';
+            $sbLink = trim($productSidebarBanner['link'] ?? '');
+          ?>
+          <div class="side-banner">
+            <?php if ($sbLink): ?>
+              <a href="<?php echo htmlspecialchars($sbLink, ENT_QUOTES); ?>">
+            <?php endif; ?>
+
+              <img
+                src="<?php echo htmlspecialchars($sbSrc, ENT_QUOTES); ?>"
+                alt="<?php echo htmlspecialchars($sbAlt, ENT_QUOTES); ?>"
+              >
+
+              <?php if (!empty($sbAlt)): ?>
+                <div class="side-banner-text">
+                  <h4><?php echo htmlspecialchars($sbAlt, ENT_QUOTES); ?></h4>
+                </div>
+              <?php endif; ?>
+
+            <?php if ($sbLink): ?>
+              </a>
+            <?php endif; ?>
+          </div>
+        <?php endif; ?>
+      </aside>
+
+      <!-- PRODUCTS AREA -->
+      <?php renderProductResults($products, $totalPages, $page, $sort); ?>
+    </section>
+
+    <!-- MOBILE FILTER OVERLAY (DB-powered) -->
+    <div class="filter-overlay">
+      <div class="filter-sheet">
+        <div class="filter-sheet-header">
+          <button class="filter-back" type="button">
+            <i class="fa-solid fa-arrow-left"></i>
           </button>
+          <h3>Filters</h3>
+          <button class="filter-clear" type="button">Clear</button>
         </div>
 
-        <div class="shop-sort">
-          <span>Sort by:</span>
-          <select>
-            <option>Default sorting</option>
-            <option>Sort by popularity</option>
-            <option>Sort by latest</option>
-            <option>Sort by price: low to high</option>
-            <option>Sort by price: high to low</option>
-          </select>
+        <div class="filter-sheet-body">
+          <div class="filter-left">
+            <?php foreach ($filterGroups as $idx => $g): ?>
+              <?php $paramKey = $g['param_key']; ?>
+              <button
+                type="button"
+                class="filter-tab<?php echo $idx === 0 ? ' active' : ''; ?>"
+                data-filter-target="<?php echo htmlspecialchars($paramKey, ENT_QUOTES); ?>">
+                <?php echo htmlspecialchars($g['name'], ENT_QUOTES); ?>
+              </button>
+            <?php endforeach; ?>
+
+            <!-- Price tab -->
+            <button
+              type="button"
+              class="filter-tab"
+              data-filter-target="price">
+              Price
+            </button>
+          </div>
+
+          <div class="filter-right">
+            <?php foreach ($filterGroups as $idx => $g): ?>
+              <?php
+                $paramKey = $g['param_key'];
+                $selectedValues = $activeFilterValues[$paramKey] ?? [];
+              ?>
+              <div
+                class="filter-pane<?php echo $idx === 0 ? ' active' : ''; ?>"
+                id="filter-<?php echo htmlspecialchars($paramKey, ENT_QUOTES); ?>">
+                <h4><?php echo htmlspecialchars($g['name'], ENT_QUOTES); ?></h4>
+
+                <?php foreach ($g['options'] as $opt): ?>
+                  <?php $val = $opt['value']; $label = $opt['label']; ?>
+                  <label>
+                    <input
+                      type="checkbox"
+                      name="<?php echo htmlspecialchars($paramKey, ENT_QUOTES); ?>[]"
+                      value="<?php echo htmlspecialchars($val, ENT_QUOTES); ?>"
+                      <?php echo in_array($val, $selectedValues, true) ? 'checked' : ''; ?>>
+                    <?php echo htmlspecialchars($label, ENT_QUOTES); ?>
+                  </label>
+                <?php endforeach; ?>
+              </div>
+            <?php endforeach; ?>
+
+            <!-- Price pane (MOBILE) -->
+            <div class="filter-pane" id="filter-price">
+              <h4>Price</h4>
+              <div class="price-row">
+                <input
+                  type="number"
+                  name="m_price_min"
+                  value="<?php echo $priceMin !== null ? htmlspecialchars($priceMin, ENT_QUOTES) : ''; ?>"
+                  placeholder="Min"
+                  class="mobile-price-min">
+                <span>–</span>
+                <input
+                  type="number"
+                  name="m_price_max"
+                  value="<?php echo $priceMax !== null ? htmlspecialchars($priceMax, ENT_QUOTES) : ''; ?>"
+                  placeholder="Max"
+                  class="mobile-price-max">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="filter-sheet-footer">
+          <div class="filter-count">
+            <?php echo number_format($totalProducts); ?> products found
+          </div>
+          <button class="filter-apply" type="button">Apply</button>
         </div>
       </div>
-
-      <!-- PRODUCTS GRID -->
-      <div class="products-grid">
-        <!-- product 1 -->
-        <article class="product-card">
-          <div class="product-image-wrap">
-            <span class="product-badge">New</span>
-            <img src="https://images.pexels.com/photos/3738336/pexels-photo-3738336.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
-            <div class="product-actions">
-              <span><i class="fa-regular fa-heart"></i></span>
-              <span><i class="fa-regular fa-eye"></i></span>
-              <span><i class="fa-solid fa-bag-shopping"></i></span>
-            </div>
-          </div>
-          <div class="product-info">
-            <div class="product-name">Herbal Heart Cushion</div>
-            <div class="product-price">₹1,499.00</div>
-            <div class="product-stars">★★★★★ <span>(12)</span></div>
-          </div>
-        </article>
-
-        <!-- product 2 -->
-        <article class="product-card">
-          <div class="product-image-wrap">
-            <span class="product-badge">New</span>
-            <span class="product-badge sale">Sale</span>
-            <img src="https://images.pexels.com/photos/3738340/pexels-photo-3738340.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
-            <div class="product-actions">
-              <span><i class="fa-regular fa-heart"></i></span>
-              <span><i class="fa-regular fa-eye"></i></span>
-              <span><i class="fa-solid fa-bag-shopping"></i></span>
-            </div>
-          </div>
-          <div class="product-info">
-            <div class="product-name">Aloe Desk Planter</div>
-            <div class="product-price">
-              <span class="old">₹1,999.00</span> ₹1,599.00
-            </div>
-            <div class="product-stars">★★★★☆ <span>(8)</span></div>
-          </div>
-        </article>
-
-        <!-- product 3 -->
-        <article class="product-card">
-          <div class="product-image-wrap">
-            <span class="product-badge">New</span>
-            <img src="https://images.pexels.com/photos/3738338/pexels-photo-3738338.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
-            <div class="product-actions">
-              <span><i class="fa-regular fa-heart"></i></span>
-              <span><i class="fa-regular fa-eye"></i></span>
-              <span><i class="fa-solid fa-bag-shopping"></i></span>
-            </div>
-          </div>
-          <div class="product-info">
-            <div class="product-name">Soft Knit Pillow</div>
-            <div class="product-price">₹1,299.00</div>
-            <div class="product-stars">★★★★★ <span>(5)</span></div>
-          </div>
-        </article>
-
-        <!-- product 4 -->
-        <article class="product-card">
-          <div class="product-image-wrap">
-            <span class="product-badge">New</span>
-            <img src="https://images.pexels.com/photos/3738339/pexels-photo-3738339.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
-            <div class="product-actions">
-              <span><i class="fa-regular fa-heart"></i></span>
-              <span><i class="fa-regular fa-eye"></i></span>
-              <span><i class="fa-solid fa-bag-shopping"></i></span>
-            </div>
-          </div>
-          <div class="product-info">
-            <div class="product-name">Owl Cushion Toy</div>
-            <div class="product-price">
-              <span class="old">₹1,799.00</span> ₹1,450.00
-            </div>
-            <div class="product-stars">★★★★☆ <span>(21)</span></div>
-          </div>
-        </article>
-
-        <!-- product 5 -->
-        <article class="product-card">
-          <div class="product-image-wrap">
-            <span class="product-badge">New</span>
-            <img src="https://images.pexels.com/photos/3738335/pexels-photo-3738335.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
-            <div class="product-actions">
-              <span><i class="fa-regular fa-heart"></i></span>
-              <span><i class="fa-regular fa-eye"></i></span>
-              <span><i class="fa-solid fa-bag-shopping"></i></span>
-            </div>
-          </div>
-          <div class="product-info">
-            <div class="product-name">Striped Gift Box</div>
-            <div class="product-price">₹799.00</div>
-            <div class="product-stars">★★★★☆ <span>(4)</span></div>
-          </div>
-        </article>
-
-        <!-- product 6 -->
-        <article class="product-card">
-          <div class="product-image-wrap">
-            <span class="product-badge">New</span>
-            <img src="https://images.pexels.com/photos/3738342/pexels-photo-3738342.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
-            <div class="product-actions">
-              <span><i class="fa-regular fa-heart"></i></span>
-              <span><i class="fa-regular fa-eye"></i></span>
-              <span><i class="fa-solid fa-bag-shopping"></i></span>
-            </div>
-          </div>
-          <div class="product-info">
-            <div class="product-name">Canvas Wall Art</div>
-            <div class="product-price">
-              <span class="old">₹2,499.00</span> ₹1,999.00
-            </div>
-            <div class="product-stars">★★★★★ <span>(9)</span></div>
-          </div>
-        </article>
-      </div>
-
-      <!-- PAGINATION -->
-      <div class="pagination">
-        <div class="page-item active">1</div>
-        <div class="page-item">2</div>
-        <div class="page-item">3</div>
-        <div class="page-item">4</div>
-        <div class="page-item">…</div>
-        <div class="page-item"><i class="fa-solid fa-angle-right"></i></div>
-      </div>
-
     </div>
-  </section>
+  </form>
 
   <!-- BRAND STRIP -->
-  <section class="brand-strip">
+  <!-- <section class="brand-strip">
     <div class="brand-strip-inner">
       <span>Wild Mountain</span>
       <span>Vintage Studio</span>
@@ -1082,7 +1616,7 @@ ul{
       <span>Inspire Graphic</span>
       <span>Pure Aroma</span>
     </div>
-  </section>
+  </section> -->
 
   <!-- FOOTER -->
   <footer class="footer">
@@ -1139,75 +1673,6 @@ ul{
     </div>
   </footer>
 
-  <!-- MOBILE FILTER OVERLAY -->
-  <div class="filter-overlay">
-    <div class="filter-sheet">
-      <!-- top bar -->
-      <div class="filter-sheet-header">
-        <button class="filter-back">
-          <i class="fa-solid fa-arrow-left"></i>
-        </button>
-        <h3>Filters</h3>
-        <button class="filter-clear">Clear</button>
-      </div>
-
-      <!-- content area -->
-      <div class="filter-sheet-body">
-        <div class="filter-left">
-          <button class="filter-tab active" data-filter-target="color">Color</button>
-          <button class="filter-tab" data-filter-target="size">Size</button>
-          <button class="filter-tab" data-filter-target="range">Range</button>
-          <button class="filter-tab" data-filter-target="price">Price</button>
-        </div>
-
-        <div class="filter-right">
-          <!-- Color -->
-          <div class="filter-pane active" id="filter-color">
-            <h4>Color</h4>
-            <label><input type="checkbox"> Beige</label>
-            <label><input type="checkbox"> Black</label>
-            <label><input type="checkbox"> Green</label>
-            <label><input type="checkbox"> Rose</label>
-          </div>
-
-          <!-- Size -->
-          <div class="filter-pane" id="filter-size">
-            <h4>Size</h4>
-            <label><input type="checkbox"> Mini</label>
-            <label><input type="checkbox"> Standard</label>
-            <label><input type="checkbox"> Large</label>
-          </div>
-
-          <!-- Range -->
-          <div class="filter-pane" id="filter-range">
-            <h4>Range</h4>
-            <label><input type="checkbox"> Onion Series</label>
-            <label><input type="checkbox"> Glow Care</label>
-            <label><input type="checkbox"> Aloe Rituals</label>
-          </div>
-
-          <!-- Price -->
-          <div class="filter-pane" id="filter-price">
-            <h4>Price</h4>
-            <div class="price-row">
-              <input type="number" placeholder="₹10">
-              <span>–</span>
-              <input type="number" placeholder="₹2000">
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- bottom bar -->
-      <div class="filter-sheet-footer">
-        <div class="filter-count">
-          1,004 products found
-        </div>
-        <button class="filter-apply">Apply</button>
-      </div>
-    </div>
-  </div>
-
   <!-- Back to top -->
   <div class="back-top" onclick="window.scrollTo({top:0,behavior:'smooth'});">
     <i class="fa-solid fa-angle-up"></i>
@@ -1216,92 +1681,184 @@ ul{
   <!-- 🔹 Shared navbar JS -->
   <script src="assets/js/navbar.js"></script>
 
-  <!-- Filter sheet JS -->
+  <!-- Slider + Filters + AJAX -->
   <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      const overlay = document.querySelector('.filter-overlay');
-      const openBtn = document.querySelector('.filter-toggle');
-      const backBtn = document.querySelector('.filter-back');
-      const applyBtn = document.querySelector('.filter-apply');
-      const clearBtn = document.querySelector('.filter-clear');
-      const tabs = document.querySelectorAll('.filter-tab');
-      const panes = document.querySelectorAll('.filter-pane');
+  document.addEventListener('DOMContentLoaded', function () {
+    // ================= HERO SLIDER =================
+    const track = document.querySelector('.shop-hero-track');
+    if (track) {
+      const slides = Array.from(document.querySelectorAll('.shop-hero-slide'));
+      const dots   = Array.from(document.querySelectorAll('.shop-hero-dot'));
 
-      function openFilter() {
-        if (overlay) overlay.classList.add('open');
+      if (slides.length > 1) {
+        let index = 0;
+        const total = slides.length;
+        const delay = 3000;
+
+        function goToSlide(i){
+          index = i;
+          track.style.transform = 'translateX(' + (-index * 100) + '%)';
+          dots.forEach(d => d.classList.remove('active'));
+          if (dots[index]) dots[index].classList.add('active');
+        }
+
+        dots.forEach(function(dot){
+          dot.addEventListener('click', function(){
+            const s = parseInt(dot.getAttribute('data-slide') || '0', 10);
+            goToSlide(s);
+          });
+        });
+
+        setInterval(function(){
+          const next = (index + 1) % total;
+          goToSlide(next);
+        }, delay);
+
+        goToSlide(0);
       }
-      function closeFilter() {
-        if (overlay) overlay.classList.remove('open');
+    }
+
+    // ================= FILTERS + AJAX =================
+    const form           = document.getElementById('productFilterForm');
+    const overlay        = document.querySelector('.filter-overlay');
+    const openBtn        = document.querySelector('.filter-toggle');
+    const backBtn        = document.querySelector('.filter-back');
+    const applyMobileBtn = document.querySelector('.filter-apply');
+    const clearMobileBtn = document.querySelector('.filter-clear');
+    const tabs           = document.querySelectorAll('.filter-tab');
+    const panes          = document.querySelectorAll('.filter-pane');
+    const applyDesktopBtns = document.querySelectorAll('.btn-apply-desktop');
+    const clearDesktopBtn  = document.querySelector('.btn-clear-desktop');
+
+    function loadProducts(extraParams = {}) {
+      if (!form) return;
+
+      const formData = new FormData(form);
+      const params   = new URLSearchParams(formData);
+
+      // pagination support
+      if (extraParams.page) {
+        params.set('page', extraParams.page);
       }
 
-      if (openBtn) openBtn.addEventListener('click', openFilter);
-      if (backBtn) backBtn.addEventListener('click', closeFilter);
-      if (applyBtn) applyBtn.addEventListener('click', closeFilter);
-      if (clearBtn) clearBtn.addEventListener('click', function () {
-        // simple clear: uncheck everything
+      const queryString = params.toString();
+      console.log('Sending filters:', queryString);
+
+      fetch('product.php?ajax=1', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'filters=' + encodeURIComponent(queryString)
+      })
+      .then(res => res.text())
+      .then(html => {
+        const container = document.getElementById('productResults');
+        if (container) {
+          container.innerHTML = html;
+          window.scrollTo({ top: container.offsetTop - 60, behavior: 'smooth' });
+        }
+      })
+      .catch(err => {
+        console.error('AJAX error:', err);
+      });
+    }
+
+    // open/close mobile sheet
+    function openFilter() {
+      if (overlay) overlay.classList.add('open');
+    }
+    function closeFilter() {
+      if (overlay) overlay.classList.remove('open');
+    }
+
+    if (openBtn) openBtn.addEventListener('click', openFilter);
+    if (backBtn) backBtn.addEventListener('click', closeFilter);
+
+    // mobile APPLY
+    if (applyMobileBtn) {
+      applyMobileBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        if (!form) return;
+
+        // sync mobile price -> main price
+        const mobileMin  = document.querySelector('.mobile-price-min');
+        const mobileMax  = document.querySelector('.mobile-price-max');
+        const mainMin    = form.querySelector('input[name="price_min"]');
+        const mainMax    = form.querySelector('input[name="price_max"]');
+
+        if (mobileMin && mainMin) mainMin.value = mobileMin.value;
+        if (mobileMax && mainMax) mainMax.value = mobileMax.value;
+
+        closeFilter();
+        loadProducts();
+      });
+    }
+
+    // desktop APPLY
+    applyDesktopBtns.forEach(btn => {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        loadProducts();
+      });
+    });
+
+    // clear filter logic (shared for mobile & desktop)
+    function clearAllFilters() {
+      if (form) {
+        form.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = false);
+        form.querySelectorAll('input[type="number"]').forEach(i => i.value = '');
+      }
+      if (overlay) {
         overlay.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = false);
         overlay.querySelectorAll('input[type="number"]').forEach(i => i.value = '');
+      }
+      loadProducts();
+    }
+
+    if (clearMobileBtn) {
+      clearMobileBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        clearAllFilters();
       });
+    }
+    if (clearDesktopBtn) {
+      clearDesktopBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        clearAllFilters();
+      });
+    }
 
-      // tab switching
-      tabs.forEach(tab => {
-        tab.addEventListener('click', function () {
-          const target = this.getAttribute('data-filter-target');
+    // sort change – event delegation
+    document.addEventListener('change', function (e) {
+      if (e.target && e.target.matches('select[name="sort"]')) {
+        e.preventDefault();
+        loadProducts();
+      }
+    });
 
-          tabs.forEach(t => t.classList.remove('active'));
-          this.classList.add('active');
+    // pagination – event delegation (because innerHTML replaces content)
+    document.addEventListener('click', function (e) {
+      const pageBtn = e.target.closest('.page-item');
+      if (pageBtn && pageBtn.dataset.page) {
+        e.preventDefault();
+        loadProducts({ page: pageBtn.dataset.page });
+      }
+    });
 
-          panes.forEach(p => {
-            p.classList.toggle('active', p.id === 'filter-' + target);
-          });
+    // mobile tabs
+    tabs.forEach(tab => {
+      tab.addEventListener('click', function () {
+        const target = this.getAttribute('data-filter-target');
+
+        tabs.forEach(t => t.classList.remove('active'));
+        this.classList.add('active');
+
+        panes.forEach(p => {
+          p.classList.toggle('active', p.id === 'filter-' + target);
         });
       });
     });
-  </script>
-  <script>
-document.addEventListener('DOMContentLoaded', function () {
-  const track = document.querySelector('.shop-hero-track');
-  if (!track) return;
-
-  const slides = Array.from(document.querySelectorAll('.shop-hero-slide'));
-  const dots   = Array.from(document.querySelectorAll('.shop-hero-dot'));
-
-  if (slides.length <= 1) return; // only one banner, no slider needed
-
-  let index = 0;
-  const total = slides.length;
-  const delay = 3000;
-
-  function goToSlide(i){
-    index = i;
-    track.style.transform = 'translateX(' + (-index * 100) + '%)';
-    dots.forEach(d => d.classList.remove('active'));
-    if (dots[index]) dots[index].classList.add('active');
-  }
-
-  dots.forEach(function(dot){
-    dot.addEventListener('click', function(){
-      const s = parseInt(dot.getAttribute('data-slide') || '0', 10);
-      goToSlide(s);
-      resetTimer();
-    });
   });
+  </script>
 
-  let timer = null;
-  function startTimer(){
-    timer = setInterval(function(){
-      const next = (index + 1) % total;
-      goToSlide(next);
-    }, delay);
-  }
-  function resetTimer(){
-    if (timer) clearInterval(timer);
-    startTimer();
-  }
-
-  goToSlide(0);
-  startTimer();
-});
-</script>
 </body>
 </html>

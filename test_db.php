@@ -96,3 +96,79 @@ CREATE TABLE product_tags (
     FOREIGN KEY (tag_id) REFERENCES tags(id)
     ON DELETE CASCADE
 );
+
+
+CREATE TABLE filter_options (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    filter_key VARCHAR(50) NOT NULL,   -- 'color', 'size', 'range'
+    value VARCHAR(100) NOT NULL,       -- actual value used in products table
+    label VARCHAR(100) NOT NULL,       -- text displayed in UI
+    sort_order INT DEFAULT 0,
+    is_active TINYINT(1) DEFAULT 1
+);
+
+CREATE TABLE filter_options (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    group_id INT NOT NULL,        -- FK to filter_groups.id
+    value VARCHAR(100) NOT NULL,  -- stored in products.column_name
+    label VARCHAR(100) NOT NULL,  -- UI text
+    sort_order INT DEFAULT 0,
+    is_active TINYINT(1) DEFAULT 1,
+    CONSTRAINT fk_group FOREIGN KEY (group_id)
+        REFERENCES filter_groups(id)
+        ON DELETE CASCADE
+);
+
+
+
+
+DELIMITER //
+
+CREATE TRIGGER trg_products_bi_category_name
+BEFORE INSERT ON products
+FOR EACH ROW
+BEGIN
+  DECLARE v_cat_title VARCHAR(255);
+
+  IF NEW.category_id IS NOT NULL THEN
+    SELECT title
+    INTO v_cat_title
+    FROM categories
+    WHERE id = NEW.category_id
+    LIMIT 1;
+
+    SET NEW.category_name = v_cat_title;
+  ELSE
+    SET NEW.category_name = NULL;
+  END IF;
+END//
+
+DELIMITER ;
+
+
+
+
+DELIMITER $$
+
+CREATE TRIGGER trg_products_bi_category_name
+BEFORE INSERT ON products
+FOR EACH ROW
+BEGIN
+  DECLARE v_cat_title VARCHAR(255);
+
+  IF NEW.category_id IS NOT NULL THEN
+    SELECT title
+    INTO v_cat_title
+    FROM categories
+    WHERE id = NEW.category_id
+    LIMIT 1;
+
+    SET NEW.category_name = v_cat_title;
+  ELSE
+    SET NEW.category_name = NULL;
+  END IF;
+END$$
+
+DELIMITER ;
+
+

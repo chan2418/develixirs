@@ -51,8 +51,9 @@ $allowedSlots = [
     'home',
     'home_sidebar',
     'home_center',
-    'home_offer',   // 👈 new child slot for sidebar offer
+    'home_offer',   // child slot for home
     'product',
+    'product_sidebar', // 👈 NEW: child slot for product listing sidebar
     'product_detail',
     'blog',
     'category',
@@ -124,11 +125,21 @@ if (!$files || !is_array($files['name'])) {
     }
 }
 
-$homeChildSlots = ['home_sidebar', 'home_center', 'home_offer'];
-
+// $homeChildSlots = ['home_sidebar', 'home_center', 'home_offer'];
+$childParents = [
+    'home_sidebar'    => 'home',
+    'home_center'     => 'home',
+    'home_offer'      => 'home',
+    'product_sidebar' => 'product',  // 👈 NEW: product child slot
+];
 if (!empty($_SESSION['form_errors'])) {
-    redirect_to_slot(in_array($page_slot, $homeChildSlots, true) ? 'home' : $page_slot);
+    $parentSlot = $childParents[$page_slot] ?? $page_slot;
+    redirect_to_slot($parentSlot);
 }
+
+// if (!empty($_SESSION['form_errors'])) {
+//     $parentSlot = $childParents[$page_slot] ?? $page_slot;
+// }
 
 /* ---------- UPLOAD DIR ---------- */
 $uploadDir = __DIR__ . '/../assets/uploads/banners/';
@@ -138,7 +149,8 @@ if (!is_dir($uploadDir)) {
 
 if (empty($validFiles)) {
     flash_add_error('No valid images to upload.');
-    redirect_to_slot(in_array($page_slot, $homeChildSlots, true) ? 'home' : $page_slot);
+    $parentSlot = $childParents[$page_slot] ?? $page_slot;
+    redirect_to_slot($parentSlot);
 }
 
 /* ---------- INSERT BANNERS ---------- */
@@ -184,4 +196,5 @@ try {
     flash_add_error('Database / upload error: ' . $e->getMessage());
 }
 
-redirect_to_slot(in_array($page_slot, $homeChildSlots, true) ? 'home' : $page_slot);
+$parentSlot = $childParents[$page_slot] ?? $page_slot;
+redirect_to_slot($parentSlot);

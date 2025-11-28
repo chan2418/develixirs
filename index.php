@@ -2282,30 +2282,32 @@ try {
         <!-- LEFT SIDEBAR -->
         <aside class="side-column">
           <div class="card categories-card">
-            <div class="card-header categories-toggle">
-              <div class="label">
-                <i class="fa-solid fa-bars"></i>
-                <span>Categories</span>
-              </div>
-              <i class="fa-solid fa-chevron-right toggle-icon"></i>
-            </div>
-            <div class="card-body">
-              <ul class="category-list">
-                <?php if (!empty($categories)): ?>
-                  <?php foreach ($categories as $cat): ?>
-                    <li>
-                      <i class="fa-solid fa-leaf"></i>
-                      <?php echo htmlspecialchars($cat['title']); ?>
-                    </li>
-                  <?php endforeach; ?>
-                <?php else: ?>
-                  <li style="font-size:12px; color:#777; padding:8px 18px;">
-                    No categories available.
-                  </li>
-                <?php endif; ?>
-              </ul>
-            </div>
-          </div>
+      <div class="card-header categories-toggle">
+        <div class="label">
+          <i class="fa-solid fa-bars"></i>
+          <span>Categories</span>
+        </div>
+        <i class="fa-solid fa-chevron-right toggle-icon"></i>
+      </div>
+      <div class="card-body">
+        <ul class="category-list">
+  <?php if (!empty($categories)): ?>
+    <?php foreach ($categories as $cat): ?>
+      <li>
+        <i class="fa-solid fa-leaf"></i>
+        <a href="product.php?category[]=<?php echo urlencode($cat['title']); ?>">
+          <?php echo htmlspecialchars($cat['title'], ENT_QUOTES, 'UTF-8'); ?>
+        </a>
+      </li>
+    <?php endforeach; ?>
+  <?php else: ?>
+    <li style="font-size:12px; color:#777; padding:8px 18px;">
+      No categories available.
+    </li>
+  <?php endif; ?>
+</ul>
+      </div>
+    </div>
 
           <!-- DEVILIXIRS PICKS – latest products from DB -->
           <div class="card">
@@ -2515,46 +2517,50 @@ try {
           <section class="content-grid">
             <!-- Top banners -->
             <div class="banner-row">
-              <?php if (!empty($subCategories)): ?>
-                <?php foreach ($subCategories as $sub): ?>
-                  <?php
-                    // Default category image
-                    $catImg = '/assets/images/category-placeholder.jpg';
+  <?php if (!empty($subCategories)): ?>
+    <?php foreach ($subCategories as $sub): ?>
+      <?php
+        // Default category image
+        $catImg = '/assets/images/category-placeholder.jpg';
 
-                    if (!empty($sub['img'])) {
-                        $imgVal = trim($sub['img']);
+        if (!empty($sub['img'])) {
+          $imgVal = trim($sub['img']);
 
-                        if (preg_match('#^https?://#i', $imgVal) || strpos($imgVal, '/') === 0) {
-                            // full URL or absolute path
-                            $catImg = $imgVal;
-                        } else {
-                            // assume stored as filename under uploads
-                            $catImg = '/assets/uploads/categories/' . ltrim($imgVal, '/');
-                        }
-                    }
-                  ?>
-                  <div class="banner-item">
-                    <img
-                      src="<?php echo htmlspecialchars($catImg, ENT_QUOTES, 'UTF-8'); ?>"
-                      alt="<?php echo htmlspecialchars($sub['title'], ENT_QUOTES, 'UTF-8'); ?>"
-                    >
-                    <div class="banner-caption">
-                      <h4><?php echo htmlspecialchars($sub['title']); ?></h4>
-                    </div>
-                  </div>
-                <?php endforeach; ?>
-              <?php else: ?>
-                <!-- Fallback if no subcategories found -->
-                <div class="banner-item">
-                  <img src="https://images.pexels.com/photos/3738335/pexels-photo-3738335.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
-                  <div class="banner-caption">
-                    <h4>No subcategories</h4>
-                    <span>Add some in admin panel</span>
-                  </div>
-                </div>
-              <?php endif; ?>
-            </div>
+          if (preg_match('#^https?://#i', $imgVal) || strpos($imgVal, '/') === 0) {
+            // full URL or absolute path
+            $catImg = $imgVal;
+          } else {
+            // assume stored as filename under uploads
+            $catImg = '/assets/uploads/categories/' . ltrim($imgVal, '/');
+          }
+        }
 
+        // 🔹 Build URL with subcategory ID only
+        // This will filter products where category_id = subcategory ID
+        $url = 'product.php?cat=' . (int)$sub['id'];
+      ?>
+      <a class="banner-item"
+         href="<?php echo htmlspecialchars($url, ENT_QUOTES, 'UTF-8'); ?>">
+        <img
+          src="<?php echo htmlspecialchars($catImg, ENT_QUOTES, 'UTF-8'); ?>"
+          alt="<?php echo htmlspecialchars($sub['title'], ENT_QUOTES, 'UTF-8'); ?>"
+        >
+        <div class="banner-caption">
+          <h4><?php echo htmlspecialchars($sub['title']); ?></h4>
+        </div>
+      </a>
+    <?php endforeach; ?>
+  <?php else: ?>
+    <!-- Fallback if no subcategories found -->
+    <div class="banner-item">
+      <img src="https://images.pexels.com/photos/3738335/pexels-photo-3738335.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
+      <div class="banner-caption">
+        <h4>No subcategories</h4>
+        <span>Add some in admin panel</span>
+      </div>
+    </div>
+  <?php endif; ?>
+</div>
             <!-- New Herbal Products (latest products from DB) -->
             <div class="section-header">
               <h3>New Herbal Products</h3>

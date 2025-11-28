@@ -33,11 +33,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['bulk_action'])) {
 // Inputs / Filters
 // ----------------------
 $q = trim($_GET['q'] ?? '');
-$status_filter = trim($_GET['status'] ?? '');
+$status_filter   = trim($_GET['status'] ?? '');
 $category_filter = (int)($_GET['category'] ?? 0);
-$page = max(1, (int)($_GET['page'] ?? 1));
+$page    = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 10;
-$offset = ($page - 1) * $perPage;
+$offset  = ($page - 1) * $perPage;
 
 // ----------------------
 // Build WHERE
@@ -48,43 +48,75 @@ $params = [];
 if ($q !== '') {
     $whereParts[] = "(p.name LIKE ? OR p.sku LIKE ? OR p.slug LIKE ?)";
     $like = "%$q%";
-    $params[] = $like; $params[] = $like; $params[] = $like;
+    $params[] = $like; 
+    $params[] = $like; 
+    $params[] = $like;
 }
+
 if ($status_filter !== '') {
-    if ($status_filter === 'published') { $whereParts[] = "p.is_active = 1"; }
-    elseif ($status_filter === 'draft') { $whereParts[] = "p.is_active = 0"; }
+    if ($status_filter === 'published') { 
+        $whereParts[] = "p.is_active = 1"; 
+    } elseif ($status_filter === 'draft') { 
+        $whereParts[] = "p.is_active = 0"; 
+    }
 }
+
+/**
+ * Category filter:
+ * - match either direct (sub) category_id
+ * - or parent_category_id
+ */
 if ($category_filter) {
-    $whereParts[] = "p.category_id = ?";
+    $whereParts[] = "(p.category_id = ? OR p.parent_category_id = ?)";
+    $params[] = $category_filter;
     $params[] = $category_filter;
 }
+
 $whereSql = implode(' AND ', $whereParts);
 
 // ----------------------
 // Totals & Rows
 // ----------------------
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM products p WHERE $whereSql");
+$stmt = $pdo->prepare("SELECT COUNT(*) 
+                       FROM products p 
+                       WHERE $whereSql");
 $stmt->execute($params);
 $total = (int)$stmt->fetchColumn();
 $pages = max(1, ceil($total / $perPage));
 
-$sql = "SELECT p.*, COALESCE(c.title, c.name) AS category_name
+/**
+ * Join categories twice:
+ *  - c_sub    = sub category (p.category_id)
+ *  - c_parent = main / parent category (p.parent_category_id)
+ */
+$sql = "SELECT 
+            p.*,
+            COALESCE(c_parent.title, c_parent.name) AS parent_category_name,
+            COALESCE(c_sub.title, c_sub.name)       AS sub_category_name
         FROM products p
-        LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN categories c_sub 
+               ON p.category_id = c_sub.id
+        LEFT JOIN categories c_parent 
+               ON p.parent_category_id = c_parent.id
         WHERE $whereSql
         ORDER BY p.created_at DESC
         LIMIT ? OFFSET ?";
+
 $params_for_list = array_merge($params, [$perPage, $offset]);
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params_for_list);
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // ----------------------
-// Categories for filter
+// Categories for filter dropdown
 // ----------------------
 $cats = [];
 try {
-    $cats = $pdo->query("SELECT id, COALESCE(title, name) AS name FROM categories ORDER BY COALESCE(title, name) ASC")->fetchAll(PDO::FETCH_ASSOC);
+    $cats = $pdo->query("
+        SELECT id, COALESCE(title, name) AS name 
+        FROM categories 
+        ORDER BY COALESCE(title, name) ASC
+    ")->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
     $cats = [];
 }
@@ -158,7 +190,9 @@ function preserve_qs($overrides = []) {
         <select id="category" name="category" class="border border-gray-200 rounded-lg px-3 py-2 text-sm">
           <option value="">All Categories</option>
           <?php foreach($cats as $c): ?>
-            <option value="<?php echo (int)$c['id']; ?>" <?php if($category_filter===$c['id']) echo 'selected'; ?>><?php echo htmlspecialchars($c['name']); ?></option>
+            <option value="<?php echo (int)$c['id']; ?>" <?php if((int)$category_filter === (int)$c['id']) echo 'selected'; ?>>
+              <?php echo htmlspecialchars($c['name']); ?>
+            </option>
           <?php endforeach; ?>
         </select>
 
@@ -174,9 +208,11 @@ function preserve_qs($overrides = []) {
         <table class="w-full min-w-[1000px] divide-y divide-gray-100">
           <thead class="bg-gray-50">
             <tr class="text-left text-sm text-gray-500">
-              <th class="px-4 py-3 w-12"><input id="checkAll" type="checkbox" class="h-4 w-4 text-indigo-600 border-gray-200 rounded" /></th>
+              <th class="px-4 py-3 w-12">
+                <input id="checkAll" type="checkbox" class="h-4 w-4 text-indigo-600 border-gray-200 rounded" />
+              </th>
               <th class="px-4 py-3">Product</th>
-              <th class="px-4 py-3">Category</th>
+              <th class="px-4 py-3">Category (Parent / Sub)</th>
               <th class="px-4 py-3">Stock</th>
               <th class="px-4 py-3">Price</th>
               <th class="px-4 py-3">Status</th>
@@ -186,25 +222,52 @@ function preserve_qs($overrides = []) {
 
           <tbody id="productsTbody" class="bg-white divide-y divide-gray-100">
             <?php if (empty($rows)): ?>
-              <tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">No products found.</td></tr>
+              <tr>
+                <td colspan="7" class="px-4 py-8 text-center text-gray-400">
+                  No products found.
+                </td>
+              </tr>
             <?php else: foreach($rows as $r):
               $img = htmlspecialchars(get_first_image($r['images']));
               $stock = (int)$r['stock'];
-              $statusText = $r['is_active'] ? 'Published' : 'Draft';
+              $statusText  = $r['is_active'] ? 'Published' : 'Draft';
               $statusClass = $r['is_active'] ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-slate-600';
+
+              $parentCat = $r['parent_category_name'] ?? '';
+              $subCat    = $r['sub_category_name'] ?? '';
+
+              if ($parentCat && $subCat) {
+                  $catLabel = $parentCat . ' / ' . $subCat;
+              } elseif ($parentCat) {
+                  $catLabel = $parentCat;
+              } elseif ($subCat) {
+                  $catLabel = $subCat;
+              } else {
+                  $catLabel = '-';
+              }
             ?>
               <tr class="hover:bg-gray-50">
-                <td class="px-4 py-4"><input type="checkbox" name="ids[]" value="<?php echo (int)$r['id']; ?>" class="h-4 w-4 text-indigo-600 border-gray-200 rounded" /></td>
+                <td class="px-4 py-4">
+                  <input type="checkbox" name="ids[]" value="<?php echo (int)$r['id']; ?>" class="h-4 w-4 text-indigo-600 border-gray-200 rounded" />
+                </td>
 
                 <td class="px-4 py-4 flex items-center gap-3">
-                  <div class="w-14 h-14 rounded-lg overflow-hidden bg-gray-100 border"><img src="<?php echo $img; ?>" alt="" class="object-cover w-full h-full"></div>
+                  <div class="w-14 h-14 rounded-lg overflow-hidden bg-gray-100 border">
+                    <img src="<?php echo $img; ?>" alt="" class="object-cover w-full h-full">
+                  </div>
                   <div>
-                    <div class="font-semibold text-slate-800"><?php echo htmlspecialchars($r['name']); ?></div>
-                    <div class="text-xs text-slate-400 mt-0.5"><?php echo htmlspecialchars($r['sku'] ?: substr($r['name'],0,60)); ?></div>
+                    <div class="font-semibold text-slate-800">
+                      <?php echo htmlspecialchars($r['name']); ?>
+                    </div>
+                    <div class="text-xs text-slate-400 mt-0.5">
+                      <?php echo htmlspecialchars($r['sku'] ?: substr($r['name'],0,60)); ?>
+                    </div>
                   </div>
                 </td>
 
-                <td class="px-4 py-4 text-sm text-slate-600"><?php echo htmlspecialchars($r['category_name'] ?? '-'); ?></td>
+                <td class="px-4 py-4 text-sm text-slate-600">
+                  <?php echo htmlspecialchars($catLabel); ?>
+                </td>
 
                 <td class="px-4 py-4 text-sm">
                   <?php if ($stock <= 0): ?>
@@ -216,9 +279,15 @@ function preserve_qs($overrides = []) {
                   <?php endif; ?>
                 </td>
 
-                <td class="px-4 py-4 text-sm font-semibold">₹ <?php echo number_format($r['price'],2); ?></td>
+                <td class="px-4 py-4 text-sm font-semibold">
+                  ₹ <?php echo number_format($r['price'],2); ?>
+                </td>
 
-                <td class="px-4 py-4"><span class="inline-flex items-center px-3 py-1 rounded-full <?php echo $statusClass; ?> text-sm"><?php echo $statusText; ?></span></td>
+                <td class="px-4 py-4">
+                  <span class="inline-flex items-center px-3 py-1 rounded-full <?php echo $statusClass; ?> text-sm">
+                    <?php echo $statusText; ?>
+                  </span>
+                </td>
 
                 <td class="px-4 py-4 text-right">
                   <div class="inline-flex items-center gap-2">
@@ -246,16 +315,20 @@ function preserve_qs($overrides = []) {
         </div>
 
         <div class="flex items-center gap-3">
-          <div id="totalsText" class="text-sm text-slate-500">Showing <?php echo min($total, $offset+1); ?> - <?php echo min($total, $offset + count($rows)); ?> of <?php echo $total; ?> products</div>
+          <div id="totalsText" class="text-sm text-slate-500">
+            Showing <?php echo $total ? min($total, $offset+1) : 0; ?> - <?php echo min($total, $offset + count($rows)); ?> of <?php echo $total; ?> products
+          </div>
 
           <div id="paginationWrap" class="inline-flex items-center gap-1">
             <?php
               $start = max(1, $page - 2);
-              $end = min($pages, $page + 2);
+              $end   = min($pages, $page + 2);
             ?>
             <a href="#" data-page="<?php echo max(1,$page-1); ?>" class="px-3 py-1 rounded-lg border bg-white hover:shadow">Prev</a>
             <?php for($p=$start;$p<=$end;$p++): ?>
-              <a href="#" data-page="<?php echo $p; ?>" data-page-num="<?php echo $p; ?>" class="px-3 py-1 rounded-lg <?php echo $p==$page ? 'bg-indigo-600 text-white' : 'bg-white'; ?>"><?php echo $p; ?></a>
+              <a href="#" data-page="<?php echo $p; ?>" data-page-num="<?php echo $p; ?>" class="px-3 py-1 rounded-lg <?php echo $p==$page ? 'bg-indigo-600 text-white' : 'bg-white'; ?>">
+                <?php echo $p; ?>
+              </a>
             <?php endfor; ?>
             <a href="#" data-page="<?php echo min($pages,$page+1); ?>" class="px-3 py-1 rounded-lg border bg-white hover:shadow">Next</a>
           </div>
@@ -276,12 +349,18 @@ const debounceMs = 450;
 
 /* Read filters */
 function readFilters() {
-  return { q: document.getElementById('q').value || '', status: document.getElementById('status').value || '', category: document.getElementById('category').value || '', perPage: 10 };
+  return { 
+    q: document.getElementById('q').value || '', 
+    status: document.getElementById('status').value || '', 
+    category: document.getElementById('category').value || '', 
+    perPage: 10 
+  };
 }
 
 /* AJAX search */
 function doSearch(page = 1) {
-  const filters = readFilters(); filters.page = page;
+  const filters = readFilters(); 
+  filters.page = page;
   const url = 'products_search.php?' + qs(filters);
   const input = document.getElementById('q');
   const cursorPos = input && typeof input.selectionStart !== 'undefined' ? input.selectionStart : null;
@@ -293,25 +372,56 @@ function doSearch(page = 1) {
       document.getElementById('productsTbody').innerHTML = data.rows_html;
       document.getElementById('totalsText').textContent = data.totals_text;
       document.getElementById('paginationWrap').innerHTML = data.pagination_html;
-      if (input) { input.focus(); if (cursorPos !== null) { try { input.setSelectionRange(cursorPos, cursorPos); } catch(e) {} } }
-      // preserve delegated delete handler (already attached to document)
+      if (input) { 
+        input.focus(); 
+        if (cursorPos !== null) { 
+          try { input.setSelectionRange(cursorPos, cursorPos); } catch(e) {} 
+        } 
+      }
     }).catch(err => console.error('ajax fetch error', err));
 }
 
-function scheduleSearch(){ clearTimeout(ajaxTimer); ajaxTimer = setTimeout(() => doSearch(1), debounceMs); }
+function scheduleSearch(){ 
+  clearTimeout(ajaxTimer); 
+  ajaxTimer = setTimeout(() => doSearch(1), debounceMs); 
+}
 
 /* Bind events */
 document.addEventListener('DOMContentLoaded', function(){
-  const qInput = document.getElementById('q'); if (qInput) qInput.addEventListener('input', scheduleSearch);
-  const sb = document.getElementById('searchBtn'); if (sb) sb.addEventListener('click', function(){ doSearch(1); });
-  const pw = document.getElementById('paginationWrap'); if (pw) pw.addEventListener('click', function(e){ const a = e.target.closest('a[data-page]'); if (!a) return; e.preventDefault(); doSearch(parseInt(a.getAttribute('data-page')||'1',10)); });
-  const st = document.getElementById('status'); if (st) st.addEventListener('change', function(){ doSearch(1); });
-  const ct = document.getElementById('category'); if (ct) ct.addEventListener('change', function(){ doSearch(1); });
-  const checkAll = document.getElementById('checkAll'); if (checkAll) checkAll.addEventListener('change', function(e){ const ch = e.target.checked; document.querySelectorAll('input[name="ids[]"]').forEach(i => i.checked = ch); });
+  const qInput = document.getElementById('q'); 
+  if (qInput) qInput.addEventListener('input', scheduleSearch);
+  const sb = document.getElementById('searchBtn'); 
+  if (sb) sb.addEventListener('click', function(){ doSearch(1); });
+  const pw = document.getElementById('paginationWrap'); 
+  if (pw) pw.addEventListener('click', function(e){ 
+    const a = e.target.closest('a[data-page]'); 
+    if (!a) return; 
+    e.preventDefault(); 
+    doSearch(parseInt(a.getAttribute('data-page')||'1',10)); 
+  });
+  const st = document.getElementById('status'); 
+  if (st) st.addEventListener('change', function(){ doSearch(1); });
+  const ct = document.getElementById('category'); 
+  if (ct) ct.addEventListener('change', function(){ doSearch(1); });
+  const checkAll = document.getElementById('checkAll'); 
+  if (checkAll) checkAll.addEventListener('change', function(e){ 
+    const ch = e.target.checked; 
+    document.querySelectorAll('input[name="ids[]"]').forEach(i => i.checked = ch); 
+  });
 });
 
 /* Confirm bulk */
-function confirmBulk(){ var act = document.getElementById('bulkAction').value; if (!act) { alert('Select bulk action'); return false; } if (act === 'delete') { return confirm('Are you sure you want to DELETE selected products? This action cannot be undone.'); } return true; }
+function confirmBulk(){ 
+  var act = document.getElementById('bulkAction').value; 
+  if (!act) { 
+    alert('Select bulk action'); 
+    return false; 
+  } 
+  if (act === 'delete') { 
+    return confirm('Are you sure you want to DELETE selected products? This action cannot be undone.'); 
+  } 
+  return true; 
+}
 
 /* Delegated delete handler */
 document.addEventListener('click', function(e){
@@ -334,14 +444,29 @@ document.addEventListener('click', function(e){
   .then(async res => {
     const text = await res.text();
     let json;
-    try { json = JSON.parse(text); } catch (err) { console.error('invalid json', text); alert('Delete failed (invalid server response). See console.'); btn.disabled = false; btn.innerHTML = oldText; return; }
-    if (!json.ok) { alert('Delete failed: ' + (json.error || 'Unknown error')); btn.disabled = false; btn.innerHTML = oldText; return; }
-    // refresh current page
+    try { json = JSON.parse(text); } catch (err) { 
+      console.error('invalid json', text); 
+      alert('Delete failed (invalid server response). See console.'); 
+      btn.disabled = false; 
+      btn.innerHTML = oldText; 
+      return; 
+    }
+    if (!json.ok) { 
+      alert('Delete failed: ' + (json.error || 'Unknown error')); 
+      btn.disabled = false; 
+      btn.innerHTML = oldText; 
+      return; 
+    }
     const active = document.querySelector('#paginationWrap a.bg-indigo-600[data-page], #paginationWrap a[aria-current="true"][data-page]');
     const current = active ? parseInt(active.getAttribute('data-page')||'1',10) : 1;
     doSearch(current || 1);
   })
-  .catch(err => { console.error('fetch error', err); alert('Delete failed (network). See console.'); btn.disabled = false; btn.innerHTML = oldText; });
+  .catch(err => { 
+    console.error('fetch error', err); 
+    alert('Delete failed (network). See console.'); 
+    btn.disabled = false; 
+    btn.innerHTML = oldText; 
+  });
 });
 </script>
 
