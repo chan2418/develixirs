@@ -188,6 +188,20 @@ include __DIR__ . '/layout/header.php';
                   placeholder="Full product description"><?php echo $description_val; ?></textarea>
       </div>
 
+      <div class="mb-4">
+        <label class="block text-sm font-semibold mb-2">Ingredients</label>
+        <textarea id="ingredients" name="ingredients" rows="4"
+                  class="w-full p-3 border rounded-lg"
+                  placeholder="List the ingredients used in this product"><?php echo $old['ingredients'] ?? ''; ?></textarea>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-semibold mb-2">How to Use</label>
+        <textarea id="how_to_use" name="how_to_use" rows="4"
+                  class="w-full p-3 border rounded-lg"
+                  placeholder="Instructions on how to use this product"><?php echo $old['how_to_use'] ?? ''; ?></textarea>
+      </div>
+
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-semibold mb-2">SEO Title</label>
@@ -302,6 +316,43 @@ include __DIR__ . '/layout/header.php';
         </select>
       </div>
 
+      <!-- Variants -->
+      <div>
+        <label class="block text-sm font-semibold mb-2">Product Variants (Sizes/Options)</label>
+        
+        <!-- Variant Label Input -->
+        <div class="mb-3">
+          <label class="text-xs font-semibold text-slate-500">Variant Label (e.g. Size, Volume, Ingredient)</label>
+          <input type="text" name="variant_label" class="w-full p-2 border rounded text-sm" placeholder="Size" value="Size">
+        </div>
+
+        <!-- Variants List -->
+        <div class="border rounded-lg p-4 bg-slate-50">
+          <div id="variants-list" class="space-y-2 mb-3">
+            <!-- Variant cards will be displayed here -->
+          </div>
+          <button type="button" id="add-variant-btn" class="w-full py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition">
+            + Add Variant
+          </button>
+        </div>
+        <p class="text-xs text-slate-500 mt-1">
+          Variants can override product title, description, images, and FAQs.
+        </p>
+      </div>
+
+      <!-- FAQs -->
+      <div>
+        <label class="block text-sm font-semibold mb-2">Product FAQs</label>
+        <div class="border rounded-lg p-4 bg-slate-50">
+          <div id="faqs-container" class="space-y-3">
+            <!-- FAQ rows will be added here -->
+          </div>
+          <button type="button" id="add-faq-btn" class="mt-3 text-sm text-indigo-600 font-semibold hover:underline">
+            + Add FAQ
+          </button>
+        </div>
+      </div>
+
       <!-- Images -->
       <div>
         <label class="block text-sm font-semibold mb-2">Product Images</label>
@@ -334,6 +385,83 @@ include __DIR__ . '/layout/header.php';
 
     </div>
   </form>
+
+  <!-- Variant Modal -->
+  <div id="variantModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4" style="overflow-y:auto;">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+      <div class="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
+        <h3 class="text-xl font-bold text-gray-900" id="modalTitle">Add Variant</h3>
+        <button type="button" id="closeModalBtn" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+      </div>
+      
+      <div class="p-6 space-y-4">
+        <!-- Hidden ID for editing -->
+        <input type="hidden" id="variantEditIndex" value="">
+        
+        <!-- Required Fields -->
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-semibold mb-2">Variant Name <span class="text-red-500">*</span></label>
+            <input type="text" id="variantName" class="w-full p-3 border rounded-lg" placeholder="e.g. 250ml, XL, Red" required>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold mb-2">Price (₹) <span class="text-red-500">*</span></label>
+            <input type="number" id="variantPrice" step="0.01" min="0" class="w-full p-3 border rounded-lg" placeholder="0.00" required>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-semibold mb-2">Stock</label>
+            <input type="number" id="variantStock" min="0" value="10" class="w-full p-3 border rounded-lg">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold mb-2">SKU (Optional)</label>
+            <input type="text" id="variantSKU" class="w-full p-3 border rounded-lg" placeholder="Optional">
+          </div>
+        </div>
+
+        <!-- Override Fields -->
+        <div class="border-t pt-4">
+          <h4 class="font-semibold text-gray-700 mb-3">Override Product Info (Optional)</h4>
+          
+          <div class="mb-4">
+            <label class="block text-sm font-semibold mb-2">Custom Title</label>
+            <input type="text" id="variantCustomTitle" class="w-full p-3 border rounded-lg" placeholder="Leave empty to use product title">
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-semibold mb-2">Custom Description</label>
+            <textarea id="variantCustomDesc" rows="4" class="w-full p-3 border rounded-lg" placeholder="Leave empty to use product description"></textarea>
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-semibold mb-2">Variant Images (Multiple)</label>
+            <input type="file" id="variantImages" accept="image/*" multiple class="w-full p-2 border rounded-lg">
+            <p class="text-xs text-gray-500 mt-1">Upload images specific to this variant. Leave empty to use product images.</p>
+            <div id="variantImagesPreviews" class="mt-2 flex flex-wrap gap-2"></div>
+          </div>
+
+          <!-- Variant FAQs -->
+          <div class="mb-4">
+            <label class="block text-sm font-semibold mb-2">Variant FAQs</label>
+            <div id="variantFaqsContainer" class="space-y-2 mb-2">
+              <!-- FAQ rows will be added here -->
+            </div>
+            <button type="button" id="addVariantFaqBtn" class="text-sm text-indigo-600 font-semibold hover:underline">
+              + Add FAQ
+            </button>
+            <p class="text-xs text-gray-500 mt-1">Leave empty to use product FAQs.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="sticky bottom-0 bg-gray-50 px-6 py-4 flex justify-end gap-3 border-t">
+        <button type="button" id="cancelModalBtn" class="px-6 py-2 border rounded-lg hover:bg-gray-100">Cancel</button>
+        <button type="button" id="saveVariantBtn" class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Save Variant</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- image preview + subcategory filtering script -->
@@ -442,6 +570,274 @@ include __DIR__ . '/layout/header.php';
       refreshSubOptions();
     });
   }
+
+  // ====== Variants Modal Logic ======
+  const variantsList = document.getElementById('variants-list');
+  const addVariantBtn = document.getElementById('add-variant-btn');
+  const variantModal = document.getElementById('variantModal');
+  const closeModalBtn = document.getElementById('closeModalBtn');
+  const cancelModalBtn = document.getElementById('cancelModalBtn');
+  const saveVariantBtn = document.getElementById('saveVariantBtn');
+  const modalTitle = document.getElementById('modalTitle');
+  
+  let variants = []; // Store variant data in memory
+  let editingIndex = null;
+  
+  // Modal Controls
+  function openModal(editIndex = null) {
+    editingIndex = editIndex;
+    if (editIndex !== null) {
+      modalTitle.textContent = 'Edit Variant';
+      const variant = variants[editIndex];
+      document.getElementById('variantName').value = variant.name;
+      document.getElementById('variantPrice').value = variant.price;
+      document.getElementById('variantStock').value = variant.stock;
+      document.getElementById('variantSKU').value = variant.sku;
+      document.getElementById('variantCustomTitle').value = variant.customTitle || '';
+      document.getElementById('variantCustomDesc').value = variant.customDesc || '';
+      // Note: Files and FAQs need special handling for edit mode
+    } else {
+      modalTitle.textContent = 'Add Variant';
+      clearModalForm();
+    }
+    variantModal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  }
+  
+  function closeModal() {
+    variantModal.classList.add('hidden');
+    document.body.style.overflow = 'auto';
+    clearModalForm();
+    editingIndex = null;
+  }
+  
+  function clearModalForm() {
+    document.getElementById('variantName').value = '';
+    document.getElementById('variantPrice').value = '';
+    document.getElementById('variantStock').value = '10';
+    document.getElementById('variantSKU').value = '';
+    document.getElementById('variantCustomTitle').value = '';
+    document.getElementById('variantCustomDesc').value = '';
+    document.getElementById('variantImages').value = '';
+    document.getElementById('variantImagesPreviews').innerHTML = '';
+    document.getElementById('variantFaqsContainer').innerHTML = '';
+  }
+  
+  // Variant FAQs in Modal
+  let variantFaqCount = 0;
+  document.getElementById('addVariantFaqBtn').addEventListener('click', function() {
+    const container = document.getElementById('variantFaqsContainer');
+    const row = document.createElement('div');
+    row.className = 'border rounded p-2 space-y-2';
+    row.innerHTML = `
+      <input type="text" placeholder="Question" class="w-full p-2 border rounded text-sm variant-faq-question">
+      <textarea placeholder="Answer" rows="2" class="w-full p-2 border rounded text-sm variant-faq-answer"></textarea>
+      <button type="button" class="text-red-500 text-xs hover:underline" onclick="this.closest('div').remove()">Remove</button>
+    `;
+    container.appendChild(row);
+  });
+  
+  // Image Preview
+  document.getElementById('variantImages').addEventListener('change', function(e) {
+    const previews = document.getElementById('variantImagesPreviews');
+    previews.innerHTML = '';
+    Array.from(e.target.files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        const img = document.createElement('img');
+        img.src = event.target.result;
+        img.className = 'w-16 h-16 object-cover rounded border';
+        previews.appendChild(img);
+      };
+      reader.readAsDataURL(file);
+    });
+  });
+  
+  // Save Variant
+  saveVariantBtn.addEventListener('click', function() {
+    const name = document.getElementById('variantName').value.trim();
+    const price = document.getElementById('variantPrice').value;
+    
+    if (!name || !price) {
+      alert('Variant Name and Price are required!');
+      return;
+    }
+    
+    const variantData = {
+      name: name,
+      price: parseFloat(price),
+      stock: parseInt(document.getElementById('variantStock').value) || 10,
+      sku: document.getElementById('variantSKU').value.trim(),
+      customTitle: document.getElementById('variantCustomTitle').value.trim(),
+      customDesc: document.getElementById('variantCustomDesc').value.trim(),
+      images: document.getElementById('variantImages').files,
+      faqs: []
+    };
+    
+    // Collect FAQs
+    document.querySelectorAll('#variantFaqsContainer > div').forEach(row => {
+      const q = row.querySelector('.variant-faq-question')?.value.trim();
+      const a = row.querySelector('.variant-faq-answer')?.value.trim();
+      if (q && a) {
+        variantData.faqs.push({ question: q, answer: a });
+      }
+    });
+    
+    if (editingIndex !== null) {
+      variants[editingIndex] = variantData;
+    } else {
+      variants.push(variantData);
+    }
+    
+    renderVariants();
+    closeModal();
+  });
+  
+  //Render Variants List
+  function renderVariants() {
+    variantsList.innerHTML = '';
+    variants.forEach((v, index) => {
+      const card = document.createElement('div');
+      card.className = 'border rounded-lg p-3 bg-white flex justify-between items-center hover:shadow-md transition';
+      card.innerHTML = `
+        <div class="flex-1">
+          <div class="font-semibold text-gray-900">${v.name} - ₹${v.price.toFixed(2)}</div>
+          <div class="text-xs text-gray-500">Stock: ${v.stock} ${v.customTitle ? '• Custom Title' : ''} ${v.customDesc ? '• Custom Desc' : ''} ${v.images.length ? '• ' + v.images.length + ' img(s)' : ''} ${v.faqs.length ? '• ' + v.faqs.length + ' FAQ(s)' : ''}</div>
+        </div>
+        <div class="flex gap-2">
+          <button type="button" onclick="editVariant(${index})" class="text-indigo-600 hover:underline text-sm">Edit</button>
+          <button type="button" onclick="deleteVariant(${index})" class="text-red-600 hover:underline text-sm">Delete</button>
+        </div>
+      `;
+      variantsList.appendChild(card);
+    });
+  }
+  
+  // Global functions for edit/delete
+  window.editVariant = function(index) {
+    openModal(index);
+  };
+  
+  window.deleteVariant = function(index) {
+    if (confirm('Delete this variant?')) {
+      variants.splice(index, 1);
+      renderVariants();
+    }
+  };
+  
+  // Event Listeners
+  addVariantBtn.addEventListener('click', () => openModal());
+  closeModalBtn.addEventListener('click', closeModal);
+  cancelModalBtn.addEventListener('click', closeModal);
+  
+  // Close modal on outside click
+  variantModal.addEventListener('click', function(e) {
+    if (e.target === variantModal) {
+      closeModal();
+    }
+  });
+
+  // ====== Form Submission with FormData for Variants ======
+  const productForm = document.querySelector('form[action="save_product.php"]');
+  if (productForm) {
+    productForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      const formData = new FormData(this);
+      
+      // Remove old variant inputs before adding new ones
+      const formInputs = Array.from(formData.keys());
+      formInputs.forEach(key => {
+        if (key.startsWith('variants[')) {
+          formData.delete(key);
+        }
+      });
+      
+      // Add variant data to FormData
+      variants.forEach((v, idx) => {
+        formData.append(`variants[${idx}][name]`, v.name);
+        formData.append(`variants[${idx}][price]`, v.price);
+        formData.append(`variants[${idx}][stock]`, v.stock);
+        formData.append(`variants[${idx}][sku]`, v.sku);
+        formData.append(`variants[${idx}][custom_title]`, v.customTitle || '');
+        formData.append(`variants[${idx}][custom_description]`, v.customDesc || '');
+        
+        // Add variant images (multiple files)
+        if (v.images && v.images.length > 0) {
+          Array.from(v.images).forEach((file, fileIdx) => {
+            formData.append(`variants[${idx}][images][${fileIdx}]`, file);
+          });
+        }
+        
+        // Add variant FAQs
+        v.faqs.forEach((faq, faqIdx) => {
+          formData.append(`variants[${idx}][faqs][${faqIdx}][question]`, faq.question);
+          formData.append(`variants[${idx}][faqs][${faqIdx}][answer]`, faq.answer);
+        });
+      });
+      
+      // Submit via AJAX
+      const submitBtn = this.querySelector('button[type="submit"]');
+      const originalText = submitBtn.textContent;
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Saving...';
+      
+      fetch('save_product.php', {
+        method: 'POST',
+        body: formData
+      })
+      .then(response => response.text())
+      .then(html => {
+        // Check if success or error
+        if (html.includes('success') || html.includes('Success')) {
+          window.location.href = 'products.php';
+        } else {
+          // Show the response (might have errors)
+          document.body.innerHTML = html;
+        }
+      })
+      .catch(error => {
+        alert('Error saving product: ' + error.message);
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalText;
+      });
+    });
+  }
+
+  // ====== FAQs Logic ======
+  const faqsContainer = document.getElementById('faqs-container');
+  const addFaqBtn     = document.getElementById('add-faq-btn');
+
+  if (faqsContainer && addFaqBtn) {
+    let faqCount = 0;
+
+    function addFaqRow() {
+      const index = faqCount++;
+      const row = document.createElement('div');
+      row.className = 'border-b pb-3 last:border-0 last:pb-0 mb-2';
+      row.innerHTML = `
+        <div class="flex justify-between items-start gap-2">
+          <div class="w-full space-y-2">
+            <div>
+              <label class="text-xs font-semibold text-slate-500">Question</label>
+              <input type="text" name="faqs[${index}][question]" required class="w-full p-2 border rounded text-sm" placeholder="e.g. How often should I use this?">
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-slate-500">Answer</label>
+              <textarea name="faqs[${index}][answer]" rows="2" required class="w-full p-2 border rounded text-sm" placeholder="e.g. Use it daily for best results."></textarea>
+            </div>
+          </div>
+          <button type="button" class="text-red-500 hover:text-red-700 mt-6" onclick="this.closest('.border-b').remove()">
+            &times;
+          </button>
+        </div>
+      `;
+      faqsContainer.appendChild(row);
+    }
+
+    addFaqBtn.addEventListener('click', addFaqRow);
+  }
+
 })();
 </script>
 

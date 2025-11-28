@@ -223,31 +223,48 @@ if (!empty($_FILES['images']) && is_array($_FILES['images']['name'])) {
 
 // merge existing images + new ones
 $finalImages = [];
-if (!empty($existing['images'])) {
-    $oldImgs = [];
-    $maybe = @json_decode($existing['images'], true);
-    if (is_array($maybe)) {
-        $oldImgs = array_values($maybe);
-    } elseif (strpos($existing['images'], ',') !== false) {
-        $oldImgs = array_map('trim', explode(',', $existing['images']));
+$rawExisting = $existing['images'] ?? '';
+
+if (strlen(trim($rawExisting)) > 0) {
+    // Try JSON first
+    $decoded = json_decode($rawExisting, true);
+    
+    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+        $finalImages = $decoded;
+    } elseif (strpos($rawExisting, ',') !== false) {
+        // Comma separated
+        $finalImages = array_map('trim', explode(',', $rawExisting));
     } else {
-        $oldImgs = [$existing['images']];
+        // Single string (legacy or just one image)
+        $finalImages = [$rawExisting];
     }
-    $finalImages = $oldImgs;
 }
+
 if (!empty($savedImages)) {
-    $finalImages = array_values(array_unique(array_merge($finalImages, $savedImages)));
+    // Merge new images with existing ones
+    $finalImages = array_merge($finalImages, $savedImages);
+    // Remove duplicates and re-index
+    $finalImages = array_values(array_unique($finalImages));
 }
+
 $imagesForDb = empty($finalImages) ? '' : json_encode($finalImages);
 
 // ============ UPDATE DB ============
 
 try {
+    $variant_label = trim($_POST['variant_label'] ?? 'Size');
+    if ($variant_label === '') $variant_label = 'Size';
+
+    $ingredients = trim($_POST['ingredients'] ?? '');
+    $how_to_use = trim($_POST['how_to_use'] ?? '');
+
     $sql = "UPDATE products SET
                 name = :name,
                 slug = :slug,
                 short_description = :short_description,
                 description = :description,
+                ingredients = :ingredients,
+                how_to_use = :how_to_use,
                 meta_title = :meta_title,
                 meta_description = :meta_description,
                 parent_category_id = :parent_category_id,
@@ -258,6 +275,7 @@ try {
                 sku = :sku,
                 images = :images,
                 is_active = :is_active,
+                variant_label = :variant_label,
                 updated_at = NOW()
             WHERE id = :id";
 
@@ -267,6 +285,8 @@ try {
         ':slug'               => $slug,
         ':short_description'  => $short_description,
         ':description'        => $description,
+        ':ingredients'        => $ingredients ?: null,
+        ':how_to_use'         => $how_to_use ?: null,
         ':meta_title'         => $meta_title,
         ':meta_description'   => $meta_description,
         ':parent_category_id' => $parent_category_id ?: null,
@@ -277,13 +297,105 @@ try {
         ':sku'                => $sku,
         ':images'             => $imagesForDb,
         ':is_active'          => $is_active,
+        ':variant_label'      => $variant_label,
         ':id'                 => $id,
     ]);
+
+    // ============ HANDLE VARIANTS ============
+    // 1. Delete removed variants
+    if (!empty($_POST['delete_variant_ids']) && is_array($_POST['delete_variant_ids'])) {
+        $delIds = array_map('intval', $_POST['delete_variant_ids']);
+        if (!empty($delIds)) {
+            $inQuery = implode(',', $delIds);
+            $pdo->exec("DELETE FROM product_variants WHERE id IN ($inQuery) AND product_id = $id");
+        }
+    }
+
+    // 2. Update/Insert variants
+    $variantsRaw = $_POST['variants'] ?? [];
+    if (!empty($variantsRaw) && is_array($variantsRaw)) {
+        $stmtInsert = $pdo->prepare("INSERT INTO product_variants (product_id, variant_name, price, stock, sku, image, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)");
+        // For update: if new image provided, update it. If not (null), keep existing (COALESCE).
+        $stmtUpdate = $pdo->prepare("UPDATE product_variants SET variant_name=?, price=?, stock=?, sku=?, image=COALESCE(?, image) WHERE id=? AND product_id=?");
+
+        foreach ($variantsRaw as $idx => $v) {
+            $vId    = !empty($v['id']) ? (int)$v['id'] : 0;
+            $vName  = trim($v['name'] ?? '');
+            $vPrice = (float)($v['price'] ?? 0);
+            $vStock = isset($v['stock']) ? (int)$v['stock'] : 0;
+            $vSku   = trim($v['sku'] ?? '');
+
+            if ($vName === '') continue;
+
+            // Handle Variant Image Upload
+            $vImage = null;
+            if (!empty($_FILES['variants']['name'][$idx]['image'])) {
+                $fName = $_FILES['variants']['name'][$idx]['image'];
+                $fTmp  = $_FILES['variants']['tmp_name'][$idx]['image'];
+                $fErr  = $_FILES['variants']['error'][$idx]['image'];
+
+                if ($fErr === UPLOAD_ERR_OK && is_uploaded_file($fTmp)) {
+                    $ext = pathinfo($fName, PATHINFO_EXTENSION) ?: 'jpg';
+                    $ext = preg_replace('/[^a-zA-Z0-9]/', '', $ext);
+                    $newName = 'var_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+                    $dest = $uploadDir . $newName;
+                    if (move_uploaded_file($fTmp, $dest)) {
+                        $vImage = $newName;
+                    }
+                }
+            }
+
+            if ($vId > 0) {
+                // Update
+                $stmtUpdate->execute([$vName, $vPrice, $vStock, $vSku, $vImage, $vId, $id]);
+            } else {
+                // Insert
+                $stmtInsert->execute([$id, $vName, $vPrice, $vStock, $vSku, $vImage]);
+            }
+        }
+    }
+
+    // ============ HANDLE FAQS ============
+    // 1. Delete removed FAQs
+    if (!empty($_POST['delete_faq_ids'])) {
+        // It might be a comma-separated string from the hidden input
+        $delFaqIds = explode(',', $_POST['delete_faq_ids']);
+        $delFaqIds = array_map('intval', $delFaqIds);
+        $delFaqIds = array_filter($delFaqIds); // remove 0 or empty
+
+        if (!empty($delFaqIds)) {
+            $inQuery = implode(',', $delFaqIds);
+            $pdo->exec("DELETE FROM product_faqs WHERE id IN ($inQuery) AND product_id = $id");
+        }
+    }
+
+    // 2. Update/Insert FAQs
+    $faqsRaw = $_POST['faqs'] ?? [];
+    if (!empty($faqsRaw) && is_array($faqsRaw)) {
+        $stmtInsertFaq = $pdo->prepare("INSERT INTO product_faqs (product_id, question, answer) VALUES (?, ?, ?)");
+        $stmtUpdateFaq = $pdo->prepare("UPDATE product_faqs SET question=?, answer=? WHERE id=? AND product_id=?");
+
+        foreach ($faqsRaw as $f) {
+            $fId = !empty($f['id']) ? (int)$f['id'] : 0;
+            $q   = trim($f['question'] ?? '');
+            $a   = trim($f['answer'] ?? '');
+
+            if ($q === '' || $a === '') continue;
+
+            if ($fId > 0) {
+                // Update
+                $stmtUpdateFaq->execute([$q, $a, $fId, $id]);
+            } else {
+                // Insert
+                $stmtInsertFaq->execute([$id, $q, $a]);
+            }
+        }
+    }
 
     flash_set('success_msg', 'Product updated successfully.');
     redirect('products.php');
 
-} catch (Exception $e) {
+} catch (PDOException $e) {
     // optional: delete newly uploaded files if error
     foreach ($savedImages as $f) {
         @unlink($uploadDir . $f);
