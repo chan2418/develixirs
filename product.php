@@ -628,6 +628,7 @@ if ($isAjax) {
 
   <!-- Shared navbar styles -->
   <link rel="stylesheet" href="assets/css/navbar.css">
+  <?php include __DIR__ . '/navbar.php'; ?>
   
   <style>
 /* === CSS (same as yours) === */

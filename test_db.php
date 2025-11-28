@@ -8,11 +8,9 @@ develixirs_pass
 
 USE develixirs_db;
 
+DESC users;
 
-SELECT *
-FROM products
-WHERE (is_active = 1 OR is_active IS NULL)
-  AND category_id = 9;
+
 UPDATE users
 SET password = '$2y$10$wB0xNxGr6nqPivhmTdQWxeGfK9iUlW129N4.hO.V1HQ0i5R9vIjXi'
 WHERE email = 'admin@admin.com';

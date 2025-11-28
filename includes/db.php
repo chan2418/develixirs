@@ -1,7 +1,7 @@
 <?php
 // LOCAL using Docker MySQL
 
-define('DB_HOST', '127.0.0.1');
+define('DB_HOST', '192.168.1.3');
 define('DB_PORT', '3307');
 define('DB_NAME', 'develixirs_db');
 define('DB_USER', 'develixirs_user');
