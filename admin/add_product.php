@@ -321,9 +321,15 @@ include __DIR__ . '/layout/header.php';
         <label class="block text-sm font-semibold mb-2">Product Variants (Sizes/Options)</label>
         
         <!-- Variant Label Input -->
-        <div class="mb-3">
-          <label class="text-xs font-semibold text-slate-500">Variant Label (e.g. Size, Volume, Ingredient)</label>
-          <input type="text" name="variant_label" class="w-full p-2 border rounded text-sm" placeholder="Size" value="Size">
+        <div class="grid grid-cols-2 gap-4 mb-3">
+          <div>
+            <label class="text-xs font-semibold text-slate-500">Variant Label (e.g. Size, Volume)</label>
+            <input type="text" name="variant_label" class="w-full p-2 border rounded text-sm" placeholder="Size" value="Size">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-slate-500">Main Variant Name (e.g. Vitamin C)</label>
+            <input type="text" name="main_variant_name" class="w-full p-2 border rounded text-sm" placeholder="Default Option Name">
+          </div>
         </div>
 
         <!-- Variants List -->
@@ -436,10 +442,36 @@ include __DIR__ . '/layout/header.php';
           </div>
 
           <div class="mb-4">
+            <label class="block text-sm font-semibold mb-2">Short Description</label>
+            <textarea id="variantShortDesc" rows="2" class="w-full p-3 border rounded-lg" placeholder="Leave empty to use product short description"></textarea>
+          </div>
+
+          <div class="mb-4">
             <label class="block text-sm font-semibold mb-2">Variant Images (Multiple)</label>
             <input type="file" id="variantImages" accept="image/*" multiple class="w-full p-2 border rounded-lg">
             <p class="text-xs text-gray-500 mt-1">Upload images specific to this variant. Leave empty to use product images.</p>
             <div id="variantImagesPreviews" class="mt-2 flex flex-wrap gap-2"></div>
+          </div>
+
+          <!-- Extra Fields -->
+          <div class="mb-4">
+            <label class="block text-sm font-semibold mb-2">Ingredients</label>
+            <textarea id="variantIngredients" rows="3" class="w-full p-3 border rounded-lg" placeholder="Leave empty to use product ingredients"></textarea>
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-semibold mb-2">How to Use</label>
+            <textarea id="variantHowToUse" rows="3" class="w-full p-3 border rounded-lg" placeholder="Leave empty to use product how to use"></textarea>
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-semibold mb-2">SEO Title</label>
+            <input type="text" id="variantMetaTitle" class="w-full p-3 border rounded-lg" placeholder="Leave empty to use product meta title">
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-semibold mb-2">SEO Description</label>
+            <textarea id="variantMetaDesc" rows="2" class="w-full p-3 border rounded-lg" placeholder="Leave empty to use product meta description"></textarea>
           </div>
 
           <!-- Variant FAQs -->
@@ -595,6 +627,7 @@ include __DIR__ . '/layout/header.php';
       document.getElementById('variantSKU').value = variant.sku;
       document.getElementById('variantCustomTitle').value = variant.customTitle || '';
       document.getElementById('variantCustomDesc').value = variant.customDesc || '';
+      document.getElementById('variantShortDesc').value = variant.shortDesc || '';
       // Note: Files and FAQs need special handling for edit mode
     } else {
       modalTitle.textContent = 'Add Variant';
@@ -618,6 +651,11 @@ include __DIR__ . '/layout/header.php';
     document.getElementById('variantSKU').value = '';
     document.getElementById('variantCustomTitle').value = '';
     document.getElementById('variantCustomDesc').value = '';
+    document.getElementById('variantShortDesc').value = '';
+    document.getElementById('variantIngredients').value = '';
+    document.getElementById('variantHowToUse').value = '';
+    document.getElementById('variantMetaTitle').value = '';
+    document.getElementById('variantMetaDesc').value = '';
     document.getElementById('variantImages').value = '';
     document.getElementById('variantImagesPreviews').innerHTML = '';
     document.getElementById('variantFaqsContainer').innerHTML = '';
@@ -670,6 +708,11 @@ include __DIR__ . '/layout/header.php';
       sku: document.getElementById('variantSKU').value.trim(),
       customTitle: document.getElementById('variantCustomTitle').value.trim(),
       customDesc: document.getElementById('variantCustomDesc').value.trim(),
+      shortDesc: document.getElementById('variantShortDesc').value.trim(),
+      ingredients: document.getElementById('variantIngredients').value.trim(),
+      howToUse: document.getElementById('variantHowToUse').value.trim(),
+      metaTitle: document.getElementById('variantMetaTitle').value.trim(),
+      metaDesc: document.getElementById('variantMetaDesc').value.trim(),
       images: document.getElementById('variantImages').files,
       faqs: []
     };
@@ -761,6 +804,11 @@ include __DIR__ . '/layout/header.php';
         formData.append(`variants[${idx}][sku]`, v.sku);
         formData.append(`variants[${idx}][custom_title]`, v.customTitle || '');
         formData.append(`variants[${idx}][custom_description]`, v.customDesc || '');
+        formData.append(`variants[${idx}][short_description]`, v.shortDesc || '');
+        formData.append(`variants[${idx}][ingredients]`, v.ingredients || '');
+        formData.append(`variants[${idx}][how_to_use]`, v.howToUse || '');
+        formData.append(`variants[${idx}][meta_title]`, v.metaTitle || '');
+        formData.append(`variants[${idx}][meta_description]`, v.metaDesc || '');
         
         // Add variant images (multiple files)
         if (v.images && v.images.length > 0) {

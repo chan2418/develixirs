@@ -49,6 +49,24 @@ try {
     $stmtVar = $pdo->prepare("SELECT * FROM product_variants WHERE product_id = ? AND is_active = 1 ORDER BY price ASC");
     $stmtVar->execute([$productId]);
     $variants = $stmtVar->fetchAll(PDO::FETCH_ASSOC);
+
+    // Inject Main Product as First Variant
+    $mainVariantName = $product['main_variant_name'] ?? '';
+    // Only show if there are other variants OR if a specific main name is set
+    if (!empty($variants) || !empty($mainVariantName)) {
+        $mainVariant = [
+            'id' => 0, // 0 indicates main product (empty check passes)
+            'variant_name' => $mainVariantName ?: 'Default',
+            'price' => $product['price'],
+            'stock' => $product['stock'],
+            'sku' => $product['sku'],
+            'image' => null, 
+            'images' => null,
+            'custom_title' => null,
+            'custom_description' => null
+        ];
+        array_unshift($variants, $mainVariant);
+    }
     
     // Fetch FAQs for all variants
     if (!empty($variants)) {
@@ -1395,6 +1413,7 @@ input:focus{
                       data-image="<?php echo !empty($v['image']) ? '/assets/uploads/products/' . htmlspecialchars($v['image']) : ''; ?>"
                       data-custom-title="<?php echo htmlspecialchars($v['custom_title'] ?? '', ENT_QUOTES); ?>"
                       data-custom-description="<?php echo htmlspecialchars($v['custom_description'] ?? '', ENT_QUOTES); ?>"
+                      data-short-description="<?php echo htmlspecialchars($v['short_description'] ?? '', ENT_QUOTES); ?>"
                       data-images="<?php echo htmlspecialchars(json_encode($vImagesUrls), ENT_QUOTES); ?>"
                       data-faqs="<?php echo htmlspecialchars(json_encode($vFaqs), ENT_QUOTES); ?>">
                 <?php echo htmlspecialchars($v['variant_name']); ?>
@@ -1417,13 +1436,26 @@ input:focus{
           const defaultData = {
             title: '<?php echo addslashes($productName); ?>',
             description: `<?php echo addslashes($longDescription); ?>`,
-            images: <?php echo json_encode($imageList); ?>,
+            images: <?php echo json_encode($imageList); ?>.map(img => img.startsWith('/') ? img : '/' + img),
             faqs: <?php echo json_encode($faqs); ?>
           };
 
           if (variantBtns.length > 0) {
+            // Safe JSON parse helper (MUST be defined first)
+            function safeParse(jsonStr, fallback) {
+              try {
+                return jsonStr ? JSON.parse(jsonStr) : fallback;
+              } catch (e) {
+                console.error('JSON Parse Error:', e);
+                return fallback;
+              }
+            }
+
             // Function to update all content dynamically
             function updateVariant(btn) {
+              console.log('=== Updating Variant ===');
+              console.log('Button dataset:', btn.dataset);
+              
               // Update active class
               variantBtns.forEach(b => b.classList.remove('active'));
               btn.classList.add('active');
@@ -1431,45 +1463,75 @@ input:focus{
               // Get variant data (with fallback to product data)
               const customTitle = btn.dataset.customTitle || defaultData.title;
               const customDesc = btn.dataset.customDescription || defaultData.description;
-              const variantImages = btn.dataset.images ? JSON.parse(btn.dataset.images) : defaultData.images;
-              const variantFaqs = btn.dataset.faqs ? JSON.parse(btn.dataset.faqs) : defaultData.faqs;
+              const shortDesc = btn.dataset.shortDescription || '';
+              const variantImages = safeParse(btn.dataset.images, defaultData.images);
+              const variantFaqs = safeParse(btn.dataset.faqs, defaultData.faqs);
 
-              // Update Title
+              console.log('Custom Title:', customTitle);
+              console.log('Short Description:', shortDesc);
+              console.log('Variant Images:', variantImages);
+              console.log('Default Images:', defaultData.images);
+
+              // Update Title (both locations!)
               const titleElement = document.querySelector('.product-hero h1');
+              const productTitleElement = document.querySelector('.product-title');
+              console.log('Title Element:', titleElement);
+              console.log('Product Title Element:', productTitleElement);
+              
               if (titleElement && customTitle) {
                 titleElement.textContent = customTitle;
+                console.log('Hero title updated to:', customTitle);
+              }
+              if (productTitleElement && customTitle) {
+                productTitleElement.textContent = customTitle;
+                console.log('Product title updated to:', customTitle);
+              }
+
+              // Update Short Description
+              const shortDescElement = document.querySelector('.short-desc');
+              if (shortDescElement) {
+                if (shortDesc) {
+                  shortDescElement.innerHTML = shortDesc.replace(/\n/g, '<br>');
+                  shortDescElement.style.display = 'block';
+                } else {
+                  shortDescElement.style.display = 'none';
+                }
               }
 
               // Update Description (in tab content)
-              const descTab = document.querySelector('#tab-desc'); // Changed from #desc-tab to #tab-desc
+              const descTab = document.querySelector('#tab-desc');
               if (descTab && customDesc) {
                 descTab.innerHTML = '<h3>Description</h3><p>' + customDesc.replace(/\n/g, '<br>') + '</p>';
               }
 
-              // Update Images
-              if (variantImages && variantImages.length > 0) {
-                updateImageGallery(variantImages);
-              } else {
-                updateImageGallery(defaultData.images);
+              // Update Images with fallback
+              let finalImages = variantImages;
+              if (!finalImages || finalImages.length === 0) {
+                finalImages = defaultData.images;
               }
+              console.log('Final Images to update:', finalImages);
+              updateImageGallery(finalImages);
 
               // Update FAQs
               updateFAQs(Array.isArray(variantFaqs) && variantFaqs.length > 0 ? variantFaqs : defaultData.faqs);
 
-              // Update Price
+              // Update Price & Stock
               const price = parseFloat(btn.dataset.price);
-              priceDisplay.innerHTML = '₹' + price.toFixed(2);
-
-              // Update Stock
-              const stock = parseInt(btn.dataset.stock);
-              if (stock > 0) {
-                stockDisplay.textContent = 'In Stock';
-                stockDisplay.style.color = 'var(--highlight)';
-              } else {
-                stockDisplay.textContent = 'Out of Stock';
-                stockDisplay.style.color = 'red';
+              if (priceDisplay) {
+                priceDisplay.innerHTML = '<?php if ($oldPrice): ?><span class="old-price">₹<?php echo number_format($oldPrice, 2); ?></span><?php endif; ?>' + '₹' + price.toFixed(2);
               }
-
+              
+              const stock = parseInt(btn.dataset.stock);
+              if (stockDisplay) {
+                if (stock > 0) {
+                  stockDisplay.textContent = 'In Stock';
+                  stockDisplay.style.color = 'var(--highlight)';
+                } else {
+                  stockDisplay.textContent = 'Out of Stock';
+                  stockDisplay.style.color = 'red';
+                }
+              }
+              
               // Update hidden input
               if (variantInput) {
                 variantInput.value = btn.dataset.id;
@@ -1478,10 +1540,17 @@ input:focus{
 
             // Update image gallery
             function updateImageGallery(images) {
+              console.log('=== updateImageGallery called ===');
+              console.log('Images to display:', images);
+              
               const mainImage = document.getElementById('mainProductImage');
               const thumbGallery = document.querySelector('.thumb-gallery');
               
+              console.log('Main Image Element:', mainImage);
+              console.log('Thumb Gallery Element:', thumbGallery);
+              
               if (mainImage && images.length > 0) {
+                console.log('Updating main image to:', images[0]);
                 mainImage.src = images[0];
               }
               
@@ -1539,12 +1608,20 @@ input:focus{
             }
 
             // Initialize with first variant
-            updateVariant(variantBtns[0]);
+            try {
+               updateVariant(variantBtns[0]);
+            } catch (e) {
+               console.error('Error updating initial variant:', e);
+            }
 
             // Attach click event to variant buttons
             variantBtns.forEach(btn => {
               btn.addEventListener('click', function() {
-                updateVariant(this);
+                try {
+                  updateVariant(this);
+                } catch (e) {
+                  console.error('Error updating variant:', e);
+                }
               });
             });
           }
