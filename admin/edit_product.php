@@ -120,6 +120,28 @@ try {
     $variants = [];
 }
 
+// Fetch variant FAQs
+$variantFaqs = [];
+if (!empty($variants)) {
+    try {
+        $variantIds = array_column($variants, 'id');
+        $placeholders = implode(',', array_fill(0, count($variantIds), '?'));
+        $stmtVarFaq = $pdo->prepare("SELECT * FROM variant_faqs WHERE variant_id IN ($placeholders) ORDER BY variant_id, display_order");
+        $stmtVarFaq->execute($variantIds);
+        $allVarFaqs = $stmtVarFaq->fetchAll(PDO::FETCH_ASSOC);
+        
+        foreach ($allVarFaqs as $faq) {
+            $vid = (int)$faq['variant_id'];
+            if (!isset($variantFaqs[$vid])) {
+                $variantFaqs[$vid] = [];
+            }
+            $variantFaqs[$vid][] = $faq;
+        }
+    } catch (Exception $e) {
+        $variantFaqs = [];
+    }
+}
+
 // ------------------------
 // FETCH FAQS
 // ------------------------
@@ -304,11 +326,19 @@ function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
         <label class="block text-sm font-semibold mb-2">Product Variants (Sizes/Options)</label>
         
         <!-- Variant Label Input -->
-        <div class="mb-3">
-          <label class="text-xs font-semibold text-slate-500">Variant Label (e.g. Size, Volume, Ingredient)</label>
-          <input type="text" name="variant_label" class="w-full p-2 border rounded text-sm" 
-                 placeholder="Size" 
-                 value="<?php echo esc($p['variant_label'] ?? 'Size'); ?>">
+        <div class="grid grid-cols-2 gap-4 mb-3">
+          <div>
+            <label class="text-xs font-semibold text-slate-500">Variant Label (e.g. Size, Volume)</label>
+            <input type="text" name="variant_label" class="w-full p-2 border rounded text-sm" 
+                   placeholder="Size" 
+                   value="<?php echo esc($p['variant_label'] ?? 'Size'); ?>">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-slate-500">Main Variant Name (e.g. Vitamin C)</label>
+            <input type="text" name="main_variant_name" class="w-full p-2 border rounded text-sm" 
+                   placeholder="Default Option Name"
+                   value="<?php echo esc($p['main_variant_name'] ?? ''); ?>">
+          </div>
         </div>
 
         <!-- Variants List -->
@@ -458,11 +488,37 @@ function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
           </div>
 
           <div class="mb-4">
+            <label class="block text-sm font-semibold mb-2">Short Description</label>
+            <textarea id="variantShortDesc" rows="2" class="w-full p-3 border rounded-lg" placeholder="Leave empty to use product short description"></textarea>
+          </div>
+
+          <div class="mb-4">
             <label class="block text-sm font-semibold mb-2">Variant Images (Multiple)</label>
             <div id="existingVariantImages" class="mb-2"></div>
             <input type="file" id="variantImages" accept="image/*" multiple class="w-full p-2 border rounded-lg">
             <p class="text-xs text-gray-500 mt-1">Upload images specific to this variant. Leave empty to use product images.</p>
             <div id="variantImagesPreviews" class="mt-2 flex flex-wrap gap-2"></div>
+          </div>
+
+          <!-- Extra Fields -->
+          <div class="mb-4">
+            <label class="block text-sm font-semibold mb-2">Ingredients</label>
+            <textarea id="variantIngredients" rows="3" class="w-full p-3 border rounded-lg" placeholder="Leave empty to use product ingredients"></textarea>
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-semibold mb-2">How to Use</label>
+            <textarea id="variantHowToUse" rows="3" class="w-full p-3 border rounded-lg" placeholder="Leave empty to use product how to use"></textarea>
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-semibold mb-2">SEO Title</label>
+            <input type="text" id="variantMetaTitle" class="w-full p-3 border rounded-lg" placeholder="Leave empty to use product meta title">
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-semibold mb-2">SEO Description</label>
+            <textarea id="variantMetaDesc" rows="2" class="w-full p-3 border rounded-lg" placeholder="Leave empty to use product meta description"></textarea>
           </div>
 
           <!-- Variant FAQs -->
@@ -577,66 +633,289 @@ function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
     });
   }
 
-  // ====== Variants Logic ======
-  const variantsContainer = document.getElementById('variants-container');
-  const addVariantBtn     = document.getElementById('add-variant-btn');
-  const deletedContainer  = document.getElementById('deleted-variants-container');
-
-  if (variantsContainer && addVariantBtn) {
-    // Start index from existing count to avoid collision
-    let variantCount = <?php echo count($variants); ?>;
-
-    function addVariantRow() {
-      const index = variantCount++;
-      const row = document.createElement('div');
-      row.className = 'grid grid-cols-2 md:grid-cols-5 gap-2 items-end border-b pb-3 last:border-0 last:pb-0 variant-row';
-      row.innerHTML = `
+  // ====== Variants Modal Logic ======
+  const variantsList = document.getElementById('variants-list');
+  const addVariantBtn = document.getElementById('add-variant-btn');
+  const variantModal = document.getElementById('variantModal');
+  const closeModalBtn = document.getElementById('closeModalBtn');
+  const cancelModalBtn = document.getElementById('cancelModalBtn');
+  const saveVariantBtn = document.getElementById('saveVariantBtn');
+  const modalTitle = document.getElementById('modalTitle');
+  const deletedContainer = document.getElementById('deleted-variants-container');
+  
+  let variants = []; // Store variant data in memory
+  let tempExistingImages = []; // Track existing images during editing
+  let editingIndex = null;
+  
+  // Load existing variants from PHP
+  <?php foreach ($variants as $v): ?>
+  variants.push({
+    id: <?php echo $v['id'] ?? 0; ?>,
+    name: <?php echo json_encode($v['variant_name'] ?? ''); ?>,
+    price: <?php echo json_encode($v['price'] ?? ''); ?>,
+    stock: <?php echo json_encode($v['stock'] ?? 10); ?>,
+    sku: <?php echo json_encode($v['sku'] ?? ''); ?>,
+    customTitle: <?php echo json_encode($v['custom_title'] ?? ''); ?>,
+    customDesc: <?php echo json_encode($v['custom_description'] ?? ''); ?>,
+    shortDesc: <?php echo json_encode($v['short_description'] ?? ''); ?>,
+    ingredients: <?php echo json_encode($v['ingredients'] ?? ''); ?>,
+    howToUse: <?php echo json_encode($v['how_to_use'] ?? ''); ?>,
+    metaTitle: <?php echo json_encode($v['meta_title'] ?? ''); ?>,
+    metaDesc: <?php echo json_encode($v['meta_description'] ?? ''); ?>,
+    existingImages: <?php 
+      $vImages = !empty($v['images']) ? json_decode($v['images'], true) : [];
+      if (!is_array($vImages)) $vImages = [];
+      echo json_encode($vImages); 
+    ?>,
+    images: [], // New images to upload
+    faqs: <?php 
+      echo json_encode($variantFaqs[$v['id']] ?? []); 
+    ?>
+  });
+  <?php endforeach; ?>
+  
+  // Render variants list
+  function renderVariants() {
+    variantsList.innerHTML = '';
+    variants.forEach((v, idx) => {
+      const card = document.createElement('div');
+      card.className = 'bg-white border rounded-lg p-4 flex justify-between items-center';
+      
+      const info = [];
+      info.push(v.name);
+      info.push('₹' + parseFloat(v.price).toFixed(2));
+      if (v.customTitle) info.push('• Custom Title');
+      if (v.existingImages && v.existingImages.length > 0) info.push('• ' + v.existingImages.length + ' img(s)');
+      if (v.images && v.images.length > 0) info.push('• +' + v.images.length + ' new img(s)');
+      if (v.faqs && v.faqs.length > 0) info.push('• ' + v.faqs.length + ' FAQ(s)');
+      
+      card.innerHTML = `
         <div>
-          <label class="text-xs font-semibold text-slate-500">Name</label>
-          <input type="text" name="variants[${index}][name]" required class="w-full p-2 border rounded text-sm" placeholder="Variant Name">
+          <div class="font-semibold">${info.join(' ')}</div>
+          <div class="text-xs text-gray-500">Stock: ${v.stock}</div>
         </div>
-        <div>
-          <label class="text-xs font-semibold text-slate-500">Price (₹)</label>
-          <input type="number" name="variants[${index}][price]" step="0.01" min="0" required class="w-full p-2 border rounded text-sm" placeholder="Price">
-        </div>
-        <div>
-          <label class="text-xs font-semibold text-slate-500">Stock</label>
-          <input type="number" name="variants[${index}][stock]" min="0" value="10" required class="w-full p-2 border rounded text-sm" placeholder="Stock">
-        </div>
-        <div>
-          <label class="text-xs font-semibold text-slate-500">SKU</label>
-          <input type="text" name="variants[${index}][sku]" class="w-full p-2 border rounded text-sm" placeholder="SKU">
-        </div>
-        <div class="relative">
-          <label class="text-xs font-semibold text-slate-500">Image (Opt)</label>
-          <div class="flex gap-1">
-            <input type="file" name="variants[${index}][image]" accept="image/*" class="w-full p-1 border rounded text-xs">
-            <button type="button" class="text-red-500 hover:text-red-700 px-2" onclick="this.closest('.variant-row').remove()">
-              &times;
-            </button>
-          </div>
+        <div class="flex gap-2">
+          <button type="button" class="text-blue-600 hover:underline text-sm" onclick="editVariant(${idx})">Edit</button>
+          <button type="button" class="text-red-600 hover:underline text-sm" onclick="deleteVariant(${idx})">Delete</button>
         </div>
       `;
-      variantsContainer.appendChild(row);
-    }
-
-    addVariantBtn.addEventListener('click', addVariantRow);
-
-    // Handle delete for existing variants
-    variantsContainer.addEventListener('click', function(e) {
-      if (e.target.classList.contains('delete-variant-btn')) {
-        const id = e.target.getAttribute('data-id');
-        if (id) {
-          const input = document.createElement('input');
-          input.type = 'hidden';
-          input.name = 'delete_variant_ids[]';
-          input.value = id;
-          deletedContainer.appendChild(input);
-        }
-        e.target.closest('.variant-row').remove();
-      }
+      variantsList.appendChild(card);
     });
   }
+  
+  // Modal Controls
+  window.openModal = function(editIndex = null) {
+    editingIndex = editIndex;
+    if (editIndex !== null) {
+      modalTitle.textContent = 'Edit Variant';
+      const variant = variants[editIndex];
+      document.getElementById('variantName').value = variant.name;
+      document.getElementById('variantPrice').value = variant.price;
+      document.getElementById('variantStock').value = variant.stock;
+      document.getElementById('variantSKU').value = variant.sku;
+      document.getElementById('variantCustomTitle').value = variant.customTitle || '';
+      document.getElementById('variantCustomDesc').value = variant.customDesc || '';
+      document.getElementById('variantShortDesc').value = variant.shortDesc || '';
+      document.getElementById('variantIngredients').value = variant.ingredients || '';
+      document.getElementById('variantHowToUse').value = variant.howToUse || '';
+      document.getElementById('variantMetaTitle').value = variant.metaTitle || '';
+      document.getElementById('variantMetaDesc').value = variant.metaDesc || '';
+      document.getElementById('variantEditIndex').value = editIndex;
+      document.getElementById('variantEditId').value = variant.id || '';
+      
+      // Show existing images
+      tempExistingImages = [...(variant.existingImages || [])];
+      renderExistingImagesInModal();
+      
+      // Load FAQs
+      loadVariantFaqs(variant.faqs || []);
+    } else {
+      modalTitle.textContent = 'Add Variant';
+      clearModalForm();
+    }
+    variantModal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function renderExistingImagesInModal() {
+    const existingImagesDiv = document.getElementById('existingVariantImages');
+    existingImagesDiv.innerHTML = '';
+    
+    if (tempExistingImages && tempExistingImages.length > 0) {
+      tempExistingImages.forEach((img, idx) => {
+        const imgContainer = document.createElement('div');
+        imgContainer.className = 'relative inline-block mr-2 mb-2';
+        
+        const imgEl = document.createElement('img');
+        imgEl.src = `/assets/uploads/products/${img}`;
+        imgEl.className = 'w-20 h-20 object-cover rounded border';
+        
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600';
+        removeBtn.innerHTML = '&times;';
+        removeBtn.onclick = function() { removeExistingImage(idx); };
+        
+        imgContainer.appendChild(imgEl);
+        imgContainer.appendChild(removeBtn);
+        existingImagesDiv.appendChild(imgContainer);
+      });
+    }
+  }
+
+  function removeExistingImage(idx) {
+    if (confirm('Remove this image? (Will be deleted on save)')) {
+      tempExistingImages.splice(idx, 1);
+      renderExistingImagesInModal();
+    }
+  }
+  
+  function closeModal() {
+    variantModal.classList.add('hidden');
+    document.body.style.overflow = 'auto';
+    clearModalForm();
+    editingIndex = null;
+  }
+  
+  function clearModalForm() {
+    document.getElementById('variantName').value = '';
+    document.getElementById('variantPrice').value = '';
+    document.getElementById('variantStock').value = '10';
+    document.getElementById('variantSKU').value = '';
+    document.getElementById('variantCustomTitle').value = '';
+    document.getElementById('variantCustomDesc').value = '';
+    document.getElementById('variantShortDesc').value = '';
+    document.getElementById('variantIngredients').value = '';
+    document.getElementById('variantHowToUse').value = '';
+    document.getElementById('variantMetaTitle').value = '';
+    document.getElementById('variantMetaDesc').value = '';
+    document.getElementById('variantImages').value = '';
+    document.getElementById('variantImagesPreviews').innerHTML = '';
+    document.getElementById('variantFaqsContainer').innerHTML = '';
+    document.getElementById('existingVariantImages').innerHTML = '';
+    document.getElementById('variantEditIndex').value = '';
+    document.getElementById('variantEditId').value = '';
+  }
+  
+  function loadVariantFaqs(faqs) {
+    const container = document.getElementById('variantFaqsContainer');
+    container.innerHTML = '';
+    faqs.forEach(faq => {
+      const row = document.createElement('div');
+      row.className = 'border rounded p-2 space-y-2';
+      row.innerHTML = `
+        <input type="text" placeholder="Question" class="w-full p-2 border rounded text-sm variant-faq-question" value="${faq.question || ''}">
+        <textarea placeholder="Answer" rows="2" class="w-full p-2 border rounded text-sm variant-faq-answer">${faq.answer || ''}</textarea>
+        <button type="button" class="text-red-500 text-xs hover:underline" onclick="this.closest('div').remove()">Remove</button>
+      `;
+      container.appendChild(row);
+    });
+  }
+  
+  // Add FAQ button
+  document.getElementById('addVariantFaqBtn').addEventListener('click', function() {
+    const container = document.getElementById('variantFaqsContainer');
+    const row = document.createElement('div');
+    row.className = 'border rounded p-2 space-y-2';
+    row.innerHTML = `
+      <input type="text" placeholder="Question" class="w-full p-2 border rounded text-sm variant-faq-question">
+      <textarea placeholder="Answer" rows="2" class="w-full p-2 border rounded text-sm variant-faq-answer"></textarea>
+      <button type="button" class="text-red-500 text-xs hover:underline" onclick="this.closest('div').remove()">Remove</button>
+    `;
+    container.appendChild(row);
+  });
+  
+  // Image Preview
+  document.getElementById('variantImages').addEventListener('change', function(e) {
+    const previews = document.getElementById('variantImagesPreviews');
+    previews.innerHTML = '';
+    Array.from(e.target.files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        const img = document.createElement('img');
+        img.src = event.target.result;
+        img.className = 'w-20 h-20 object-cover rounded border';
+        previews.appendChild(img);
+      };
+      reader.readAsDataURL(file);
+    });
+  });
+  
+  // Save Variant
+  saveVariantBtn.addEventListener('click', function() {
+    const name = document.getElementById('variantName').value.trim();
+    const price = document.getElementById('variantPrice').value;
+    
+    if (!name || !price) {
+      alert('Variant name and price are required');
+      return;
+    }
+    
+    const variantData = {
+      id: document.getElementById('variantEditId').value || null,
+      name: name,
+      price: price,
+      stock: document.getElementById('variantStock').value || 10,
+      sku: document.getElementById('variantSKU').value.trim(),
+      customTitle: document.getElementById('variantCustomTitle').value.trim(),
+      customDesc: document.getElementById('variantCustomDesc').value.trim(),
+      shortDesc: document.getElementById('variantShortDesc').value.trim(),
+      ingredients: document.getElementById('variantIngredients').value.trim(),
+      howToUse: document.getElementById('variantHowToUse').value.trim(),
+      metaTitle: document.getElementById('variantMetaTitle').value.trim(),
+      metaDesc: document.getElementById('variantMetaDesc').value.trim(),
+      images: Array.from(document.getElementById('variantImages').files),
+      faqs: []
+    };
+    
+    // Collect FAQs
+    document.querySelectorAll('#variantFaqsContainer > div').forEach(row => {
+      const q = row.querySelector('.variant-faq-question').value.trim();
+      const a = row.querySelector('.variant-faq-answer').value.trim();
+      if (q && a) {
+        variantData.faqs.push({ question: q, answer: a });
+      }
+    });
+    
+    if (editingIndex !== null) {
+      // Keep existing images that weren't deleted
+      variantData.existingImages = tempExistingImages;
+      variants[editingIndex] = variantData;
+    } else {
+      variants.push(variantData);
+    }
+    
+    renderVariants();
+    closeModal();
+  });
+  
+  window.editVariant = function(idx) {
+    openModal(idx);
+  }
+  
+  window.deleteVariant = function(idx) {
+    if (confirm('Delete this variant?')) {
+      const variant = variants[idx];
+      if (variant.id) {
+        // Mark for deletion
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'delete_variant_ids[]';
+        input.value = variant.id;
+        deletedContainer.appendChild(input);
+      }
+      variants.splice(idx, 1);
+      renderVariants();
+    }
+  }
+  
+  // Event listeners
+  addVariantBtn.addEventListener('click', () => openModal());
+  closeModalBtn.addEventListener('click', closeModal);
+  cancelModalBtn.addEventListener('click', closeModal);
+  
+  // Initial render
+  renderVariants();
 
   // ====== FAQs Logic =====
   const faqsContainer = document.getElementById('faqs-container');
@@ -683,6 +962,83 @@ function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
         }
         e.target.closest('.faq-row').remove();
       }
+    });
+  }
+
+  // ====== Form Submission with FormData ======
+  const productForm = document.querySelector('form[action="modify_product.php"]');
+  if (productForm) {
+    productForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      const formData = new FormData(this);
+      
+      // Remove any existing variant data from form (to avoid conflicts)
+      const keysToDelete = [];
+      for (let key of formData.keys()) {
+        if (key.startsWith('variants[')) {
+          keysToDelete.push(key);
+        }
+      }
+      keysToDelete.forEach(key => formData.delete(key));
+      
+      // Append variant data from JavaScript
+      variants.forEach((v, idx) => {
+        if (v.id) formData.append(`variants[${idx}][id]`, v.id);
+        formData.append(`variants[${idx}][name]`, v.name);
+        formData.append(`variants[${idx}][price]`, v.price);
+        formData.append(`variants[${idx}][stock]`, v.stock);
+        formData.append(`variants[${idx}][sku]`, v.sku);
+        formData.append(`variants[${idx}][custom_title]`, v.customTitle || '');
+        formData.append(`variants[${idx}][custom_description]`, v.customDesc || '');
+        formData.append(`variants[${idx}][short_description]`, v.shortDesc || '');
+        formData.append(`variants[${idx}][ingredients]`, v.ingredients || '');
+        formData.append(`variants[${idx}][how_to_use]`, v.howToUse || '');
+        formData.append(`variants[${idx}][meta_title]`, v.metaTitle || '');
+        formData.append(`variants[${idx}][meta_description]`, v.metaDesc || '');
+        
+        // Add new images
+        if (v.images && v.images.length > 0) {
+          Array.from(v.images).forEach((file, fileIdx) => {
+            formData.append(`variants[${idx}][images][${fileIdx}]`, file);
+          });
+        }
+
+        // Add kept existing images
+        if (v.existingImages && v.existingImages.length > 0) {
+          v.existingImages.forEach((img, imgIdx) => {
+            formData.append(`variants[${idx}][existing_images][${imgIdx}]`, img);
+          });
+        }
+        
+        // Add FAQs
+        if (v.faqs && v.faqs.length > 0) {
+          v.faqs.forEach((faq, faqIdx) => {
+            formData.append(`variants[${idx}][faqs][${faqIdx}][question]`, faq.question || '');
+            formData.append(`variants[${idx}][faqs][${faqIdx}][answer]`, faq.answer || '');
+          });
+        }
+      });
+      
+      // Submit via fetch
+      fetch('modify_product.php', {
+        method: 'POST',
+        body: formData
+      })
+      .then(response => response.text())
+      .then(html => {
+        // Check for success
+        if (html.includes('success') || html.includes('Success') || html.includes('updated')) {
+          window.location.href = 'products.php';
+        } else {
+          // Show response
+          document.body.innerHTML = html;
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred. Please try again.');
+      });
     });
   }
 

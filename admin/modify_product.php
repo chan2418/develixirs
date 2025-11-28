@@ -254,6 +254,7 @@ $imagesForDb = empty($finalImages) ? '' : json_encode($finalImages);
 try {
     $variant_label = trim($_POST['variant_label'] ?? 'Size');
     if ($variant_label === '') $variant_label = 'Size';
+    $main_variant_name = trim($_POST['main_variant_name'] ?? '') ?: null;
 
     $ingredients = trim($_POST['ingredients'] ?? '');
     $how_to_use = trim($_POST['how_to_use'] ?? '');
@@ -276,6 +277,7 @@ try {
                 images = :images,
                 is_active = :is_active,
                 variant_label = :variant_label,
+                main_variant_name = :main_variant_name,
                 updated_at = NOW()
             WHERE id = :id";
 
@@ -298,6 +300,7 @@ try {
         ':images'             => $imagesForDb,
         ':is_active'          => $is_active,
         ':variant_label'      => $variant_label,
+        ':main_variant_name'  => $main_variant_name,
         ':id'                 => $id,
     ]);
 
@@ -314,9 +317,13 @@ try {
     // 2. Update/Insert variants
     $variantsRaw = $_POST['variants'] ?? [];
     if (!empty($variantsRaw) && is_array($variantsRaw)) {
-        $stmtInsert = $pdo->prepare("INSERT INTO product_variants (product_id, variant_name, price, stock, sku, image, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)");
-        // For update: if new image provided, update it. If not (null), keep existing (COALESCE).
-        $stmtUpdate = $pdo->prepare("UPDATE product_variants SET variant_name=?, price=?, stock=?, sku=?, image=COALESCE(?, image) WHERE id=? AND product_id=?");
+        // Prepare statements for variants
+        $stmtInsert = $pdo->prepare("INSERT INTO product_variants (product_id, variant_name, price, stock, sku, image, images, custom_title, custom_description, short_description, ingredients, how_to_use, meta_title, meta_description, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)");
+        $stmtUpdate = $pdo->prepare("UPDATE product_variants SET variant_name=?, price=?, stock=?, sku=?, image=?, images=?, custom_title=?, custom_description=?, short_description=?, ingredients=?, how_to_use=?, meta_title=?, meta_description=? WHERE id=? AND product_id=?");
+        
+        // Prepare statements for variant FAQs
+        $stmtInsertFaq = $pdo->prepare("INSERT INTO variant_faqs (variant_id, question, answer, display_order) VALUES (?, ?, ?, ?)");
+        $stmtDeleteFaqs = $pdo->prepare("DELETE FROM variant_faqs WHERE variant_id = ?");
 
         foreach ($variantsRaw as $idx => $v) {
             $vId    = !empty($v['id']) ? (int)$v['id'] : 0;
@@ -324,33 +331,80 @@ try {
             $vPrice = (float)($v['price'] ?? 0);
             $vStock = isset($v['stock']) ? (int)$v['stock'] : 0;
             $vSku   = trim($v['sku'] ?? '');
+            $vCustomTitle = trim($v['custom_title'] ?? '') ?: null;
+            $vCustomDesc = trim($v['custom_description'] ?? '') ?: null;
+            $vShortDesc = trim($v['short_description'] ?? '') ?: null;
+            $vIngredients = trim($v['ingredients'] ?? '') ?: null;
+            $vHowToUse = trim($v['how_to_use'] ?? '') ?: null;
+            $vMetaTitle = trim($v['meta_title'] ?? '') ?: null;
+            $vMetaDesc = trim($v['meta_description'] ?? '') ?: null;
 
             if ($vName === '') continue;
 
-            // Handle Variant Image Upload
-            $vImage = null;
-            if (!empty($_FILES['variants']['name'][$idx]['image'])) {
-                $fName = $_FILES['variants']['name'][$idx]['image'];
-                $fTmp  = $_FILES['variants']['tmp_name'][$idx]['image'];
-                $fErr  = $_FILES['variants']['error'][$idx]['image'];
+            // Handle Variant Images Upload (Multiple)
+            $variantImages = [];
+            
+            // 1. Keep existing images (that weren't deleted)
+            if (!empty($v['existing_images']) && is_array($v['existing_images'])) {
+                $variantImages = $v['existing_images'];
+            }
 
-                if ($fErr === UPLOAD_ERR_OK && is_uploaded_file($fTmp)) {
-                    $ext = pathinfo($fName, PATHINFO_EXTENSION) ?: 'jpg';
-                    $ext = preg_replace('/[^a-zA-Z0-9]/', '', $ext);
-                    $newName = 'var_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
-                    $dest = $uploadDir . $newName;
-                    if (move_uploaded_file($fTmp, $dest)) {
-                        $vImage = $newName;
+            // 2. Add new uploaded images
+            if (!empty($_FILES['variants']['name'][$idx]['images'])) {
+                foreach ($_FILES['variants']['name'][$idx]['images'] as $i => $fname) {
+                    if (empty($fname)) continue;
+                    
+                    $fTmp = $_FILES['variants']['tmp_name'][$idx]['images'][$i];
+                    $fErr = $_FILES['variants']['error'][$idx]['images'][$i];
+                    
+                    if ($fErr === UPLOAD_ERR_OK && is_uploaded_file($fTmp)) {
+                        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+                        $mime = finfo_file($finfo, $fTmp);
+                        finfo_close($finfo);
+                        
+                        if (strpos($mime, 'image/') === 0) {
+                            $ext = pathinfo($fname, PATHINFO_EXTENSION) ?: 'jpg';
+                            $ext = preg_replace('/[^a-zA-Z0-9]/', '', $ext);
+                            $newName = 'var_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+                            $dest = $uploadDir . $newName;
+                            
+                            if (move_uploaded_file($fTmp, $dest)) {
+                                $variantImages[] = $newName;
+                            }
+                        }
                     }
                 }
             }
+            
+            $vImagesJson = !empty($variantImages) ? json_encode($variantImages) : '[]';
+            $vFirstImage = !empty($variantImages) ? $variantImages[0] : null;
 
             if ($vId > 0) {
-                // Update
-                $stmtUpdate->execute([$vName, $vPrice, $vStock, $vSku, $vImage, $vId, $id]);
+                // Update existing variant
+                $stmtUpdate->execute([$vName, $vPrice, $vStock, $vSku, $vFirstImage, $vImagesJson, $vCustomTitle, $vCustomDesc, $vShortDesc, $vIngredients, $vHowToUse, $vMetaTitle, $vMetaDesc, $vId, $id]);
+                $variantId = $vId;
             } else {
-                // Insert
-                $stmtInsert->execute([$id, $vName, $vPrice, $vStock, $vSku, $vImage]);
+                // Insert new variant
+                $stmtInsert->execute([$id, $vName, $vPrice, $vStock, $vSku, $vFirstImage, $vImagesJson, $vCustomTitle, $vCustomDesc, $vShortDesc, $vIngredients, $vHowToUse, $vMetaTitle, $vMetaDesc]);
+                $variantId = (int)$pdo->lastInsertId();
+            }
+            
+            // Handle Variant FAQs
+            if ($variantId > 0) {
+                // Delete existing FAQs for this variant
+                $stmtDeleteFaqs->execute([$variantId]);
+                
+                // Insert new/updated FAQs
+                if (!empty($v['faqs']) && is_array($v['faqs'])) {
+                    foreach ($v['faqs'] as $faqIdx => $faq) {
+                        $question = trim($faq['question'] ?? '');
+                        $answer = trim($faq['answer'] ?? '');
+                        
+                        if ($question && $answer) {
+                            $stmtInsertFaq->execute([$variantId, $question, $answer, $faqIdx]);
+                        }
+                    }
+                }
             }
         }
     }

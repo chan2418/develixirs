@@ -298,7 +298,14 @@ try {
         );
     }
     if ($hasCurrency) {
-        $addField('currency', ':currency', $currency);
+        $addField('currency', ':currency', 'INR');
+    }
+    // Variant Label & Main Variant Name
+    if (in_array('variant_label', $productCols, true)) {
+        $addField('variant_label', ':variant_label', trim($_POST['variant_label'] ?? 'Size'));
+    }
+    if (in_array('main_variant_name', $productCols, true)) {
+        $addField('main_variant_name', ':main_variant_name', trim($_POST['main_variant_name'] ?? '') ?: null);
     }
 
     // NEW: save main + sub category (if columns exist)
@@ -328,10 +335,6 @@ try {
     }
     if ($hasIsFeatured) {
         $addField('is_featured', ':is_featured', 0);
-    }
-    // NEW: variant_label
-    if (in_array('variant_label', $productCols, true)) {
-        $addField('variant_label', ':variant_label', $_POST['variant_label'] ?? 'Size');
     }
     if ($hasMetaTitle) {
         $addField('meta_title', ':meta_title', $meta_title ?: null);
@@ -392,8 +395,8 @@ try {
     if (!empty($variantsRaw) && is_array($variantsRaw) && $newId > 0) {
         try {
             $stmtVar = $pdo->prepare("
-                INSERT INTO product_variants (product_id, variant_name, price, stock, sku, custom_title, custom_description, images, image, is_active)
-                VALUES (:pid, :name, :price, :stock, :sku, :custom_title, :custom_desc, :images, :image, 1)
+                INSERT INTO product_variants (product_id, variant_name, price, stock, sku, custom_title, custom_description, short_description, ingredients, how_to_use, meta_title, meta_description, images, image, is_active)
+                VALUES (:pid, :name, :price, :stock, :sku, :custom_title, :custom_desc, :short_desc, :ingredients, :how_to_use, :meta_title, :meta_desc, :images, :image, 1)
             ");
             
             // Prepare variant FAQ statement
@@ -409,6 +412,11 @@ try {
                 $vSku   = trim($v['sku'] ?? '');
                 $vCustomTitle = trim($v['custom_title'] ?? '');
                 $vCustomDesc = trim($v['custom_description'] ?? '');
+                $vShortDesc = trim($v['short_description'] ?? '');
+                $vIngredients = trim($v['ingredients'] ?? '');
+                $vHowToUse = trim($v['how_to_use'] ?? '');
+                $vMetaTitle = trim($v['meta_title'] ?? '');
+                $vMetaDesc = trim($v['meta_description'] ?? '');
 
                 if ($vName === '') continue;
 
@@ -444,6 +452,11 @@ try {
                     ':sku'   => $vSku,
                     ':custom_title' => $vCustomTitle ?: null,
                     ':custom_desc'  => $vCustomDesc ?: null,
+                    ':short_desc'   => $vShortDesc ?: null,
+                    ':ingredients'  => $vIngredients ?: null,
+                    ':how_to_use'   => $vHowToUse ?: null,
+                    ':meta_title'   => $vMetaTitle ?: null,
+                    ':meta_desc'    => $vMetaDesc ?: null,
                     ':images' => $imagesJson,
                     ':image'  => $legacyImage,
                 ]);
