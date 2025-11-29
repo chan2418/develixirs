@@ -559,9 +559,9 @@ function renderProductResults($products, $totalPages, $page, $sort) { ?>
                   alt="<?php echo htmlspecialchars($name, ENT_QUOTES); ?>">
 
                 <div class="product-actions">
-                  <span><i class="fa-regular fa-heart"></i></span>
+                  <span class="wishlist-btn" data-product-id="<?php echo $productId; ?>"><i class="fa-regular fa-heart"></i></span>
                   <span><i class="fa-regular fa-eye"></i></span>
-                  <span><i class="fa-solid fa-bag-shopping"></i></span>
+                  <span class="cart-btn" data-product-id="<?php echo $productId; ?>"><i class="fa-solid fa-bag-shopping"></i></span>
                 </div>
               </div>
               <div class="product-info">
@@ -1865,5 +1865,183 @@ ul{
   });
   </script>
 
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 1. Load initial wishlist state
+    fetch('ajax_wishlist.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'action=get_all'
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success && data.ids) {
+            data.ids.forEach(id => {
+                const btn = document.querySelector(`.wishlist-btn[data-product-id="${id}"] i`);
+                if (btn) {
+                    btn.classList.remove('fa-regular');
+                    btn.classList.add('fa-solid');
+                    btn.style.color = 'red';
+                }
+            });
+        }
+    })
+    .catch(err => console.error('Wishlist load error:', err));
+
+    // 2. Handle click
+    document.body.addEventListener('click', function(e) {
+        const btn = e.target.closest('.wishlist-btn');
+        if (!btn) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        const productId = btn.getAttribute('data-product-id');
+        const icon = btn.querySelector('i');
+
+        fetch('ajax_wishlist.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `action=toggle&product_id=${productId}`
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                if (data.status === 'added') {
+                    icon.classList.remove('fa-regular');
+                    icon.classList.add('fa-solid');
+                    icon.style.color = 'red';
+                } else {
+                    icon.classList.remove('fa-solid');
+                    icon.classList.add('fa-regular');
+                    icon.style.color = '';
+                }
+                
+                // Update header count if exists
+                // const countEl = document.querySelector('.wishlist-count');
+                // if(countEl) countEl.textContent = data.count;
+            } else {
+                alert(data.message || 'Error updating wishlist');
+            }
+        })
+        .catch(err => console.error('Wishlist toggle error:', err));
+    });
+});
+</script>
+
+<script>
+// Cart functionality
+document.addEventListener('DOMContentLoaded', function() {
+    // Create toast container if it doesn't exist
+    if (!document.getElementById('toast-container')) {
+        const toastContainer = document.createElement('div');
+        toastContainer.id = 'toast-container';
+        toastContainer.style.cssText = 'position:fixed;top:80px;right:20px;z-index:9999;';
+        document.body.appendChild(toastContainer);
+    }
+
+    function showToast(message, type = 'success') {
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            background: ${type === 'success' ? '#4CAF50' : '#f44336'};
+            color: white;
+            padding: 16px 24px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: slideIn 0.3s ease;
+            font-size: 14px;
+        `;
+        toast.innerHTML = `
+            <i class="fa-solid fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
+            <span>${message}</span>
+        `;
+        
+        document.getElementById('toast-container').appendChild(toast);
+        
+        setTimeout(() => {
+            toast.style.animation = 'slideOut 0.3s ease';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+
+    // Add animation styles
+    if (!document.getElementById('toast-styles')) {
+        const style = document.createElement('style');
+        style.id = 'toast-styles';
+        style.textContent = `
+            @keyframes slideIn {
+                from { transform: translateX(400px); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            @keyframes slideOut {
+                from { transform: translateX(0); opacity: 1; }
+                to { transform: translateX(400px); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    document.body.addEventListener('click', function(e) {
+        const btn = e.target.closest('.cart-btn');
+        if (!btn) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        const productId = btn.getAttribute('data-product-id');
+        const icon = btn.querySelector('i');
+
+        // Show adding animation
+        const originalColor = icon.style.color;
+        icon.style.color = '#4CAF50';
+
+        fetch('ajax_cart.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `action=add&product_id=${productId}&quantity=1`
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                // Show success toast
+                showToast('Product added to cart successfully!', 'success');
+                
+                // Update navbar count
+                const cartCountEl = document.querySelector('.cart-count');
+                if (cartCountEl) {
+                    cartCountEl.textContent = data.count;
+                    cartCountEl.style.display = data.count > 0 ? 'flex' : 'none';
+                }
+                
+                // Update navbar total
+                const cartTotalEls = document.querySelectorAll('.icon-btn span:last-child');
+                cartTotalEls.forEach(el => {
+                    if (el.textContent.includes('₹')) {
+                        el.textContent = '₹' + data.total.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                    }
+                });
+                
+                // Show success feedback
+                setTimeout(() => {
+                    icon.style.color = originalColor;
+                }, 500);
+            } else {
+                showToast(data.message || 'Error adding to cart', 'error');
+                icon.style.color = originalColor;
+            }
+        })
+        .catch(err => {
+            console.error('Cart add error:', err);
+            showToast('Error adding to cart', 'error');
+            icon.style.color = originalColor;
+        });
+    });
+});
+</script>
 </body>
 </html>

@@ -38,6 +38,39 @@ try {
 $isLoggedIn = isset($_SESSION['user_id']);
 $userName   = $isLoggedIn ? ($_SESSION['user_name'] ?? 'User') : null;
 $userLetter = $isLoggedIn ? strtoupper(substr($userName, 0, 1)) : null;
+
+// --- WISHLIST COUNT ---
+$wishlistCount = 0;
+if ($isLoggedIn) {
+    try {
+        $stmtWishlist = $pdo->prepare("SELECT COUNT(*) FROM wishlist WHERE user_id = ?");
+        $stmtWishlist->execute([$_SESSION['user_id']]);
+        $wishlistCount = (int)$stmtWishlist->fetchColumn();
+    } catch (PDOException $e) {
+        $wishlistCount = 0;
+    }
+}
+
+// --- CART COUNT AND TOTAL ---
+$cartCount = 0;
+$cartTotal = 0;
+if ($isLoggedIn) {
+    try {
+        $stmtCart = $pdo->prepare("
+            SELECT COUNT(*) as count, COALESCE(SUM(p.price * c.quantity), 0) as total
+            FROM cart c
+            JOIN products p ON c.product_id = p.id
+            WHERE c.user_id = ?
+        ");
+        $stmtCart->execute([$_SESSION['user_id']]);
+        $cartData = $stmtCart->fetch(PDO::FETCH_ASSOC);
+        $cartCount = (int)$cartData['count'];
+        $cartTotal = (float)$cartData['total'];
+    } catch (PDOException $e) {
+        $cartCount = 0;
+        $cartTotal = 0;
+    }
+}
 ?>
 <link rel="stylesheet" href="assets/css/navbar.css">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -80,7 +113,7 @@ $userLetter = $isLoggedIn ? strtoupper(substr($userName, 0, 1)) : null;
       <li><a href="product.php">Product</a><span class="plus">+</span></li>
       <li><a href="#">Blog</a><span class="plus">+</span></li>
       <li><a href="#">Contact</a><span class="plus">+</span></li>
-      <li><a href="#">Wishlist (0)</a></li>
+      <li><a href="my-profile.php?tab=wishlist">Wishlist (<?php echo $wishlistCount; ?>)</a></li>
       
       <?php if ($isLoggedIn): ?>
         <li><a href="users.php">Users</a></li>
@@ -191,14 +224,21 @@ $userLetter = $isLoggedIn ? strtoupper(substr($userName, 0, 1)) : null;
     </form>
 
     <div class="header-icons">
-      <div class="icon-btn">
-        <i class="fa-regular fa-heart"></i>
-      </div>
-      <div class="icon-btn">
-        <i class="fa-solid fa-bag-shopping"></i>
-        <span class="cart-count">0</span>
-        <span>$0.00</span>
-      </div>
+      <a href="my-profile.php?tab=wishlist" class="icon-btn" style="position:relative;">
+        <i class="fa-regular fa-heart" style="font-size:22px;"></i>
+        <?php if ($wishlistCount > 0): ?>
+          <span style="position:absolute;top:-6px;right:-6px;background:#ff4d4d;color:#fff;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;"><?php echo $wishlistCount; ?></span>
+        <?php endif; ?>
+      </a>
+      <a href="cart.php" class="icon-btn" style="position:relative;">
+        <i class="fa-solid fa-bag-shopping" style="font-size:22px;"></i>
+        <?php if ($cartCount > 0): ?>
+          <span class="cart-count" style="position:absolute;top:-6px;right:-6px;background:#ff4d4d;color:#fff;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;"><?php echo $cartCount; ?></span>
+        <?php else: ?>
+          <span class="cart-count" style="display:none;">0</span>
+        <?php endif; ?>
+        <span style="margin-left:8px;">₹<?php echo number_format($cartTotal, 2); ?></span>
+      </a>
     </div>
   </div>
 </header>
@@ -349,9 +389,9 @@ $userLetter = $isLoggedIn ? strtoupper(substr($userName, 0, 1)) : null;
     <i class="fa-solid fa-cart-shopping"></i>
     <span>Cart (0)</span>
   </a>
-  <a href="#">
+  <a href="my-profile.php?tab=wishlist">
     <i class="fa-regular fa-heart"></i>
-    <span>Wishlist (0)</span>
+    <span>Wishlist (<?php echo $wishlistCount; ?>)</span>
   </a>
 
   <?php if ($isLoggedIn): ?>
