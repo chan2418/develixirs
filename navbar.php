@@ -111,8 +111,8 @@ if ($isLoggedIn) {
       <li class="active"><a href="index.php">Home</a><span class="plus">+</span></li>
       <li><a href="#">Shop</a><span class="plus">+</span></li>
       <li><a href="product.php">Product</a><span class="plus">+</span></li>
-      <li><a href="#">Blog</a><span class="plus">+</span></li>
-      <li><a href="#">Contact</a><span class="plus">+</span></li>
+      <li><a href="blog.php">Blog</a><span class="plus">+</span></li>
+      <li><a href="contact.php">Contact</a><span class="plus">+</span></li>
       <li><a href="my-profile.php?tab=wishlist">Wishlist (<?php echo $wishlistCount; ?>)</a></li>
       
       <?php if ($isLoggedIn): ?>
@@ -366,8 +366,8 @@ if ($isLoggedIn) {
         </div>
       </li>
 
-      <li><a href="#">Blog</a></li>
-      <li><a href="#">Contact</a></li>
+      <li><a href="blog.php">Blog</a></li>
+      <li><a href="contact.php">Contact</a></li>
 
       <?php if ($isLoggedIn): ?>
         <li><a href="my-profile.php">My Account</a></li>
