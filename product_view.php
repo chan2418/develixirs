@@ -1,6 +1,10 @@
 <?php
 // product_view.php
 
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
@@ -197,6 +201,22 @@ try {
     $sidebarBanner = null;
 }
 
+// Fetch Product Tags
+$productTags = [];
+try {
+    $stmtTags = $pdo->prepare("
+        SELECT t.id, t.name 
+        FROM tags t
+        JOIN product_tags pt ON t.id = pt.tag_id
+        WHERE pt.product_id = ?
+        ORDER BY t.name ASC
+    ");
+    $stmtTags->execute([$productId]);
+    $productTags = $stmtTags->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    $productTags = [];
+}
+
 // Images
 $imageList = parse_product_images($product['images'] ?? '');
 if (empty($imageList)) {
@@ -211,6 +231,7 @@ $thumbImages = array_slice($imageList, 1, 3); // max 3 thumbs
 <head>
   <meta charset="UTF-8" />
   <title>Devilixirs – <?php echo htmlspecialchars($productName, ENT_QUOTES); ?></title>
+  <meta name="description" content="<?php echo htmlspecialchars($shortDesc ?: $productName, ENT_QUOTES); ?>" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <!-- Google Font -->
@@ -357,12 +378,12 @@ ul{ list-style:none; }
 
 /* ============== MAIN PRODUCT SECTION ============== */
 .page-wrap{
-  max-width:1200px;
-  margin:0 auto 60px;
-  padding:0 15px;
+  max-width:1280px;
+  margin:50px auto 70px;
+  padding:0 20px;
   display:grid;
-  grid-template-columns:3fr 2fr;
-  gap:40px;
+  grid-template-columns:1.2fr 1fr;
+  gap:50px;
   animation:fadeInUp .6s ease;
 }
 
@@ -374,14 +395,15 @@ ul{ list-style:none; }
 .product-media{
   background:#fff;
   border:1px solid var(--border);
-  border-radius:12px;
-  padding:18px;
+  border-radius:16px;
+  padding:24px;
   box-shadow:var(--shadow-md);
-  transition:all .3s ease;
+  transition:all .4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .product-media:hover{
-  box-shadow:var(--shadow-lg);
-  transform:translateY(-4px);
+  box-shadow:var(--shadow-xl);
+  transform:translateY(-2px);
+  border-color:#d0d0d0;
 }
 
 /* Main Image Wrapper with Navigation */
@@ -397,6 +419,64 @@ ul{ list-style:none; }
   overflow:hidden;
   position:relative;
 }
+
+/* Variant Cards CSS */
+.variant-options-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 16px;
+}
+.variant-card {
+  border: 2px solid #e8e8e8;
+  border-radius: 16px;
+  padding: 22px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: #fff;
+  text-align: left;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 130px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+}
+.variant-card:hover {
+  border-color: #c0c0c0;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.1);
+  transform: translateY(-4px);
+}
+.variant-card.active {
+  border: 2.5px solid #3B502C;
+  background: linear-gradient(135deg, #fafef9 0%, #ffffff 100%);
+  box-shadow: 0 8px 20px rgba(59,80,44,0.15);
+}
+.variant-name {
+  font-weight: 700;
+  font-size: 17px;
+  margin-bottom: 10px;
+  color: #222;
+  letter-spacing: 0.01em;
+}
+.variant-price-row {
+  margin-bottom: 10px;
+}
+.variant-current-price {
+  font-weight: 800;
+  font-size: 24px;
+  color: #A41B42;
+}
+.variant-stock {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2e7d32;
+  margin-top: auto;
+  font-style: italic;
+}
+.variant-stock.out-stock {
+  color: #d32f2f;
+}
 .product-main-image::after{
   content:"";
   position:absolute;
@@ -411,7 +491,9 @@ ul{ list-style:none; }
   transition:all .5s ease;
 }
 .product-main-image:hover img{
-  transform:scale(1.05);
+  /* transform:scale(1.05); Removed for JS Zoom */
+  transition: none;
+  cursor: crosshair;
 }
 
 /* Navigation Arrows */
@@ -476,6 +558,37 @@ ul{ list-style:none; }
   color: #333;
 }
 
+/* Fullscreen Mode Styles */
+.product-main-image-wrapper:fullscreen {
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+.product-main-image-wrapper:fullscreen .product-main-image {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.product-main-image-wrapper:fullscreen img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  transform: none !important;
+  cursor: default;
+}
+.product-main-image-wrapper:fullscreen .fullscreen-btn {
+  display: none;
+}
+
 /* Thumbnail Gallery */
 .thumb-gallery{
   margin-top:16px;
@@ -527,23 +640,33 @@ ul{ list-style:none; }
 .product-summary{
   background:#fff;
   border:1px solid var(--border);
-  border-radius:12px;
-  padding:22px 24px 24px;
+  border-radius:16px;
+  padding:30px;
   box-shadow:var(--shadow-md);
-  transition:all .3s ease;
+  transition:all .4s cubic-bezier(0.4, 0, 0.2, 1);
+  position:sticky;
+  top:20px;
 }
 .product-summary:hover{
-  box-shadow:var(--shadow-lg);
+  box-shadow:var(--shadow-xl);
+  border-color:#d0d0d0;
 }
 .product-title{
-  font-size:20px;
-  letter-spacing:.1em;
-  text-transform:uppercase;
-  margin-bottom:10px;
+  font-size:24px;
+  letter-spacing:.05em;
+  font-weight:700;
+  line-height:1.3;
+  margin-bottom:16px;
   background:linear-gradient(135deg, var(--highlight) 0%, var(--berry) 100%);
   -webkit-background-clip:text;
   -webkit-text-fill-color:transparent;
   background-clip:text;
+  animation:titleGlow 3s ease-in-out infinite;
+}
+
+@keyframes titleGlow {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.1); }
 }
 .product-meta{
   font-size:12px;
@@ -572,11 +695,14 @@ ul{ list-style:none; }
 }
 
 .price{
-  font-size:22px;
-  font-weight:700;
+  font-size:32px;
+  font-weight:800;
   color:var(--berry);
-  margin-bottom:16px;
-  animation:priceGlow 2s ease infinite;
+  margin:20px 0;
+  padding:16px 0;
+  border-top:2px solid #f0f0f0;
+  border-bottom:2px solid #f0f0f0;
+  animation:priceGlow 3s ease infinite;
 }
 .price .old-price{
   font-size:15px;
@@ -731,22 +857,40 @@ ul{ list-style:none; }
 
 .btn-add-cart{
   margin-left:10px;
-  padding:10px 32px;
+  padding:14px 36px;
   border:none;
   background:linear-gradient(135deg, var(--berry) 0%, var(--berry-dark) 100%);
   color:#fff;
-  font-size:13px;
+  font-size:14px;
+  font-weight:700;
   text-transform:uppercase;
   letter-spacing:.12em;
+  border-radius:8px;
   cursor:pointer;
-  border-radius:6px;
   box-shadow:var(--shadow-md);
-  transition:all .3s ease;
-  font-weight:600;
+  transition:all .4s cubic-bezier(0.4, 0, 0.2, 1);
+  position:relative;
+  overflow:hidden;
+}
+.btn-add-cart::before{
+  content:"";
+  position:absolute;
+  top:50%;
+  left:50%;
+  width:0;
+  height:0;
+  border-radius:50%;
+  background:rgba(255,255,255,.2);
+  transform:translate(-50%, -50%);
+  transition:width .6s, height .6s;
+}
+.btn-add-cart:hover::before{
+  width:300px;
+  height:300px;
 }
 .btn-add-cart:hover{
-  transform:translateY(-2px);
-  box-shadow:var(--shadow-lg);
+  transform:translateY(-3px);
+  box-shadow:var(--shadow-xl);
   background:linear-gradient(135deg, var(--berry-dark) 0%, var(--berry) 100%);
 }
 .btn-add-cart:active{
@@ -784,49 +928,58 @@ ul{ list-style:none; }
   transform:translateY(-2px);
   box-shadow:var(--shadow-md);
 }
+.share-btn.whatsapp:hover { color: #25D366; border-color: #25D366; background: rgba(37, 211, 102, 0.1); }
+.share-btn.instagram:hover { color: #E1306C; border-color: #E1306C; background: rgba(225, 48, 108, 0.1); }
+.share-btn.facebook:hover { color: #1877F2; border-color: #1877F2; background: rgba(24, 119, 242, 0.1); }
+.share-btn.twitter:hover { color: #000000; border-color: #000000; background: rgba(0, 0, 0, 0.1); }
 
 /* ============== DESCRIPTION TABS & SIDEBAR ============== */
 .tabs-area{
-    max-width:1200px;
-    margin:0 auto 50px;
-    padding:0 15px;
-    display:grid;
-    grid-template-columns:3fr 1.4fr;
-    gap:30px;
+  max-width:1280px;
+  margin:60px auto;
+  padding:0 20px;
+  display:grid;
+  grid-template-columns:2.5fr 1fr;
+  gap:40px;
+  animation:fadeInUp .8s ease;
 }
 .tabs-card{
-    background:#fff;
-    border:1px solid var(--border);
-    border-radius:12px;
-    overflow:hidden;
-    box-shadow:var(--shadow-md);
-    transition:all .3s ease;
+  background:#fff;
+  border:1px solid var(--border);
+  border-radius:16px;
+  box-shadow:var(--shadow-md);
+  overflow:hidden;
+  transition:all .4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .tabs-card:hover{
-    box-shadow:var(--shadow-lg);
+  box-shadow:var(--shadow-xl);
+  border-color:#d0d0d0;
 }
 .tabs-header{
-    display:flex;
-    border-bottom:1px solid var(--border);
-    background:linear-gradient(135deg, #fafafa 0%, #f0f0f0 100%);
-    overflow-x:auto;
-    overflow-y:hidden;
-    -webkit-overflow-scrolling:touch;
-    scrollbar-width:none;
+  display:flex;
+  border-bottom:2px solid #f0f0f0;
+  background:linear-gradient(to bottom, #fafafa, #ffffff);
+  padding:0;
+  overflow-x:auto;
+  overflow-y:hidden;
+  scrollbar-width:none;
 }
 .tabs-header::-webkit-scrollbar{
     display:none;
 }
 .tab-item{
-    padding:12px 20px;
-    font-size:13px;
-    font-weight:500;
-    letter-spacing:.08em;
-    transition:all .25s ease;
+    flex:1;
+    padding:18px 24px;
+    text-align:center;
+    font-size:15px;
+    font-weight:600;
     cursor:pointer;
-    white-space:nowrap;
-    flex-shrink:0;
+    border:none;
+    transition:all .4s cubic-bezier(0.4, 0, 0.2, 1);
+    color:var(--muted);
+    background:transparent;
     position:relative;
+    overflow:hidden;
 }
 .tab-item::after{
     content:"";
@@ -834,8 +987,8 @@ ul{ list-style:none; }
     bottom:0;
     left:50%;
     width:0;
-    height:2px;
-    background:var(--highlight);
+    height:3px;
+    background:linear-gradient(90deg, var(--highlight) 0%, var(--berry) 100%);
     transition:all .3s ease;
     transform:translateX(-50%);
 }
@@ -1277,35 +1430,7 @@ input:focus{
   <?php include __DIR__ . '/navbar.php'; ?>
 
   <!-- HERO / BREADCRUMB -->
-  <section class="product-hero">
-    <div class="product-hero-inner">
-      <h1><?php echo htmlspecialchars($productName, ENT_QUOTES); ?></h1>
-      <div class="breadcrumb">
-        <a href="index.php">Home</a><span>&rsaquo;</span>
-        <a href="product.php">Shop</a>
-        <?php if (!empty($categoryName)): ?>
-          <span>&rsaquo;</span>
-          <a href="product.php?category[]=<?php echo urlencode($categoryName); ?>">
-            <?php echo htmlspecialchars($categoryName, ENT_QUOTES); ?>
-          </a>
-        <?php endif; ?>
-        <span>&rsaquo;</span>
-        <span><?php echo htmlspecialchars($productName, ENT_QUOTES); ?></span>
-      </div>
 
-      <div class="hero-cats">
-        <?php if (!empty($categoryName)): ?>
-          <div class="hero-cat">
-            <i class="fa-solid fa-leaf"></i>
-            <span>
-              <?php echo htmlspecialchars($categoryName, ENT_QUOTES); ?>
-              <small>(Herbal)</small>
-            </span>
-          </div>
-        <?php endif; ?>
-      </div>
-    </div>
-  </section>
 
   <!-- MAIN PRODUCT SECTION -->
   <section class="page-wrap">
@@ -1390,7 +1515,7 @@ input:focus{
       <?php if (!empty($variants)): ?>
         <div class="mb-4">
           <div class="option-label">Select <?php echo htmlspecialchars($product['variant_label'] ?? 'Size'); ?></div>
-          <div class="size-options flex flex-wrap gap-2">
+          <div class="variant-options-grid">
             <?php foreach ($variants as $idx => $v): 
               // Prepare variant data
               $vImages = !empty($v['images']) ? json_decode($v['images'], true) : [];
@@ -1404,8 +1529,7 @@ input:focus{
               
               $vFaqs = $variantFaqs[$v['id']] ?? [];
             ?>
-              <button type="button" 
-                      class="size-btn <?php echo $idx === 0 ? 'active' : ''; ?>"
+              <div class="variant-card <?php echo $idx === 0 ? 'active' : ''; ?>"
                       data-id="<?php echo $v['id']; ?>"
                       data-price="<?php echo $v['price']; ?>"
                       data-stock="<?php echo $v['stock']; ?>"
@@ -1414,10 +1538,24 @@ input:focus{
                       data-custom-title="<?php echo htmlspecialchars($v['custom_title'] ?? '', ENT_QUOTES); ?>"
                       data-custom-description="<?php echo htmlspecialchars($v['custom_description'] ?? '', ENT_QUOTES); ?>"
                       data-short-description="<?php echo htmlspecialchars($v['short_description'] ?? '', ENT_QUOTES); ?>"
+                      data-ingredients="<?php echo htmlspecialchars($v['ingredients'] ?? '', ENT_QUOTES); ?>"
+                      data-how-to-use="<?php echo htmlspecialchars($v['how_to_use'] ?? '', ENT_QUOTES); ?>"
+                      data-meta-title="<?php echo htmlspecialchars($v['meta_title'] ?? '', ENT_QUOTES); ?>"
+                      data-meta-description="<?php echo htmlspecialchars($v['meta_description'] ?? '', ENT_QUOTES); ?>"
                       data-images="<?php echo htmlspecialchars(json_encode($vImagesUrls), ENT_QUOTES); ?>"
                       data-faqs="<?php echo htmlspecialchars(json_encode($vFaqs), ENT_QUOTES); ?>">
-                <?php echo htmlspecialchars($v['variant_name']); ?>
-              </button>
+                
+                <div class="variant-name"><?php echo htmlspecialchars($v['variant_name']); ?></div>
+                
+                <div class="variant-price-row">
+                  <span class="variant-current-price">₹<?php echo number_format($v['price']); ?></span>
+                </div>
+                
+                <div class="variant-stock <?php echo ($v['stock'] <= 0) ? 'out-stock' : ''; ?>">
+                  <?php echo ($v['stock'] > 0) ? 'In stock' : 'Out of stock'; ?>
+                </div>
+
+              </div>
             <?php endforeach; ?>
           </div>
           <input type="hidden" id="selectedVariantId" name="variant_id" value="<?php echo $variants[0]['id']; ?>">
@@ -1427,7 +1565,7 @@ input:focus{
       <!-- JS for Variants with Dynamic Switching -->
       <script>
         document.addEventListener("DOMContentLoaded", function() {
-          const variantBtns = document.querySelectorAll('.size-btn');
+          const variantBtns = document.querySelectorAll('.variant-card');
           const priceDisplay = document.querySelector('.price');
           const stockDisplay = document.querySelector('.stock');
           const variantInput = document.getElementById('selectedVariantId');
@@ -1436,6 +1574,10 @@ input:focus{
           const defaultData = {
             title: '<?php echo addslashes($productName); ?>',
             description: `<?php echo addslashes($longDescription); ?>`,
+            ingredients: `<?php echo addslashes($ingredientsText); ?>`,
+            howToUse: `<?php echo addslashes($howToUseText); ?>`,
+            metaTitle: `<?php echo addslashes($productName); ?>`, // Default to product name
+            metaDescription: `<?php echo addslashes($shortDesc); ?>`, // Default to short desc
             images: <?php echo json_encode($imageList); ?>.map(img => img.startsWith('/') ? img : '/' + img),
             faqs: <?php echo json_encode($faqs); ?>
           };
@@ -1453,8 +1595,11 @@ input:focus{
 
             // Function to update all content dynamically
             function updateVariant(btn) {
-              console.log('=== Updating Variant ===');
-              console.log('Button dataset:', btn.dataset);
+              
+              // Define tab elements
+              const descTab = document.getElementById('tab-desc');
+              const ingTab = document.getElementById('tab-ing');
+              const useTab = document.getElementById('tab-use');
               
               // Update active class
               variantBtns.forEach(b => b.classList.remove('active'));
@@ -1464,27 +1609,22 @@ input:focus{
               const customTitle = btn.dataset.customTitle || defaultData.title;
               const customDesc = btn.dataset.customDescription || defaultData.description;
               const shortDesc = btn.dataset.shortDescription || '';
+              const ingredients = btn.dataset.ingredients || defaultData.ingredients;
+              const howToUse = btn.dataset.howToUse || defaultData.howToUse;
+              const metaTitle = btn.dataset.metaTitle || defaultData.metaTitle;
+              const metaDescription = btn.dataset.metaDescription || defaultData.metaDescription;
               const variantImages = safeParse(btn.dataset.images, defaultData.images);
               const variantFaqs = safeParse(btn.dataset.faqs, defaultData.faqs);
-
-              console.log('Custom Title:', customTitle);
-              console.log('Short Description:', shortDesc);
-              console.log('Variant Images:', variantImages);
-              console.log('Default Images:', defaultData.images);
 
               // Update Title (both locations!)
               const titleElement = document.querySelector('.product-hero h1');
               const productTitleElement = document.querySelector('.product-title');
-              console.log('Title Element:', titleElement);
-              console.log('Product Title Element:', productTitleElement);
               
               if (titleElement && customTitle) {
                 titleElement.textContent = customTitle;
-                console.log('Hero title updated to:', customTitle);
               }
               if (productTitleElement && customTitle) {
                 productTitleElement.textContent = customTitle;
-                console.log('Product title updated to:', customTitle);
               }
 
               // Update Short Description
@@ -1499,9 +1639,37 @@ input:focus{
               }
 
               // Update Description (in tab content)
-              const descTab = document.querySelector('#tab-desc');
               if (descTab && customDesc) {
                 descTab.innerHTML = '<h3>Description</h3><p>' + customDesc.replace(/\n/g, '<br>') + '</p>';
+              }
+
+              // Update Ingredients (already declared above)
+              if (ingTab) {
+                if (ingredients) {
+                  ingTab.innerHTML = '<h3>Ingredients</h3><p>' + ingredients.replace(/\n/g, '<br>') + '</p>';
+                } else {
+                  ingTab.innerHTML = '<h3>Ingredients</h3><p>Ingredients information will be updated soon.</p>';
+                }
+              }
+
+              // Update How to Use (already declared above)
+              if (useTab) {
+                if (howToUse) {
+                  useTab.innerHTML = '<h3>How to use</h3><p>' + howToUse.replace(/\n/g, '<br>') + '</p>';
+                } else {
+                  useTab.innerHTML = '<h3>How to use</h3><p>Usage instructions will be updated soon.</p>';
+                }
+              }
+
+              // Update SEO Title & Description
+              if (metaTitle) {
+                document.title = 'Devilixirs – ' + metaTitle;
+              }
+              if (metaDescription) {
+                const metaDescTag = document.querySelector('meta[name="description"]');
+                if (metaDescTag) {
+                  metaDescTag.setAttribute('content', metaDescription);
+                }
               }
 
               // Update Images with fallback
@@ -1509,7 +1677,6 @@ input:focus{
               if (!finalImages || finalImages.length === 0) {
                 finalImages = defaultData.images;
               }
-              console.log('Final Images to update:', finalImages);
               updateImageGallery(finalImages);
 
               // Update FAQs
@@ -1626,6 +1793,32 @@ input:focus{
             });
           }
         });
+
+
+        // Image Zoom Logic
+        const mainImageContainer = document.querySelector('.product-main-image');
+        const mainImage = document.getElementById('mainProductImage');
+
+        if (mainImageContainer && mainImage) {
+          mainImageContainer.addEventListener('mousemove', function(e) {
+            const { left, top, width, height } = mainImageContainer.getBoundingClientRect();
+            const x = e.clientX - left;
+            const y = e.clientY - top;
+            
+            // Calculate percentage position
+            const xPercent = (x / width) * 100;
+            const yPercent = (y / height) * 100;
+
+            // Set transform origin to mouse position
+            mainImage.style.transformOrigin = `${xPercent}% ${yPercent}%`;
+            mainImage.style.transform = 'scale(2)'; // Zoom level 2x
+          });
+
+          mainImageContainer.addEventListener('mouseleave', function() {
+            mainImage.style.transformOrigin = 'center center';
+            mainImage.style.transform = 'scale(1)';
+          });
+        }
       </script>
 
       <!-- Quantity + Add to cart -->
@@ -1645,10 +1838,10 @@ input:focus{
       <!-- Share -->
       <div class="share-row">
         <span class="label">Share:</span>
-        <button class="share-btn"><i class="fa-brands fa-x-twitter"></i> Tweet</button>
-        <button class="share-btn"><i class="fa-brands fa-facebook-f"></i> Share</button>
-        <button class="share-btn"><i class="fa-brands fa-google-plus-g"></i> Google+</button>
-        <button class="share-btn"><i class="fa-brands fa-pinterest-p"></i> Pinterest</button>
+        <button class="share-btn whatsapp"><i class="fa-brands fa-whatsapp"></i> WhatsApp</button>
+        <button class="share-btn instagram"><i class="fa-brands fa-instagram"></i> Instagram</button>
+        <button class="share-btn facebook"><i class="fa-brands fa-facebook-f"></i> Facebook</button>
+        <button class="share-btn twitter"><i class="fa-brands fa-x-twitter"></i> Tweet</button>
       </div>
     </div>
   </section>
@@ -1662,7 +1855,6 @@ input:focus{
         <div class="tab-item active" data-tab="desc">Description</div>
         <div class="tab-item" data-tab="ing">Ingredients</div>
         <div class="tab-item" data-tab="use">How to use</div>
-        <div class="tab-item" data-tab="why">Why Devilixirs</div>
         <div class="tab-item" data-tab="why">Why Devilixirs</div>
       </div>
 
@@ -1723,16 +1915,16 @@ input:focus{
 
     <!-- Right Sidebar -->
     <div class="right-sidebar">
+      <?php if (!empty($productTags)): ?>
       <div class="tags-card">
-        <div class="tags-title">Popular Tags</div>
+        <div class="tags-title">Tags</div>
         <div>
-          <span class="tag-chip">Herbal</span>
-          <span class="tag-chip">Handmade</span>
-          <span class="tag-chip">Hair Care</span>
-          <span class="tag-chip">Skin Care</span>
-          <span class="tag-chip">Devilixirs</span>
+          <?php foreach ($productTags as $tag): ?>
+            <span class="tag-chip"><?php echo htmlspecialchars($tag['name'], ENT_QUOTES); ?></span>
+          <?php endforeach; ?>
         </div>
       </div>
+      <?php endif; ?>
 
       <?php if (!empty($sidebarBanner)): 
         $bannerSrc = '/assets/uploads/banners/' . ltrim($sidebarBanner['filename'] ?? '', '/');
@@ -1751,6 +1943,36 @@ input:focus{
       <?php endif; ?>
     </div>
   </section>
+
+  <!-- PRODUCT MEDIA GALLERY -->
+  <?php
+  $productMedia = [];
+  if (!empty($product['product_media'])) {
+      $decoded = json_decode($product['product_media'], true);
+      if (is_array($decoded)) {
+          $productMedia = $decoded;
+      }
+  }
+  ?>
+  <?php if (!empty($productMedia)): ?>
+  <section class="product-media-section">
+    <div class="section-title">
+      <h2>Product Gallery</h2>
+    </div>
+    <div class="media-gallery-grid">
+      <?php foreach ($productMedia as $media): ?>
+        <div class="media-item" onclick="window.openLightbox('<?php echo $media['type']; ?>', '/assets/uploads/product_media/<?php echo htmlspecialchars($media['path'], ENT_QUOTES); ?>')">
+          <?php if ($media['type'] === 'video'): ?>
+            <video src="/assets/uploads/product_media/<?php echo htmlspecialchars($media['path'], ENT_QUOTES); ?>"></video>
+            <div class="play-icon">▶</div>
+          <?php else: ?>
+            <img src="/assets/uploads/product_media/<?php echo htmlspecialchars($media['path'], ENT_QUOTES); ?>" alt="Product Media">
+          <?php endif; ?>
+        </div>
+      <?php endforeach; ?>
+    </div>
+  </section>
+  <?php endif; ?>
 
   <!-- FAQs SECTION -->
   <?php if (!empty($faqs)): ?>
@@ -1815,6 +2037,66 @@ input:focus{
     </div>
   </section>
 
+  <!-- RELATED PRODUCTS SECTION -->
+  <?php
+  // Fetch Related Products
+  $relatedProducts = [];
+  try {
+      $stmtRelated = $pdo->prepare("
+          SELECT p.id, p.name, p.price, p.compare_price, p.images
+          FROM product_relations pr
+          JOIN products p ON pr.related_product_id = p.id
+          WHERE pr.product_id = ? AND p.is_active = 1
+          LIMIT 10
+      ");
+      $stmtRelated->execute([$productId]);
+      $relatedProducts = $stmtRelated->fetchAll(PDO::FETCH_ASSOC);
+  } catch (Exception $e) {
+      $relatedProducts = [];
+  }
+  ?>
+
+  <?php if (!empty($relatedProducts)): ?>
+  <section class="related-products-section">
+    <div class="container">
+      <h2 class="section-title">Related Products</h2>
+      <div class="related-products-carousel">
+        <?php foreach ($relatedProducts as $rp): 
+          // Get first image from images JSON
+          $rpImage = null;
+          if (!empty($rp['images'])) {
+              $imgs = json_decode($rp['images'], true);
+              if (is_array($imgs) && !empty($imgs)) {
+                  $rpImage = $imgs[0];
+              }
+          }
+          $rpImagePath = !empty($rpImage) ? '/assets/uploads/products/' . htmlspecialchars($rpImage) : '/assets/images/avatar-default.png';
+          
+          $rpPrice = (float)$rp['price'];
+          $rpOldPrice = !empty($rp['compare_price']) && $rp['compare_price'] > $rpPrice ? (float)$rp['compare_price'] : null;
+        ?>
+        <div class="related-product-card">
+          <a href="product_view.php?id=<?php echo $rp['id']; ?>" class="product-link">
+            <div class="product-image">
+              <img src="<?php echo $rpImagePath; ?>" alt="<?php echo htmlspecialchars($rp['name']); ?>">
+            </div>
+            <div class="product-info">
+              <h3 class="product-name"><?php echo htmlspecialchars($rp['name']); ?></h3>
+              <div class="product-price">
+                <?php if ($rpOldPrice): ?>
+                  <span class="old-price">₹<?php echo number_format($rpOldPrice, 2); ?></span>
+                <?php endif; ?>
+                <span class="current-price">₹<?php echo number_format($rpPrice, 2); ?></span>
+              </div>
+            </div>
+          </a>
+        </div>
+        <?php endforeach; ?>
+      </div>
+    </div>
+  </section>
+  <?php endif; ?>
+
   <script>
     // ============ Image Gallery Logic ============
     (function() {
@@ -1867,16 +2149,18 @@ input:focus{
       }
       
       // Fullscreen button
-      if (fullscreenBtn) {
+      // Fullscreen button
+      const mainImageWrapper = document.querySelector('.product-main-image-wrapper');
+      if (fullscreenBtn && mainImageWrapper) {
         fullscreenBtn.addEventListener('click', () => {
-          if (mainImage.requestFullscreen) {
-            mainImage.requestFullscreen();
-          } else if (mainImage.webkitRequestFullscreen) {
-            mainImage.webkitRequestFullscreen();
-          } else if (mainImage.mozRequestFullScreen) {
-            mainImage.mozRequestFullScreen();
-          } else if (mainImage.msRequestFullscreen) {
-            mainImage.msRequestFullscreen();
+          if (mainImageWrapper.requestFullscreen) {
+            mainImageWrapper.requestFullscreen();
+          } else if (mainImageWrapper.webkitRequestFullscreen) {
+            mainImageWrapper.webkitRequestFullscreen();
+          } else if (mainImageWrapper.mozRequestFullScreen) {
+            mainImageWrapper.mozRequestFullScreen();
+          } else if (mainImageWrapper.msRequestFullscreen) {
+            mainImageWrapper.msRequestFullscreen();
           }
         });
       }
@@ -1952,6 +2236,193 @@ input:focus{
       margin: 40px auto;
       padding: 0 20px;
     }
+
+    /* Product Media Gallery */
+    .product-media-section {
+      max-width: 1000px; /* Slightly narrower for better reading flow on vertical */
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+    .media-gallery-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 40px;
+      margin-top: 30px;
+    }
+    .media-item {
+      position: relative;
+      border-radius: 16px;
+      overflow: hidden;
+      width: 100%;
+      cursor: pointer;
+      box-shadow: var(--shadow-md);
+      transition: transform 0.3s ease;
+    }
+    .media-item:hover {
+      transform: translateY(-5px);
+      box-shadow: var(--shadow-lg);
+    }
+    .media-item img, .media-item video {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .play-icon {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 50px;
+      height: 50px;
+      background: rgba(0,0,0,0.6);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 24px;
+      pointer-events: none;
+    }
+    
+    /* Lightbox */
+    .lightbox-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.9);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s ease;
+    }
+    .lightbox-overlay.active {
+      opacity: 1;
+      visibility: visible;
+    }
+    .lightbox-content {
+      max-width: 90%;
+      max-height: 90%;
+      position: relative;
+    }
+    .lightbox-content img, .lightbox-content video {
+      max-width: 100%;
+      max-height: 90vh;
+      border-radius: 4px;
+    }
+    .lightbox-close {
+      position: absolute;
+      top: -40px;
+      right: 0;
+      color: white;
+      font-size: 30px;
+      cursor: pointer;
+    }
+
+    /* Related Products Section */
+    .related-products-section {
+      max-width: 1200px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    .related-products-section .section-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 20px;
+      color: #333;
+    }
+    .related-products-carousel {
+      display: flex;
+      gap: 20px;
+      overflow-x: auto;
+      scroll-behavior: smooth;
+      padding: 10px 0;
+      scrollbar-width: thin;
+      scrollbar-color: #ccc #f1f1f1;
+    }
+    .related-products-carousel::-webkit-scrollbar {
+      height: 8px;
+    }
+    .related-products-carousel::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 4px;
+    }
+    .related-products-carousel::-webkit-scrollbar-thumb {
+      background: #ccc;
+      border-radius: 4px;
+    }
+    .related-products-carousel::-webkit-scrollbar-thumb:hover {
+      background: #999;
+    }
+    .related-product-card {
+      flex: 0 0 250px;
+      background: #fff;
+      border: 1px solid #e1e1e1;
+      border-radius: 12px;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+    .related-product-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+      border-color: #3B502C;
+    }
+    .related-product-card .product-link {
+      text-decoration: none;
+      color: inherit;
+      display: block;
+    }
+    .related-product-card .product-image {
+      width: 100%;
+      height: 200px;
+      overflow: hidden;
+      background: #f5f5f5;
+    }
+    .related-product-card .product-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.3s ease;
+    }
+    .related-product-card:hover .product-image img {
+      transform: scale(1.05);
+    }
+    .related-product-card .product-info {
+      padding: 15px;
+    }
+    .related-product-card .product-name {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: #333;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .related-product-card .product-price {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .related-product-card .old-price {
+      text-decoration: line-through;
+      color: #999;
+      font-size: 0.85rem;
+    }
+    .related-product-card .current-price {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #A41B42;
+    }
+
     .review-form-container {
       background: #fff;
       padding: 30px;
@@ -2173,6 +2644,41 @@ input:focus{
         });
       });
     });
+  </script>
+
+  <!-- Lightbox Overlay -->
+  <div id="mediaLightbox" class="lightbox-overlay" onclick="closeLightbox(event)">
+    <div class="lightbox-content">
+      <span class="lightbox-close" onclick="closeLightbox(event)">&times;</span>
+      <div id="lightboxMediaContainer"></div>
+    </div>
+  </div>
+
+  <script>
+    window.openLightbox = function(type, src) {
+      const container = document.getElementById('lightboxMediaContainer');
+      const lightbox = document.getElementById('mediaLightbox');
+      
+      if (type === 'video') {
+        container.innerHTML = `<video src="${src}" controls autoplay class="w-full h-full"></video>`;
+      } else {
+        container.innerHTML = `<img src="${src}" alt="Full View">`;
+      }
+      
+      lightbox.classList.add('active');
+      document.body.style.overflow = 'hidden'; // Prevent scrolling
+    };
+
+    window.closeLightbox = function(e) {
+      if (e.target.classList.contains('lightbox-overlay') || e.target.classList.contains('lightbox-close')) {
+        const lightbox = document.getElementById('mediaLightbox');
+        const container = document.getElementById('lightboxMediaContainer');
+        
+        lightbox.classList.remove('active');
+        container.innerHTML = ''; // Stop video playback
+        document.body.style.overflow = ''; // Restore scrolling
+      }
+    };
   </script>
 
 </body>

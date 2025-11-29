@@ -1369,7 +1369,6 @@ ul{
 <body>
 
   <!-- 🔹 SHARED NAVBAR -->
-  <?php include 'navbar.php'; ?>
 
   <!-- HERO -->
   <section class="shop-hero">

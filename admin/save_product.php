@@ -510,6 +510,84 @@ try {
     }
     /** ========================================================= */
 
+    // ==== Related Products ====
+    if (!empty($_POST['related_products']) && is_array($_POST['related_products'])) {
+        try {
+            $insertRelated = $pdo->prepare("
+                INSERT INTO product_relations (product_id, related_product_id)
+                VALUES (?, ?)
+            ");
+            
+            foreach ($_POST['related_products'] as $relatedId) {
+                $relatedId = (int)$relatedId;
+                if ($relatedId > 0 && $relatedId != $productId) {
+                    $insertRelated->execute([$productId, $relatedId]);
+                }
+            }
+        } catch (Exception $e) {
+            $upload_debug[] = 'related-products-error: ' . $e->getMessage();
+        }
+    }
+
+    // ==== Product Media Gallery Processing ====
+    $productMediaArray = [];
+    if (!empty($_FILES['product_media'])) {
+        $mediaUploadDir = __DIR__ . '/../assets/uploads/product_media/';
+        if (!is_dir($mediaUploadDir)) {
+            mkdir($mediaUploadDir, 0755, true);
+        }
+        
+        $allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+        $allowedVideoTypes = ['video/mp4', 'video/webm'];
+        $allowedTypes = array_merge($allowedImageTypes, $allowedVideoTypes);
+        
+        foreach ($_FILES['product_media']['tmp_name'] as $key => $tmpName) {
+            if (empty($tmpName) || $_FILES['product_media']['error'][$key] !== UPLOAD_ERR_OK) {
+                continue;
+            }
+            
+            $fileType = $_FILES['product_media']['type'][$key];
+            $fileSize = $_FILES['product_media']['size'][$key];
+            
+            // Validate type
+            if (!in_array($fileType, $allowedTypes)) {
+                $upload_debug[] = "media-skip-invalid-type: {$_FILES['product_media']['name'][$key]}";
+                continue;
+            }
+            
+            // Validate size (50MB max)
+            if ($fileSize > 50 * 1024 * 1024) {
+                $upload_debug[] = "media-skip-too-large: {$_FILES['product_media']['name'][$key]}";
+                continue;
+            }
+            
+            $ext = pathinfo($_FILES['product_media']['name'][$key], PATHINFO_EXTENSION);
+            $filename = time() . '_' . uniqid() . '.' . $ext;
+            $destination = $mediaUploadDir . $filename;
+            
+            if (move_uploaded_file($tmpName, $destination)) {
+                $mediaType = in_array($fileType, $allowedImageTypes) ? 'image' : 'video';
+                $productMediaArray[] = [
+                    'type' => $mediaType,
+                    'path' => $filename
+                ];
+                $upload_debug[] = "media-uploaded: $filename";
+            } else {
+                $upload_debug[] = "media-failed: {$_FILES['product_media']['name'][$key]}";
+            }
+        }
+    }
+    
+    // Update product with media if any uploaded
+    if (!empty($productMediaArray)) {
+        try {
+            $updateMedia = $pdo->prepare("UPDATE products SET product_media = ? WHERE id = ?");
+            $updateMedia->execute([json_encode($productMediaArray), $productId]);
+        } catch (Exception $e) {
+            $upload_debug[] = 'media-db-error: ' . $e->getMessage();
+        }
+    }
+
     flash_set('success_msg', 'Product created successfully.');
     flash_set('upload_debug', $upload_debug);
 

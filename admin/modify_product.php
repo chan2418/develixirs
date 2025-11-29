@@ -304,6 +304,22 @@ try {
         ':id'                 => $id,
     ]);
 
+    // ============ HANDLE TAGS (product_tags table) ============
+    // 1. Delete existing tags for this product
+    $pdo->prepare("DELETE FROM product_tags WHERE product_id = ?")->execute([$id]);
+
+    // 2. Insert new tags
+    $tagsInput = $_POST['tags'] ?? [];
+    if (!empty($tagsInput) && is_array($tagsInput)) {
+        $stmtTag = $pdo->prepare("INSERT INTO product_tags (product_id, tag_id) VALUES (?, ?)");
+        foreach ($tagsInput as $tid) {
+            $tid = (int)$tid;
+            if ($tid > 0) {
+                $stmtTag->execute([$id, $tid]);
+            }
+        }
+    }
+
     // ============ HANDLE VARIANTS ============
     // 1. Delete removed variants
     if (!empty($_POST['delete_variant_ids']) && is_array($_POST['delete_variant_ids'])) {
@@ -444,6 +460,112 @@ try {
                 $stmtInsertFaq->execute([$id, $q, $a]);
             }
         }
+    }
+
+    // ==== Update Related Products ====
+    // Delete all existing relations for this product
+    try {
+        $deleteRelated = $pdo->prepare("DELETE FROM product_relations WHERE product_id = ?");
+        $deleteRelated->execute([$id]);
+        
+        // Insert new relations
+        if (!empty($_POST['related_products']) && is_array($_POST['related_products'])) {
+            $insertRelated = $pdo->prepare("
+                INSERT INTO product_relations (product_id, related_product_id)
+                VALUES (?, ?)
+            ");
+            
+            foreach ($_POST['related_products'] as $relatedId) {
+                $relatedId = (int)$relatedId;
+                if ($relatedId > 0 && $relatedId != $id) {
+                    $insertRelated->execute([$id, $relatedId]);
+                }
+            }
+        }
+    } catch (Exception $e) {
+        // Log error but don't fail the whole operation
+        error_log('Related products update error: ' . $e->getMessage());
+    }
+
+    // ==== Product Media Gallery Processing ====
+    // Fetch existing media
+    $existingMedia = [];
+    $stmt = $pdo->prepare("SELECT product_media FROM products WHERE id = ?");
+    $stmt->execute([$id]);
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!empty($result['product_media'])) {
+        $decoded = json_decode($result['product_media'], true);
+        if (is_array($decoded)) {
+            $existingMedia = $decoded;
+        }
+    }
+    
+    // Handle removed media
+    if (!empty($_POST['removed_media']) && is_array($_POST['removed_media'])) {
+        $mediaUploadDir = __DIR__ . '/../assets/uploads/product_media/';
+        foreach ($_POST['removed_media'] as $index) {
+            $index = (int)$index;
+            if (isset($existingMedia[$index])) {
+                // Delete file from server
+                $filePath = $mediaUploadDir . $existingMedia[$index]['path'];
+                if (file_exists($filePath)) {
+                    @unlink($filePath);
+                }
+                // Remove from array
+                unset($existingMedia[$index]);
+            }
+        }
+        // Re-index array
+        $existingMedia = array_values($existingMedia);
+    }
+    
+    // Handle new media uploads
+    $newMediaArray = [];
+    if (!empty($_FILES['product_media'])) {
+        $mediaUploadDir = __DIR__ . '/../assets/uploads/product_media/';
+        if (!is_dir($mediaUploadDir)) {
+            mkdir($mediaUploadDir, 0755, true);
+        }
+        
+        $allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+        $allowedVideoTypes = ['video/mp4', 'video/webm'];
+        $allowedTypes = array_merge($allowedImageTypes, $allowedVideoTypes);
+        
+        foreach ($_FILES['product_media']['tmp_name'] as $key => $tmpName) {
+            if (empty($tmpName) || $_FILES['product_media']['error'][$key] !== UPLOAD_ERR_OK) {
+                continue;
+            }
+            
+            $fileType = $_FILES['product_media']['type'][$key];
+            $fileSize = $_FILES['product_media']['size'][$key];
+            
+            if (!in_array($fileType, $allowedTypes) || $fileSize > 50 * 1024 * 1024) {
+                continue;
+            }
+            
+            $ext = pathinfo($_FILES['product_media']['name'][$key], PATHINFO_EXTENSION);
+            $filename = time() . '_' . uniqid() . '.' . $ext;
+            $destination = $mediaUploadDir . $filename;
+            
+            if (move_uploaded_file($tmpName, $destination)) {
+                $mediaType = in_array($fileType, $allowedImageTypes) ? 'image' : 'video';
+                $newMediaArray[] = [
+                    'type' => $mediaType,
+                    'path' => $filename
+                ];
+            }
+        }
+    }
+    
+    // Merge existing (not removed) and new media
+    $finalMediaArray = array_merge($existingMedia, $newMediaArray);
+    
+    // Update database with final media array
+    try {
+        $updateMedia = $pdo->prepare("UPDATE products SET product_media = ? WHERE id = ?");
+        $updateMedia->execute([json_encode($finalMediaArray), $id]);
+    } catch (Exception $e) {
+        error_log('Media update error: ' . $e->getMessage());
     }
 
     flash_set('success_msg', 'Product updated successfully.');

@@ -143,6 +143,34 @@ if (!empty($variants)) {
 }
 
 // ------------------------
+// FETCH RELATED PRODUCTS
+// ------------------------
+$relatedProducts = [];
+try {
+    $stmtRelated = $pdo->prepare("
+        SELECT p.id, p.name, p.sku
+        FROM product_relations pr
+        JOIN products p ON pr.related_product_id = p.id
+        WHERE pr.product_id = ?
+    ");
+    $stmtRelated->execute([$id]);
+    $relatedProducts = $stmtRelated->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    $relatedProducts = [];
+}
+
+// ------------------------
+// FETCH PRODUCT MEDIA
+// ------------------------
+$productMedia = [];
+if (!empty($p['product_media'])) {
+    $decoded = json_decode($p['product_media'], true);
+    if (is_array($decoded)) {
+        $productMedia = $decoded;
+    }
+}
+
+// ------------------------
 // FETCH FAQS
 // ------------------------
 $faqs = [];
@@ -152,6 +180,31 @@ try {
     $faqs = $stmtFaq->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
     $faqs = [];
+}
+
+// ------------------------
+// FETCH TAGS
+// ------------------------
+$tags = [];
+try {
+    $tags = $pdo->query("
+        SELECT id, name
+        FROM tags
+        WHERE is_active = 1
+        ORDER BY name ASC
+    ")->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    $tags = [];
+}
+
+// Fetch selected tags for this product
+$productTagIds = [];
+try {
+    $stmtPT = $pdo->prepare("SELECT tag_id FROM product_tags WHERE product_id = ?");
+    $stmtPT->execute([$id]);
+    $productTagIds = $stmtPT->fetchAll(PDO::FETCH_COLUMN);
+} catch (Exception $e) {
+    $productTagIds = [];
 }
 
 // CSRF token
@@ -249,6 +302,75 @@ function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
         </div>
       </div>
 
+      <!-- Related Products Section -->
+      <div class="mt-6 border-t pt-6">
+        <label class="block text-sm font-semibold mb-2">Related Products</label>
+        <p class="text-xs text-gray-600 mb-3">Search and add products that are related to this one.</p>
+        
+        <div class="relative">
+          <input type="text" 
+                 id="product_search_input" 
+                 class="w-full p-3 border rounded-lg pr-10" 
+                 placeholder="Start typing to search products..."
+                 autocomplete="off">
+          <div id="search_results" class="absolute z-10 w-full bg-white border border-gray-200 rounded-lg mt-1 max-h-60 overflow-y-auto hidden shadow-lg"></div>
+        </div>
+        
+        <div id="selected_products" class="mt-3 flex flex-wrap gap-2">
+          <!-- Selected products will appear here as chips -->
+        </div>
+        
+        <!-- Hidden inputs for form submission -->
+        <div id="related_products_inputs"></div>
+      </div>
+
+      <!-- Product Media Gallery Section -->
+      <div class="mt-6 border-t pt-6">
+        <label class="block text-sm font-semibold mb-2">Product Media Gallery</label>
+        <p class="text-xs text-gray-600 mb-3">Upload images or videos to showcase this product (Max 10 files)</p>
+        
+        <!-- Existing Media -->
+        <?php if (!empty($productMedia)): ?>
+        <div class="mb-4">
+          <p class="text-sm font-medium mb-2">Current Media:</p>
+          <div id="existing_media" class="grid grid-cols-2 gap-3">
+            <?php foreach ($productMedia as $idx => $media): ?>
+            <div class="relative border rounded-lg p-2 bg-gray-50" data-index="<?php echo $idx; ?>">
+              <button type="button" 
+                      class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 z-10"
+                      onclick="removeExistingMedia(<?php echo $idx; ?>)">
+                ×
+              </button>
+              <?php if ($media['type'] === 'video'): ?>
+                <video src="/assets/uploads/product_media/<?php echo htmlspecialchars($media['path']); ?>" class="w-full h-32 object-cover rounded" controls></video>
+              <?php else: ?>
+                <img src="/assets/uploads/product_media/<?php echo htmlspecialchars($media['path']); ?>" class="w-full h-32 object-cover rounded" alt="Media">
+              <?php endif; ?>
+              <p class="text-xs text-gray-600 mt-1 truncate"><?php echo htmlspecialchars($media['path']); ?></p>
+            </div>
+            <?php endforeach; ?>
+          </div>
+        </div>
+        <?php endif; ?>
+        
+        <!-- Upload New Media -->
+        <div class="mb-3">
+          <input type="file" 
+                 id="product_media_files" 
+                 class="w-full p-3 border rounded-lg" 
+                 accept="image/jpeg,image/jpg,image/png,image/webp,video/mp4,video/webm"
+                 multiple>
+          <p class="text-xs text-gray-500 mt-1">Supported: JPG, PNG, WEBP (images) | MP4, WEBM (videos)</p>
+        </div>
+        
+        <div id="media_preview" class="grid grid-cols-2 gap-3">
+          <!-- New media previews will appear here -->
+        </div>
+        
+        <!-- Hidden inputs for removed media indices -->
+        <div id="removed_media_inputs"></div>
+      </div>
+
     </div>
 
     <!-- RIGHT -->
@@ -288,6 +410,34 @@ function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
         <p class="text-xs text-slate-500 mt-1">
           Example: Hair Wash, Hair oil, Face wash under Men Care.
         </p>
+      </div>
+
+      <!-- Tags (multi-select) -->
+      <div>
+        <label class="block text-sm font-semibold mb-2">
+          Product Tags
+          <span class="text-xs text-slate-400">(optional, multiple)</span>
+        </label>
+
+        <?php if (!empty($tags)): ?>
+          <select name="tags[]" id="tags"
+                  class="w-full p-3 border rounded-lg"
+                  multiple size="5">
+            <?php foreach ($tags as $t): ?>
+              <option value="<?php echo (int)$t['id']; ?>"
+                <?php echo in_array((string)$t['id'], array_map('strval', $productTagIds)) ? 'selected' : ''; ?>>
+                <?php echo htmlspecialchars($t['name'], ENT_QUOTES, 'UTF-8'); ?>
+              </option>
+            <?php endforeach; ?>
+          </select>
+          <p class="text-xs text-slate-500 mt-1">
+            Hold <strong>Ctrl</strong> (Windows) / <strong>Cmd</strong> (Mac) to select multiple tags.
+          </p>
+        <?php else: ?>
+          <p class="text-xs text-slate-500">
+            No tags created yet. Go to <code>tags</code> page in admin and add some tag names first.
+          </p>
+        <?php endif; ?>
       </div>
 
       <div class="grid grid-cols-2 gap-3">
@@ -1020,6 +1170,13 @@ function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
         }
       });
       
+      // Add product media files (new uploads)
+      if (window.selectedMedia && window.selectedMedia.length > 0) {
+        window.selectedMedia.forEach((file, index) => {
+          formData.append(`product_media[${index}]`, file);
+        });
+      }
+      
       // Submit via fetch
       fetch('modify_product.php', {
         method: 'POST',
@@ -1040,6 +1197,220 @@ function esc($v){ return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
         alert('An error occurred. Please try again.');
       });
     });
+  }
+
+  // === Related Products Search with Chips ===
+  const productSearchInput = document.getElementById('product_search_input');
+  const searchResults = document.getElementById('search_results');
+  const selectedProductsContainer = document.getElementById('selected_products');
+  const relatedProductsInputs = document.getElementById('related_products_inputs');
+  
+  if (productSearchInput && searchResults && selectedProductsContainer) {
+    // Pre-populate with existing related products from PHP
+    let selectedProducts = <?php echo json_encode(array_map(function($rp) {
+      return ['id' => $rp['id'], 'name' => $rp['name']];
+    }, $relatedProducts)); ?>;
+    
+    let searchTimeout = null;
+    
+    // Search products as user types
+    productSearchInput.addEventListener('input', function() {
+      const query = this.value.trim();
+      
+      clearTimeout(searchTimeout);
+      
+      if (query.length < 2) {
+        searchResults.classList.add('hidden');
+        return;
+      }
+      
+      searchTimeout = setTimeout(() => {
+        fetch(`/admin/search_products_api.php?q=${encodeURIComponent(query)}&current=<?php echo $id; ?>`)
+          .then(response => response.json())
+          .then(data => {
+            displaySearchResults(data.results || []);
+          })
+          .catch(error => {
+            console.error('Search error:', error);
+          });
+      }, 150); // Faster response: 150ms instead of 300ms
+    });
+    
+    function displaySearchResults(results) {
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="p-3 text-gray-500 text-sm">No products found</div>';
+        searchResults.classList.remove('hidden');
+        return;
+      }
+      
+      searchResults.innerHTML = results.map(product => {
+        // Check if already selected
+        const isSelected = selectedProducts.some(p => p.id == product.id);
+        if (isSelected) return '';
+        
+        return `
+          <div class="search-result-item p-3 hover:bg-gray-50 cursor-pointer border-b last:border-b-0 flex items-center gap-3"
+               data-id="${product.id}"
+               data-name="${escapeHtml(product.name)}">
+            <img src="/${product.image}" alt="" class="w-10 h-10 object-cover rounded border" onerror="this.src='/assets/images/avatar-default.png'">
+            <div class="flex-1">
+              <div class="font-medium text-sm">${escapeHtml(product.name)}</div>
+              <div class="text-xs text-gray-500">₹${product.price}</div>
+            </div>
+            <button type="button" class="text-green-600 hover:text-green-700 text-sm font-semibold">+ Add</button>
+          </div>
+        `;
+      }).join('');
+      
+      searchResults.classList.remove('hidden');
+      
+      // Add click handlers
+      searchResults.querySelectorAll('.search-result-item').forEach(item => {
+        item.addEventListener('click', function() {
+          const id = this.dataset.id;
+          const name = this.dataset.name;
+          addProduct(id, name);
+          productSearchInput.value = '';
+          searchResults.classList.add('hidden');
+        });
+      });
+    }
+    
+    function addProduct(id, name) {
+      // Check if already added
+      if (selectedProducts.some(p => p.id == id)) return;
+      
+      selectedProducts.push({ id, name });
+      renderSelectedProducts();
+      updateHiddenInputs();
+    }
+    
+    function removeProduct(id) {
+      selectedProducts = selectedProducts.filter(p => p.id != id);
+      renderSelectedProducts();
+      updateHiddenInputs();
+    }
+    
+    function renderSelectedProducts() {
+      if (selectedProducts.length === 0) {
+        selectedProductsContainer.innerHTML = '<div class="text-sm text-gray-500">No related products selected yet</div>';
+        return;
+      }
+      
+      selectedProductsContainer.innerHTML = selectedProducts.map(product => `
+        <div class="product-chip inline-flex items-center gap-2 bg-indigo-100 text-indigo-800 px-3 py-2 rounded-lg text-sm font-medium">
+          <span>${escapeHtml(product.name)}</span>
+          <button type="button" 
+                  class="remove-product hover:text-red-600 font-bold text-indigo-600"
+                  data-id="${product.id}">
+            ×
+          </button>
+        </div>
+      `).join('');
+      
+      // Add remove handlers
+      selectedProductsContainer.querySelectorAll('.remove-product').forEach(btn => {
+        btn.addEventListener('click', function() {
+          removeProduct(this.dataset.id);
+        });
+      });
+    }
+    
+    function updateHiddenInputs() {
+      relatedProductsInputs.innerHTML = selectedProducts.map(product => `
+        <input type="hidden" name="related_products[]" value="${product.id}">
+      `).join('');
+    }
+    
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    
+    // Close search results when clicking outside
+    document.addEventListener('click', function(e) {
+      if (!productSearchInput.contains(e.target) && !searchResults.contains(e.target)) {
+        searchResults.classList.add('hidden');
+      }
+    });
+    
+    // Initialize with existing products
+    renderSelectedProducts();
+    updateHiddenInputs();
+  }
+
+  // === Product Media Gallery for Edit Product ===
+  const mediaFilesInput = document.getElementById('product_media_files');
+  const mediaPreview = document.getElementById('media_preview');
+  window.selectedMedia = [];
+  window.removedMediaIndices = [];
+  const MAX_MEDIA_FILES = 10;
+  
+  if (mediaFilesInput && mediaPreview) {
+    mediaFilesInput.addEventListener('change', function(e) {
+      const files = Array.from(e.target.files);
+      const existingCount = document.querySelectorAll('#existing_media [data-index]').length;
+      const totalCount = existingCount + window.selectedMedia.length + files.length;
+      
+      if (totalCount > MAX_MEDIA_FILES) {
+        alert(`Maximum ${MAX_MEDIA_FILES} files allowed. You currently have ${existingCount + window.selectedMedia.length}.`);
+        return;
+      }
+      
+      files.forEach(file => {
+        if (file.size > 50 * 1024 * 1024) {
+          alert(`File ${file.name} is too large. Maximum 50MB per file.`);
+          return;
+        }
+        window.selectedMedia.push(file);
+      });
+      
+      renderMediaPreviews();
+      e.target.value = '';
+    });
+    
+    function renderMediaPreviews() {
+      mediaPreview.innerHTML = window.selectedMedia.map((file, index) => {
+        const isVideo = file.type.startsWith('video/');
+        const previewUrl = URL.createObjectURL(file);
+        
+        return `
+          <div class="relative border rounded-lg p-2 bg-gray-50">
+            <button type="button" 
+                    class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 z-10"
+                    onclick="removeNewMedia(${index})">
+              ×
+            </button>
+            ${isVideo ? `
+              <video src="${previewUrl}" class="w-full h-32 object-cover rounded" controls></video>
+              <p class="text-xs text-gray-600 mt-1 truncate">${file.name}</p>
+            ` : `
+              <img src="${previewUrl}" class="w-full h-32 object-cover rounded" alt="Preview">
+              <p class="text-xs text-gray-600 mt-1 truncate">${file.name}</p>
+            `}
+          </div>
+        `;
+      }).join('');
+    }
+    
+    window.removeNewMedia = function(index) {
+      window.selectedMedia.splice(index, 1);
+      renderMediaPreviews();
+    };
+    
+    window.removeExistingMedia = function(index) {
+      window.removedMediaIndices.push(index);
+      document.querySelector(`#existing_media [data-index="${index}"]`).remove();
+      updateRemovedMediaInputs();
+    };
+    
+    function updateRemovedMediaInputs() {
+      const container = document.getElementById('removed_media_inputs');
+      container.innerHTML = window.removedMediaIndices.map(idx => 
+        `<input type="hidden" name="removed_media[]" value="${idx}">`
+      ).join('');
+    }
   }
 
 })();

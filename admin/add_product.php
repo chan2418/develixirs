@@ -217,6 +217,50 @@ include __DIR__ . '/layout/header.php';
         </div>
       </div>
 
+      <!-- Related Products Section -->
+      <div class="mt-6 border-t pt-6">
+        <label class="block text-sm font-semibold mb-2">Related Products</label>
+        <p class="text-xs text-gray-600 mb-3">Search and add products that are related to this one.</p>
+        
+        <div class="relative">
+          <input type="text" 
+                 id="product_search_input" 
+                 class="w-full p-3 border rounded-lg pr-10" 
+                 placeholder="Start typing to search products..."
+                 autocomplete="off">
+          <div id="search_results" class="absolute z-10 w-full bg-white border border-gray-200 rounded-lg mt-1 max-h-60 overflow-y-auto hidden shadow-lg"></div>
+        </div>
+        
+        <div id="selected_products" class="mt-3 flex flex-wrap gap-2">
+          <!-- Selected products will appear here as chips -->
+        </div>
+        
+        <!-- Hidden inputs for form submission -->
+        <div id="related_products_inputs"></div>
+      </div>
+
+      <!-- Product Media Gallery Section -->
+      <div class="mt-6 border-t pt-6">
+        <label class="block text-sm font-semibold mb-2">Product Media Gallery</label>
+        <p class="text-xs text-gray-600 mb-3">Upload images or videos to showcase this product (Max 10 files)</p>
+        
+        <div class="mb-3">
+          <input type="file" 
+                 id="product_media_files" 
+                 class="w-full p-3 border rounded-lg" 
+                 accept="image/jpeg,image/jpg,image/png,image/webp,video/mp4,video/webm"
+                 multiple>
+          <p class="text-xs text-gray-500 mt-1">Supported: JPG, PNG, WEBP (images) | MP4, WEBM (videos)</p>
+        </div>
+        
+        <div id="media_preview" class="grid grid-cols-2 gap-3">
+          <!-- Media previews will appear here -->
+        </div>
+        
+        <!-- Hidden inputs for media files -->
+        <div id="media_inputs_container"></div>
+      </div>
+
     </div>
 
     <!-- RIGHT COLUMN -->
@@ -824,6 +868,13 @@ include __DIR__ . '/layout/header.php';
         });
       });
       
+      // Add product media files
+      if (window.selectedMedia && window.selectedMedia.length > 0) {
+        window.selectedMedia.forEach((file, index) => {
+          formData.append(`product_media[${index}]`, file);
+        });
+      }
+      
       // Submit via AJAX
       const submitBtn = this.querySelector('button[type="submit"]');
       const originalText = submitBtn.textContent;
@@ -884,6 +935,207 @@ include __DIR__ . '/layout/header.php';
     }
 
     addFaqBtn.addEventListener('click', addFaqRow);
+  }
+
+  // === Related Products Search with Chips ===
+  const productSearchInput = document.getElementById('product_search_input');
+  const searchResults = document.getElementById('search_results');
+  const selectedProductsContainer = document.getElementById('selected_products');
+  const relatedProductsInputs = document.getElementById('related_products_inputs');
+  
+  if (productSearchInput && searchResults && selectedProductsContainer) {
+    let selectedProducts = []; // Array to store selected products {id, name}
+    let searchTimeout = null;
+    
+    // Search products as user types
+    productSearchInput.addEventListener('input', function() {
+      const query = this.value.trim();
+      
+      clearTimeout(searchTimeout);
+      
+      if (query.length < 2) {
+        searchResults.classList.add('hidden');
+        return;
+      }
+      
+      searchTimeout = setTimeout(() => {
+        fetch(`/admin/search_products_api.php?q=${encodeURIComponent(query)}&current=0`)
+          .then(response => response.json())
+          .then(data => {
+            displaySearchResults(data.results || []);
+          })
+          .catch(error => {
+            console.error('Search error:', error);
+          });
+      }, 150); // Faster response: 150ms instead of 300ms
+    });
+    
+    function displaySearchResults(results) {
+      if (results.length === 0) {
+        searchResults.innerHTML = '<div class="p-3 text-gray-500 text-sm">No products found</div>';
+        searchResults.classList.remove('hidden');
+        return;
+      }
+      
+      searchResults.innerHTML = results.map(product => {
+        // Check if already selected
+        const isSelected = selectedProducts.some(p => p.id == product.id);
+        if (isSelected) return '';
+        
+        return `
+          <div class="search-result-item p-3 hover:bg-gray-50 cursor-pointer border-b last:border-b-0 flex items-center gap-3"
+               data-id="${product.id}"
+               data-name="${escapeHtml(product.name)}">
+            <img src="/${product.image}" alt="" class="w-10 h-10 object-cover rounded border" onerror="this.src='/assets/images/avatar-default.png'">
+            <div class="flex-1">
+              <div class="font-medium text-sm">${escapeHtml(product.name)}</div>
+              <div class="text-xs text-gray-500">₹${product.price}</div>
+            </div>
+            <button type="button" class="text-green-600 hover:text-green-700 text-sm font-semibold">+ Add</button>
+          </div>
+        `;
+      }).join('');
+      
+      searchResults.classList.remove('hidden');
+      
+      // Add click handlers
+      searchResults.querySelectorAll('.search-result-item').forEach(item => {
+        item.addEventListener('click', function() {
+          const id = this.dataset.id;
+          const name = this.dataset.name;
+          addProduct(id, name);
+          productSearchInput.value = '';
+          searchResults.classList.add('hidden');
+        });
+      });
+    }
+    
+    function addProduct(id, name) {
+      // Check if already added
+      if (selectedProducts.some(p => p.id == id)) return;
+      
+      selectedProducts.push({ id, name });
+      renderSelectedProducts();
+      updateHiddenInputs();
+    }
+    
+    function removeProduct(id) {
+      selectedProducts = selectedProducts.filter(p => p.id != id);
+      renderSelectedProducts();
+      updateHiddenInputs();
+    }
+    
+    function renderSelectedProducts() {
+      if (selectedProducts.length === 0) {
+        selectedProductsContainer.innerHTML = '<div class="text-sm text-gray-500">No related products selected yet</div>';
+        return;
+      }
+      
+      selectedProductsContainer.innerHTML = selectedProducts.map(product => `
+        <div class="product-chip inline-flex items-center gap-2 bg-indigo-100 text-indigo-800 px-3 py-2 rounded-lg text-sm font-medium">
+          <span>${escapeHtml(product.name)}</span>
+          <button type="button" 
+                  class="remove-product hover:text-red-600 font-bold text-indigo-600"
+                  data-id="${product.id}">
+            ×
+          </button>
+        </div>
+      `).join('');
+      
+      // Add remove handlers
+      selectedProductsContainer.querySelectorAll('.remove-product').forEach(btn => {
+        btn.addEventListener('click', function() {
+          removeProduct(this.dataset.id);
+        });
+      });
+    }
+    
+    function updateHiddenInputs() {
+      relatedProductsInputs.innerHTML = selectedProducts.map(product => `
+        <input type="hidden" name="related_products[]" value="${product.id}">
+      `).join('');
+    }
+    
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    
+    // Close search results when clicking outside
+    document.addEventListener('click', function(e) {
+      if (!productSearchInput.contains(e.target) && !searchResults.contains(e.target)) {
+        searchResults.classList.add('hidden');
+      }
+    });
+    
+    // Initialize with empty state
+    renderSelectedProducts();
+  }
+
+  // === Product Media Gallery ===
+  const mediaFilesInput = document.getElementById('product_media_files');
+  const mediaPreview = document.getElementById('media_preview');
+  window.selectedMedia = []; // Make global for form submission
+  const MAX_MEDIA_FILES = 10;
+  
+  if (mediaFilesInput && mediaPreview) {
+    mediaFilesInput.addEventListener('change', function(e) {
+      const files = Array.from(e.target.files);
+      
+      if (selectedMedia.length + files.length > MAX_MEDIA_FILES) {
+        alert(`Maximum ${MAX_MEDIA_FILES} files allowed. You can add ${MAX_MEDIA_FILES - selectedMedia.length} more.`);
+        return;
+      }
+      
+      files.forEach(file => {
+        if (file.size > 50 * 1024 * 1024) { // 50MB limit
+          alert(`File ${file.name} is too large. Maximum 50MB per file.`);
+          return;
+        }
+        
+        selectedMedia.push(file);
+      });
+      
+      renderMediaPreviews();
+      e.target.value = ''; // Reset input
+    });
+    
+    function renderMediaPreviews() {
+      mediaPreview.innerHTML = selectedMedia.map((file, index) => {
+        const isVideo = file.type.startsWith('video/');
+        const previewUrl = URL.createObjectURL(file);
+        
+        return `
+          <div class="relative border rounded-lg p-2 bg-gray-50">
+            <button type="button" 
+                    class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 z-10"
+                    onclick="removeMediaFile(${index})">
+              ×
+            </button>
+            ${isVideo ? `
+              <video src="${previewUrl}" class="w-full h-32 object-cover rounded" controls></video>
+              <p class="text-xs text-gray-600 mt-1 truncate">${file.name}</p>
+            ` : `
+              <img src="${previewUrl}" class="w-full h-32 object-cover rounded" alt="Preview">
+              <p class="text-xs text-gray-600 mt-1 truncate">${file.name}</p>
+            `}
+          </div>
+        `;
+      }).join('');
+    }
+    
+    // Make function global
+    window.removeMediaFile = function(index) {
+      selectedMedia.splice(index, 1);
+      renderMediaPreviews();
+    };
+    
+    // Add files to FormData before submission
+    const originalSubmit = document.querySelector('form').onsubmit;
+    document.querySelector('form').addEventListener('submit', function(e) {
+      // Files will be handled in the FormData construction below
+    });
   }
 
 })();
