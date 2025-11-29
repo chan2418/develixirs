@@ -1306,13 +1306,28 @@ $userReviews = $stmtReviews->fetchAll(PDO::FETCH_ASSOC);
                 </div>
               </div>
               <div class="address-actions">
+                <?php if (empty($addr['is_default'])): ?>
+                  <form action="set-default-address.php" method="post" style="display:inline;">
+                    <input type="hidden" name="address_id" value="<?php echo (int)$addr['id']; ?>">
+                    <button type="submit" 
+                            style="border:none;background:#D4AF37;color:#fff;cursor:pointer;font-size:12px;padding:6px 12px;border-radius:4px;font-weight:600;margin-right:8px;" 
+                            title="Set as Default">
+                      Set Default
+                    </button>
+                  </form>
+                <?php endif; ?>
+                <a href="edit-address.php?id=<?php echo (int)$addr['id']; ?>" 
+                   style="border:none;background:#4CAF50;color:#fff;cursor:pointer;font-size:12px;padding:6px 12px;border-radius:4px;font-weight:600;text-decoration:none;display:inline-block;margin-right:8px;" 
+                   title="Edit">
+                  Edit
+                </a>
                 <form action="delete-address.php" method="post" style="display:inline;" 
                       onsubmit="return confirm('Delete this address?');">
                   <input type="hidden" name="address_id" value="<?php echo (int)$addr['id']; ?>">
                   <button type="submit" 
-                          style="border:none;background:none;cursor:pointer;font-size:16px;color:#c00;" 
+                          style="border:none;background:#ff4d4d;color:#fff;cursor:pointer;font-size:12px;padding:6px 12px;border-radius:4px;font-weight:600;" 
                           title="Delete">
-                    &#128465;
+                    Delete
                   </button>
                 </form>
               </div>
@@ -1614,6 +1629,34 @@ $userReviews = $stmtReviews->fetchAll(PDO::FETCH_ASSOC);
 
     function isMobile() {
       return window.innerWidth <= 900;
+    }
+
+    // Check URL param for tab
+    const urlParams = new URLSearchParams(window.location.search);
+    const tabParam = urlParams.get('tab');
+    if (tabParam) {
+        const targetLink = document.querySelector(`.sidebar-link[data-section="${tabParam}"]`);
+        if (targetLink) {
+            // Deactivate all
+            sidebarLinks.forEach(l => l.classList.remove('active'));
+            sections.forEach(s => s.style.display = 'none');
+            
+            // Activate target
+            targetLink.classList.add('active');
+            const targetSection = document.getElementById(`section-${tabParam}`);
+            if (targetSection) {
+                targetSection.style.display = 'block';
+            }
+            
+            // Mobile view adjustment
+            if (isMobile()) {
+                wrapper.classList.add('show-main');
+                const sectionTitleEl = targetLink.closest('.sidebar-section')?.querySelector('.sidebar-title');
+                if (mobileSectionLabel) {
+                    mobileSectionLabel.textContent = sectionTitleEl ? sectionTitleEl.textContent.trim() : 'Account';
+                }
+            }
+        }
     }
 
     // Sidebar navigation
