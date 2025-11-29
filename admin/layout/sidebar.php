@@ -252,6 +252,14 @@ $isAppearanceArea = in_array($req_file, ['banner.php','appearance.php','product_
       </div>
     </div>
 
+    <!-- Blog (single link) -->
+    <a href="/admin/blogs.php"
+       class="<?php echo is_active_link(['blogs','blogs.php','blog','add_blog','edit_blog']); ?> flex items-center gap-3 px-4 py-2 rounded-md"
+       title="Blog">
+      <span class="text-slate-500">📝</span>
+      <span class="text-sm">Blog</span>
+    </a>
+
     <!-- loop the rest -->
     <?php foreach ($nav as $item): 
         $classes = is_active_link($item['match']);
