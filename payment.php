@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/coupon_helpers.php';
 session_start();
 
 if (!isset($_SESSION['user_id'])) {
@@ -34,6 +35,17 @@ if ($cartItemsCount === 0) {
     header("Location: cart.php");
     exit;
 }
+
+// Calculate Discount
+$appliedCoupon = getAppliedCoupon();
+$discountAmount = 0;
+if ($appliedCoupon) {
+    $discountAmount = calculateDiscount($appliedCoupon, $cartTotal);
+}
+
+// Calculate Delivery Charge and Final Total
+$deliveryCharge = ($cartTotal < 1000) ? 80 : 0;
+$finalTotal = $cartTotal + $deliveryCharge - $discountAmount;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -247,7 +259,7 @@ if ($cartItemsCount === 0) {
               <button style="margin-top:10px; padding:8px 20px; background:#333; color:#fff; border:none; border-radius:4px; cursor:pointer;">Verify</button>
             </div>
           </div>
-          <button class="pay-btn">Pay ₹<?php echo number_format($cartTotal, 2); ?></button>
+          <button class="pay-btn">Pay ₹<?php echo number_format($finalTotal, 2); ?></button>
         </div>
       </div>
       
@@ -270,7 +282,7 @@ if ($cartItemsCount === 0) {
                 <input type="text" placeholder="CVV">
               </div>
             </div>
-            <button class="pay-btn">Pay ₹<?php echo number_format($cartTotal, 2); ?></button>
+            <button class="pay-btn">Pay ₹<?php echo number_format($finalTotal, 2); ?></button>
           </div>
         </div>
       </div>
@@ -289,7 +301,7 @@ if ($cartItemsCount === 0) {
             <option value="sbi">State Bank of India</option>
             <option value="axis">Axis Bank</option>
           </select>
-          <button class="pay-btn">Pay ₹<?php echo number_format($cartTotal, 2); ?></button>
+          <button class="pay-btn">Pay ₹<?php echo number_format($finalTotal, 2); ?></button>
         </div>
       </div>
       
@@ -314,13 +326,26 @@ if ($cartItemsCount === 0) {
         <span>Price (<?php echo $cartItemsCount; ?> items)</span>
         <span>₹<?php echo number_format($cartTotal, 2); ?></span>
       </div>
+      
+      <?php if ($appliedCoupon): ?>
+        <div class="price-row" style="color: #28a745;">
+          <span><i class="fa fa-tag"></i> Coupon (<?php echo htmlspecialchars($appliedCoupon['code']); ?>)</span>
+          <span>-₹<?php echo number_format($discountAmount, 2); ?></span>
+        </div>
+      <?php endif; ?>
+
       <div class="price-row">
         <span>Delivery Charges</span>
-        <span style="color:#388e3c;">FREE</span>
+        <?php 
+          // Calculations moved to top
+        ?>
+        <span style="color:<?php echo ($deliveryCharge > 0) ? '#333' : '#388e3c'; ?>;">
+          <?php echo ($deliveryCharge > 0) ? '₹' . number_format($deliveryCharge, 2) : 'FREE'; ?>
+        </span>
       </div>
       <div class="total-row">
         <span>Total Payable</span>
-        <span>₹<?php echo number_format($cartTotal, 2); ?></span>
+        <span>₹<?php echo number_format($finalTotal, 2); ?></span>
       </div>
       
       <div style="margin-top:20px; font-size:12px; color:#777; display:flex; align-items:center; gap:8px;">
@@ -331,7 +356,10 @@ if ($cartItemsCount === 0) {
     
   </div>
 </div>
+</div>
 
+<?php include 'footer.php'; ?>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script>
 document.querySelectorAll('input[name="payment_method"]').forEach(radio => {
     radio.addEventListener('change', function() {
@@ -341,6 +369,107 @@ document.querySelectorAll('input[name="payment_method"]').forEach(radio => {
         this.closest('.payment-option').classList.add('active');
     });
 });
+
+// Handle Pay Buttons
+document.querySelectorAll('.pay-btn').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        
+        const selectedMethod = document.querySelector('input[name="payment_method"]:checked');
+        if (!selectedMethod) {
+            alert('Please select a payment method');
+            return;
+        }
+        
+        const methodValue = selectedMethod.value;
+        
+        if (methodValue === 'cod') {
+            alert('Cash on Delivery is not supported in this demo. Please use Online Payment.');
+            return;
+        }
+        
+        // Initiate Razorpay Payment
+        startRazorpayPayment(this);
+    });
+});
+
+function startRazorpayPayment(btn) {
+    const originalText = btn.innerText;
+    btn.innerText = 'Processing...';
+    btn.disabled = true;
+
+    fetch('api/create_razorpay_order.php', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const options = {
+                "key": data.key,
+                "amount": data.amount,
+                "currency": data.currency,
+                "name": data.name,
+                "description": data.description,
+                "order_id": data.order_id,
+                "handler": function (response) {
+                    verifyPayment(response, btn);
+                },
+                "prefill": data.prefill,
+                "theme": {
+                    "color": "#D4AF37"
+                },
+                "modal": {
+                    "ondismiss": function() {
+                        btn.innerText = originalText;
+                        btn.disabled = false;
+                    }
+                }
+            };
+            const rzp1 = new Razorpay(options);
+            rzp1.open();
+        } else {
+            alert('Error: ' + data.message);
+            btn.innerText = originalText;
+            btn.disabled = false;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Something went wrong. Please try again.');
+        btn.innerText = originalText;
+        btn.disabled = false;
+    });
+}
+
+function verifyPayment(response, btn) {
+    fetch('api/verify_payment.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_signature: response.razorpay_signature
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            window.location.href = 'my-profile.php?order_success=true&id=' + data.order_id;
+        } else {
+            alert('Payment verification failed: ' + data.message);
+            btn.innerText = 'Pay Now';
+            btn.disabled = false;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Payment verification error.');
+        btn.innerText = 'Pay Now';
+        btn.disabled = false;
+    });
+}
 </script>
 
 </body>

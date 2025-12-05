@@ -112,6 +112,11 @@ include __DIR__ . '/layout/header.php';
 
 <link rel="stylesheet" href="/assets/css/admin.css">
 
+<!-- Google Fonts for Quill Editor - 50+ Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Open+Sans:wght@300;400;600;700&family=Lato:wght@300;400;700&family=Montserrat:wght@300;400;600;700&family=Raleway:wght@300;400;600;700&family=Poppins:wght@300;400;600;700&family=Playfair+Display:wght@400;700&family=Merriweather:wght@300;400;700&family=Ubuntu:wght@300;400;500;700&family=Nunito:wght@300;400;600;700&family=PT+Sans:wght@400;700&family=Oswald:wght@300;400;600;700&family=Crimson+Text:wght@400;600;700&family=Work+Sans:wght@300;400;600;700&family=Quicksand:wght@300;400;600;700&family=Source+Sans+Pro:wght@300;400;600;700&family=Noto+Sans:wght@300;400;600;700&family=Rubik:wght@300;400;500;700&family=Inter:wght@300;400;600;700&family=Mulish:wght@300;400;600;700&family=Karla:wght@300;400;600;700&family=Barlow:wght@300;400;600;700&family=Titillium+Web:wght@300;400;600;700&family=Josefin+Sans:wght@300;400;600;700&family=Mukta:wght@300;400;600;700&family=Libre+Baskerville:wght@400;700&family=Merriweather+Sans:wght@300;400;600;700&family=Hind:wght@300;400;600;700&family=Oxygen:wght@300;400;700&family=Cabin:wght@400;500;600;700&family=Arimo:wght@400;500;600;700&family=Red+Hat+Display:wght@300;400;600;700&family=DM+Sans:wght@400;500;700&family=Fjalla+One&family=Bebas+Neue&family=Architects+Daughter&family=Pacifico&family=Dancing+Script:wght@400;500;700&family=Satisfy&family=Great+Vibes&family=Caveat:wght@400;500;700&family=Indie+Flower&family=Shadows+Into+Light&family=Kalam:wght@300;400;700&family=Permanent+Marker&family=Abril+Fatface&family=Alfa+Slab+One&family=Anton&family=Lobster&family=Righteous&family=Fredoka+One&family=Bungee&family=IBM+Plex+Sans:wght@300;400;600;700&family=IBM+Plex+Serif:wght@300;400;600;700&family=IBM+Plex+Mono:wght@300;400;600;700&family=Fira+Sans:wght@300;400;600;700&family=Libre+Franklin:wght@300;400;600;700&family=Yanone+Kaffeesatz:wght@300;400;600;700&family=Saira:wght@300;400;600;700&family=Spectral:wght@300;400;600;700&display=swap" rel="stylesheet">
+
 <div class="max-w-[1200px] mx-auto py-6">
 
   <div class="flex items-center justify-between mb-6">
@@ -175,32 +180,198 @@ include __DIR__ . '/layout/header.php';
 
       <div class="mb-4">
         <label class="block text-sm font-semibold mb-2">Short Description</label>
-        <input id="short_desc" name="short_desc"
-               class="w-full p-3 border rounded-lg"
-               value="<?php echo $short_desc_val; ?>"
-               placeholder="One-line summary">
+        <div id="editor-short-desc" class="bg-white"></div>
+        <textarea name="short_desc" id="hidden-short-desc" class="hidden"><?php echo $short_desc_val; ?></textarea>
       </div>
+
+      <!-- Quill CSS -->
+      <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+      <style>
+        .ql-editor { min-height: 150px; font-family: inherit; }
+        .ql-container { border-bottom-left-radius: 0.5rem; border-bottom-right-radius: 0.5rem; }
+        .ql-toolbar { border-top-left-radius: 0.5rem; border-top-right-radius: 0.5rem; }
+        
+        /* Custom font styles for Quill */
+        .ql-snow .ql-picker.ql-font .ql-picker-label[data-value="roboto"]::before,
+        .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="roboto"]::before {
+          content: 'Roboto';
+          font-family: 'Roboto', sans-serif;
+        }
+        .ql-snow .ql-picker.ql-font .ql-picker-label[data-value="open-sans"]::before,
+        .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="open-sans"]::before {
+          content: 'Open Sans';
+          font-family: 'Open Sans', sans-serif;
+        }
+        .ql-snow .ql-picker.ql-font .ql-picker-label[data-value="lato"]::before,
+        .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="lato"]::before {
+          content: 'Lato';
+          font-family: 'Lato', sans-serif;
+        }
+        .ql-snow .ql-picker.ql-font .ql-picker-label[data-value="montserrat"]::before,
+        .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="montserrat"]::before {
+          content: 'Montserrat';
+          font-family: 'Montserrat', sans-serif;
+        }
+        .ql-snow .ql-picker.ql-font .ql-picker-label[data-value="raleway"]::before,
+        .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="raleway"]::before {
+          content: 'Raleway';
+          font-family: 'Raleway', sans-serif;
+        }
+        .ql-snow .ql-picker.ql-font .ql-picker-label[data-value="poppins"]::before,
+        .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="poppins"]::before {
+          content: 'Poppins';
+          font-family: 'Poppins', sans-serif;
+        }
+        .ql-snow .ql-picker.ql-font .ql-picker-label[data-value="playfair"]::before,
+        .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="playfair"]::before {
+          content: 'Playfair Display';
+          font-family: 'Playfair Display', serif;
+        }
+        .ql-snow .ql-picker.ql-font .ql-picker-label[data-value="merriweather"]::before,
+        .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="merriweather"]::before {
+          content: 'Merriweather';
+          font-family: 'Merriweather', serif;
+        }
+        .ql-snow .ql-picker.ql-font .ql-picker-label[data-value="ubuntu"]::before,
+        .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="ubuntu"]::before {
+          content: 'Ubuntu';
+          font-family: 'Ubuntu', sans-serif;
+        }
+        .ql-snow .ql-picker.ql-font .ql-picker-label[data-value="nunito"]::before,
+        .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="nunito"]::before {
+          content: 'Nunito';
+          font-family: 'Nunito', sans-serif;
+        }
+        .ql-snow .ql-picker.ql-font .ql-picker-label[data-value="pt-sans"]::before,
+        .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="pt-sans"]::before {
+          content: 'PT Sans';
+          font-family: 'PT Sans', sans-serif;
+        }
+        .ql-snow .ql-picker.ql-font .ql-picker-label[data-value="oswald"]::before,
+        .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="oswald"]::before {
+          content: 'Oswald';
+          font-family: 'Oswald', sans-serif;
+        }
+        .ql-snow .ql-picker.ql-font .ql-picker-label[data-value="crimson"]::before,
+        .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="crimson"]::before {
+          content: 'Crimson Text';
+          font-family: 'Crimson Text', serif;
+        }
+        .ql-snow .ql-picker.ql-font .ql-picker-label[data-value="work-sans"]::before,
+        .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="work-sans"]::before {
+          content: 'Work Sans';
+          font-family: 'Work Sans', sans-serif;
+        }
+        .ql-snow .ql-picker.ql-font .ql-picker-label[data-value="quicksand"]::before,
+        .ql-snow .ql-picker.ql-font .ql-picker-item[data-value="quicksand"]::before {
+          content: 'Quicksand';
+          font-family: 'Quicksand', sans-serif;
+        }
+        
+        /* Apply fonts in editor */
+        .ql-font-roboto { font-family: 'Roboto', sans-serif; }
+        .ql-font-open-sans { font-family: 'Open Sans', sans-serif; }
+        .ql-font-lato { font-family: 'Lato', sans-serif; }
+        .ql-font-montserrat { font-family: 'Montserrat', sans-serif; }
+        .ql-font-raleway { font-family: 'Raleway', sans-serif; }
+        .ql-font-poppins { font-family: 'Poppins', sans-serif; }
+        .ql-font-playfair { font-family: 'Playfair Display', serif; }
+        .ql-font-merriweather { font-family: 'Merriweather', serif; }
+        .ql-font-ubuntu { font-family: 'Ubuntu', sans-serif; }
+        .ql-font-nunito { font-family: 'Nunito', sans-serif; }
+        .ql-font-pt-sans { font-family: 'PT Sans', sans-serif; }
+        .ql-font-oswald { font-family: 'Oswald', sans-serif; }
+        .ql-font-crimson { font-family: 'Crimson Text', serif; }
+        .ql-font-work-sans { font-family: 'Work Sans', sans-serif; }
+        .ql-font-quicksand { font-family: 'Quicksand', sans-serif; }
+        
+        /* Short description editor min height */
+        #editor-short-desc .ql-editor { min-height: 60px; }
+      </style>
 
       <div class="mb-4">
         <label class="block text-sm font-semibold mb-2">Full Description</label>
-        <textarea id="description" name="description" rows="6"
-                  class="w-full p-3 border rounded-lg"
-                  placeholder="Full product description"><?php echo $description_val; ?></textarea>
+        <div id="editor-description" class="bg-white"></div>
+        <textarea name="description" id="hidden-description" class="hidden"><?php echo $description_val; ?></textarea>
       </div>
 
       <div class="mb-4">
         <label class="block text-sm font-semibold mb-2">Ingredients</label>
-        <textarea id="ingredients" name="ingredients" rows="4"
-                  class="w-full p-3 border rounded-lg"
-                  placeholder="List the ingredients used in this product"><?php echo $old['ingredients'] ?? ''; ?></textarea>
+        <div id="editor-ingredients" class="bg-white"></div>
+        <textarea name="ingredients" id="hidden-ingredients" class="hidden"><?php echo $old['ingredients'] ?? ''; ?></textarea>
       </div>
 
       <div class="mb-4">
         <label class="block text-sm font-semibold mb-2">How to Use</label>
-        <textarea id="how_to_use" name="how_to_use" rows="4"
-                  class="w-full p-3 border rounded-lg"
-                  placeholder="Instructions on how to use this product"><?php echo $old['how_to_use'] ?? ''; ?></textarea>
+        <div id="editor-how-to-use" class="bg-white"></div>
+        <textarea name="how_to_use" id="hidden-how-to-use" class="hidden"><?php echo $old['how_to_use'] ?? ''; ?></textarea>
       </div>
+
+      <!-- Quill JS -->
+      <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+      <script src="/admin/quill-font-config.js"></script>
+      <script>
+        // Inject dynamic font CSS
+        const fontStyleTag = document.createElement('style');
+        fontStyleTag.textContent = window.QuillFontConfig.generateCSS();
+        document.head.appendChild(fontStyleTag);
+        
+        document.addEventListener('DOMContentLoaded', function() {
+          // Custom font whitelist
+          var Font = Quill.import('formats/font');
+          Font.whitelist = window.QuillFontConfig.getFontValues();
+          Quill.register(Font, true);
+          
+          var toolbarOptions = [
+            [{ 'font': window.QuillFontConfig.getFontValues() }],
+            [{ 'size': ['small', false, 'large', 'huge'] }],
+            ['bold', 'italic', 'underline', 'strike'],
+            [{ 'color': [] }, { 'background': [] }],
+            [{ 'script': 'sub'}, { 'script': 'super' }],
+            [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+            [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+            [{ 'indent': '-1'}, { 'indent': '+1' }],
+            [{ 'align': [] }],
+            ['link', 'clean']
+          ];
+
+          var quillOptions = {
+            theme: 'snow',
+            modules: {
+              toolbar: toolbarOptions
+            }
+          };
+
+          // Initialize Editors
+          var quillShortDesc = new Quill('#editor-short-desc', quillOptions);
+          var quillDesc = new Quill('#editor-description', quillOptions);
+          var quillIng = new Quill('#editor-ingredients', quillOptions);
+          var quillUse = new Quill('#editor-how-to-use', quillOptions);
+
+          // Load initial content
+          quillShortDesc.root.innerHTML = document.getElementById('hidden-short-desc').value;
+          quillDesc.root.innerHTML = document.getElementById('hidden-description').value;
+          quillIng.root.innerHTML = document.getElementById('hidden-ingredients').value;
+          quillUse.root.innerHTML = document.getElementById('hidden-how-to-use').value;
+
+          // Sync content on change
+          quillShortDesc.on('text-change', function() {
+            document.getElementById('hidden-short-desc').value = quillShortDesc.root.innerHTML;
+          });
+          quillDesc.on('text-change', function() {
+            document.getElementById('hidden-description').value = quillDesc.root.innerHTML;
+          });
+          quillIng.on('text-change', function() {
+            document.getElementById('hidden-ingredients').value = quillIng.root.innerHTML;
+          });
+          quillUse.on('text-change', function() {
+            document.getElementById('hidden-how-to-use').value = quillUse.root.innerHTML;
+          });
+          
+          // Initialize searchable font picker
+          window.QuillFontConfig.initSearchablePicker();
+        });
+      </script>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -330,26 +501,120 @@ include __DIR__ . '/layout/header.php';
         <?php endif; ?>
       </div>
 
-      <div class="grid grid-cols-2 gap-3">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label class="block text-sm font-semibold mb-2">Price (₹)</label>
+          <label class="block text-sm font-semibold mb-2">Selling Price (₹) *</label>
           <input id="price" name="price" type="number" step="0.01" min="0"
-                 class="w-full p-3 border rounded-lg"
+                 class="w-full p-3 border rounded-lg bg-green-50 border-green-200"
                  value="<?php echo $price_val; ?>" required>
+          <p class="text-xs text-slate-500 mt-1">Final price customer pays (Inclusive of GST)</p>
         </div>
         <div>
-          <label class="block text-sm font-semibold mb-2">Stock</label>
+          <label class="block text-sm font-semibold mb-2">Compare Price (₹)</label>
+          <input id="compare_price" name="compare_price" type="number" step="0.01" min="0"
+                 class="w-full p-3 border rounded-lg"
+                 value="<?php echo old_val('compare_price', ''); ?>" placeholder="MRP / Old Price">
+          <p class="text-xs text-slate-500 mt-1">Original price (shown crossed out)</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+        <div>
+          <label class="block text-sm font-semibold mb-2">GST Rate (%)</label>
+          <select id="gst_rate" name="gst_rate" class="w-full p-3 border rounded-lg">
+            <option value="0">0%</option>
+            <option value="5">5%</option>
+            <option value="12">12%</option>
+            <option value="18">18%</option>
+            <option value="28">28%</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-2">GST Amount (₹)</label>
+          <input id="gst_amount" type="text" readonly
+                 class="w-full p-3 border rounded-lg bg-gray-100 text-gray-600"
+                 value="0.00">
+          <p class="text-xs text-slate-500 mt-1">Included in Selling Price</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+        <div>
+          <label class="block text-sm font-semibold mb-2">Discount (%)</label>
+          <input id="discount_percent" name="discount_percent" type="number" step="0.01" min="0" max="100"
+                 class="w-full p-3 border rounded-lg"
+                 value="<?php echo old_val('discount_percent', ''); ?>" placeholder="e.g. 20">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-2">Stock *</label>
           <input id="stock" name="stock" type="number" min="0"
                  class="w-full p-3 border rounded-lg"
                  value="<?php echo $stock_val; ?>" required>
         </div>
       </div>
 
-      <div>
-        <label class="block text-sm font-semibold mb-2">SKU</label>
-        <input id="sku" name="sku"
-               class="w-full p-3 border rounded-lg"
-               value="<?php echo $sku_val; ?>" placeholder="Optional SKU">
+      <script>
+        // Auto-calculation logic
+        document.addEventListener('DOMContentLoaded', function() {
+          const priceInput = document.getElementById('price');
+          const compareInput = document.getElementById('compare_price');
+          const discountInput = document.getElementById('discount_percent');
+          const gstRateInput = document.getElementById('gst_rate');
+          const gstAmountInput = document.getElementById('gst_amount');
+
+          function calculate() {
+            const price = parseFloat(priceInput.value) || 0;
+            const compare = parseFloat(compareInput.value) || 0;
+            const discount = parseFloat(discountInput.value) || 0;
+            const gstRate = parseFloat(gstRateInput.value) || 0;
+
+            // 1. If Compare & Discount entered -> Calculate Price
+            if (document.activeElement === discountInput || document.activeElement === compareInput) {
+               if (compare > 0 && discount > 0) {
+                 const newPrice = compare - (compare * (discount / 100));
+                 priceInput.value = newPrice.toFixed(2);
+               }
+            }
+            
+            // 2. If Price & Compare entered -> Calculate Discount
+            if (document.activeElement === priceInput || document.activeElement === compareInput) {
+               if (compare > price && compare > 0) {
+                 const newDiscount = ((compare - price) / compare) * 100;
+                 discountInput.value = newDiscount.toFixed(2);
+               }
+            }
+
+            // 3. Calculate GST Amount (Inclusive)
+            // Formula: GST Amount = Price - (Price / (1 + Rate/100))
+            if (price > 0 && gstRate >= 0) {
+                const basePrice = price / (1 + (gstRate / 100));
+                const gstAmount = price - basePrice;
+                gstAmountInput.value = gstAmount.toFixed(2);
+            } else {
+                gstAmountInput.value = '0.00';
+            }
+          }
+
+          [priceInput, compareInput, discountInput, gstRateInput].forEach(input => {
+            input.addEventListener('input', calculate);
+            input.addEventListener('change', calculate); // For select dropdown
+          });
+        });
+      </script>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-semibold mb-2">SKU</label>
+          <input id="sku" name="sku"
+                 class="w-full p-3 border rounded-lg"
+                 value="<?php echo $sku_val; ?>" placeholder="Optional SKU">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-2">HSN Code</label>
+          <input id="hsn" name="hsn"
+                 class="w-full p-3 border rounded-lg"
+                 value="<?php echo old_val('hsn', ''); ?>" placeholder="Optional HSN">
+        </div>
       </div>
 
       <div>
@@ -455,8 +720,21 @@ include __DIR__ . '/layout/header.php';
             <input type="text" id="variantName" class="w-full p-3 border rounded-lg" placeholder="e.g. 250ml, XL, Red" required>
           </div>
           <div>
-            <label class="block text-sm font-semibold mb-2">Price (₹) <span class="text-red-500">*</span></label>
-            <input type="number" id="variantPrice" step="0.01" min="0" class="w-full p-3 border rounded-lg" placeholder="0.00" required>
+            <label class="block text-sm font-semibold mb-2">Selling Price (₹) <span class="text-red-500">*</span></label>
+            <input type="number" id="variantPrice" step="0.01" min="0" class="w-full p-3 border rounded-lg bg-green-50 border-green-200" placeholder="0.00" required>
+            <p class="text-xs text-gray-500 mt-1">Final price for this variant</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-semibold mb-2">Compare Price (₹)</label>
+            <input type="number" id="variantComparePrice" step="0.01" min="0" class="w-full p-3 border rounded-lg" placeholder="MRP / Old Price">
+            <p class="text-xs text-gray-500 mt-1">Original price (shown crossed)</p>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold mb-2">Discount (%)</label>
+            <input type="number" id="variantDiscount" step="0.01" min="0" max="100" class="w-full p-3 border rounded-lg" placeholder="e.g. 20">
           </div>
         </div>
 
@@ -470,6 +748,37 @@ include __DIR__ . '/layout/header.php';
             <input type="text" id="variantSKU" class="w-full p-3 border rounded-lg" placeholder="Optional">
           </div>
         </div>
+
+        <script>
+          // Variant price auto-calculation
+          (function() {
+            const vPrice = document.getElementById('variantPrice');
+            const vCompare = document.getElementById('variantComparePrice');
+            const vDiscount = document.getElementById('variantDiscount');
+
+            function calculateVariant() {
+              const price = parseFloat(vPrice.value) || 0;
+              const compare = parseFloat(vCompare.value) || 0;
+              const discount = parseFloat(vDiscount.value) || 0;
+
+              if (document.activeElement === vDiscount || document.activeElement === vCompare) {
+                if (compare > 0 && discount > 0) {
+                  vPrice.value = (compare - (compare * (discount / 100))).toFixed(2);
+                }
+              }
+              
+              if (document.activeElement === vPrice || document.activeElement === vCompare) {
+                if (compare > price && compare > 0) {
+                  vDiscount.value = (((compare - price) / compare) * 100).toFixed(2);
+                }
+              }
+            }
+
+            [vPrice, vCompare, vDiscount].forEach(input => {
+              input.addEventListener('input', calculateVariant);
+            });
+          })();
+        </script>
 
         <!-- Override Fields -->
         <div class="border-t pt-4">

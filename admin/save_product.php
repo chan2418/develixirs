@@ -2,6 +2,7 @@
 // admin/save_product.php
 session_start();
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/image_compressor.php';
 
 // Simple flash helpers (used by add_product.php)
 function flash_set($key, $val) { $_SESSION[$key] = $val; }
@@ -48,6 +49,7 @@ $description      = trim($_POST['description'] ?? '');
 $meta_title       = trim($_POST['meta_title'] ?? '');
 $meta_description = trim($_POST['meta_description'] ?? '');
 $sku              = trim($_POST['sku'] ?? '');
+$hsn              = trim($_POST['hsn'] ?? ''); // NEW
 $price            = $_POST['price'] ?? '';
 $compare_price    = $_POST['compare_price'] ?? null; // may not exist in table, we handle later
 $currency         = 'INR';
@@ -137,6 +139,7 @@ $hasMetaTitle       = in_array('meta_title', $productCols, true);
 $hasMetaDesc        = in_array('meta_description', $productCols, true);
 $hasCreatedAt       = in_array('created_at', $productCols, true);
 $hasSku             = in_array('sku', $productCols, true);
+$hasHsn             = in_array('hsn', $productCols, true); // NEW
 $hasName            = in_array('name', $productCols, true);
 $hasDescription     = in_array('description', $productCols, true);
 
@@ -213,7 +216,9 @@ if (isset($_FILES['images']) && is_array($_FILES['images']['name'])) {
 
         $dest = $uploadDir . $filename;
 
-        if (!move_uploaded_file($tmp, $dest)) {
+        // Compress and save image
+        $result = compressImage($tmp, $dest);
+        if (!$result['success']) {
             if (!@copy($tmp, $dest)) {
                 continue;
             }
@@ -269,6 +274,9 @@ try {
     if ($hasSku && $sku !== '') {
         $addField('sku', ':sku', $sku);
     }
+    if ($hasHsn && $hsn !== '') {
+        $addField('hsn', ':hsn', $hsn);
+    }
     if ($hasSlug && $slug !== null) {
         $addField('slug', ':slug', $slug);
     }
@@ -288,15 +296,35 @@ try {
     if (in_array('price', $productCols, true)) {
         $addField('price', ':price', number_format((float)$price, 2, '.', ''));
     }
-    if ($hasComparePrice) {
+    
+    // NEW: Save Compare Price & Discount
+    $compare_price = $_POST['compare_price'] ?? null;
+    $discount_percent = $_POST['discount_percent'] ?? null;
+    $gst_rate = $_POST['gst_rate'] ?? null;
+    
+    if (in_array('compare_price', $productCols, true)) {
         $addField(
             'compare_price',
             ':compare_price',
-            $compare_price !== null && $compare_price !== ''
-                ? number_format((float)$compare_price, 2, '.', '')
-                : null
+            ($compare_price !== null && $compare_price !== '') ? number_format((float)$compare_price, 2, '.', '') : null
         );
     }
+    if (in_array('discount_percent', $productCols, true)) {
+        $addField(
+            'discount_percent',
+            ':discount_percent',
+            ($discount_percent !== null && $discount_percent !== '') ? number_format((float)$discount_percent, 2, '.', '') : null
+        );
+    }
+    // NEW: Save GST Rate
+    if (in_array('gst_rate', $productCols, true)) {
+        $addField(
+            'gst_rate',
+            ':gst_rate',
+            ($gst_rate !== null && $gst_rate !== '') ? number_format((float)$gst_rate, 2, '.', '') : '0.00'
+        );
+    }
+
     if ($hasCurrency) {
         $addField('currency', ':currency', 'INR');
     }
@@ -309,10 +337,17 @@ try {
     }
 
     // NEW: save main + sub category (if columns exist)
+    // Note: DB uses 'cat_id', not 'category_id'
+    $hasCatId = in_array('cat_id', $productCols, true);
+    
     if ($hasParentCategory) {
         $addField('parent_category_id', ':parent_category_id', $parent_category_id_final ?: null);
     }
-    if ($hasCategoryId) {
+    
+    if ($hasCatId) {
+        $addField('cat_id', ':cat_id', $category_id_final ?: null);
+    } elseif ($hasCategoryId) {
+        // Fallback if schema changes back
         $addField('category_id', ':category_id', $category_id_final ?: null);
     }
 
@@ -395,8 +430,8 @@ try {
     if (!empty($variantsRaw) && is_array($variantsRaw) && $newId > 0) {
         try {
             $stmtVar = $pdo->prepare("
-                INSERT INTO product_variants (product_id, variant_name, price, stock, sku, custom_title, custom_description, short_description, ingredients, how_to_use, meta_title, meta_description, images, image, is_active)
-                VALUES (:pid, :name, :price, :stock, :sku, :custom_title, :custom_desc, :short_desc, :ingredients, :how_to_use, :meta_title, :meta_desc, :images, :image, 1)
+                INSERT INTO product_variants (product_id, variant_name, price, compare_price, discount_percent, stock, sku, custom_title, custom_description, short_description, ingredients, how_to_use, meta_title, meta_description, images, image, is_active)
+                VALUES (:pid, :name, :price, :compare_price, :discount_percent, :stock, :sku, :custom_title, :custom_desc, :short_desc, :ingredients, :how_to_use, :meta_title, :meta_desc, :images, :image, 1)
             ");
             
             // Prepare variant FAQ statement
@@ -408,6 +443,8 @@ try {
             foreach ($variantsRaw as $idx => $v) {
                 $vName  = trim($v['name'] ?? '');
                 $vPrice = (float)($v['price'] ?? 0);
+                $vComparePrice = isset($v['compare_price']) && $v['compare_price'] !== '' ? (float)$v['compare_price'] : null;
+                $vDiscountPercent = isset($v['discount_percent']) && $v['discount_percent'] !== '' ? (float)$v['discount_percent'] : null;
                 $vStock = (int)($v['stock'] ?? 0);
                 $vSku   = trim($v['sku'] ?? '');
                 $vCustomTitle = trim($v['custom_title'] ?? '');
@@ -434,7 +471,9 @@ try {
                             $ext = preg_replace('/[^a-zA-Z0-9]/', '', $ext);
                             $newName = 'var_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
                             $dest = $uploadDir . $newName;
-                            if (move_uploaded_file($fTmp, $dest)) {
+                            // Compress and save variant image
+                            $vResult = compressImage($fTmp, $dest);
+                            if ($vResult['success']) {
                                 $variantImages[] = $newName;
                             }
                         }
@@ -445,11 +484,13 @@ try {
 
                 // Insert variant
                 $stmtVar->execute([
-                    ':pid'   => $newId,
-                    ':name'  => $vName,
-                    ':price' => $vPrice,
-                    ':stock' => $vStock,
-                    ':sku'   => $vSku,
+                    ':pid'          => $newId,
+                    ':name'         => $vName,
+                    ':price'        => $vPrice,
+                    ':compare_price' => $vComparePrice,
+                    ':discount_percent' => $vDiscountPercent,
+                    ':stock'        => $vStock,
+                    ':sku'          => $vSku,
                     ':custom_title' => $vCustomTitle ?: null,
                     ':custom_desc'  => $vCustomDesc ?: null,
                     ':short_desc'   => $vShortDesc ?: null,
@@ -457,8 +498,8 @@ try {
                     ':how_to_use'   => $vHowToUse ?: null,
                     ':meta_title'   => $vMetaTitle ?: null,
                     ':meta_desc'    => $vMetaDesc ?: null,
-                    ':images' => $imagesJson,
-                    ':image'  => $legacyImage,
+                    ':images'       => $imagesJson,
+                    ':image'        => $legacyImage
                 ]);
                 
                 $variantId = (int)$pdo->lastInsertId();
@@ -565,15 +606,32 @@ try {
             $filename = time() . '_' . uniqid() . '.' . $ext;
             $destination = $mediaUploadDir . $filename;
             
-            if (move_uploaded_file($tmpName, $destination)) {
-                $mediaType = in_array($fileType, $allowedImageTypes) ? 'image' : 'video';
-                $productMediaArray[] = [
-                    'type' => $mediaType,
-                    'path' => $filename
-                ];
-                $upload_debug[] = "media-uploaded: $filename";
+            // Compress and save product media (image or video)
+            // Note: Only compress images, not videos
+            $isImage = in_array($fileType, $allowedImageTypes);
+            
+            if ($isImage) {
+                $mResult = compressImage($tmpName, $destination);
+                if ($mResult['success']) {
+                    $productMediaArray[] = [
+                        'type' => 'image',
+                        'path' => $filename
+                    ];
+                    $upload_debug[] = "media-uploaded-compressed: $filename";
+                } else {
+                    $upload_debug[] = "media-compression-failed: {$_FILES['product_media']['name'][$key]}";
+                }
             } else {
-                $upload_debug[] = "media-failed: {$_FILES['product_media']['name'][$key]}";
+                // Videos: just move without compression
+                if (move_uploaded_file($tmpName, $destination)) {
+                    $productMediaArray[] = [
+                        'type' => 'video',
+                        'path' => $filename
+                    ];
+                    $upload_debug[] = "media-uploaded: $filename";
+                } else {
+                    $upload_debug[] = "media-failed: {$_FILES['product_media']['name'][$key]}";
+                }
             }
         }
     }

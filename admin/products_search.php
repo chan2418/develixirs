@@ -26,8 +26,7 @@ if ($q !== '') {
     $params[] = $like; $params[] = $like; $params[] = $like;
 }
 if ($status_filter !== '') {
-    if ($status_filter === 'published') { $whereParts[] = "p.is_active = 1"; }
-    elseif ($status_filter === 'draft') { $whereParts[] = "p.is_active = 0"; }
+    // is_active missing, skip filter
 }
 if ($category_filter) {
     $whereParts[] = "p.category_id = ?";
@@ -42,7 +41,7 @@ $total = (int) $stmt->fetchColumn();
 $pages = max(1, ceil($total / $perPage));
 
 // fetch rows
-$sql = "SELECT p.*, c.name AS category_name
+$sql = "SELECT p.*, c.title AS category_name
         FROM products p
         LEFT JOIN categories c ON p.category_id = c.id
         WHERE $whereSql
@@ -83,8 +82,8 @@ if (empty($rows)) {
     foreach ($rows as $r) {
         $img = htmlspecialchars(get_first_image_small($r['images']));
         $stock = (int)$r['stock'];
-        $statusText = $r['is_active'] ? 'Published' : 'Draft';
-        $statusClass = $r['is_active'] ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-slate-600';
+        $statusText = 'Published';
+        $statusClass = 'bg-green-50 text-green-700';
         $id = (int)$r['id'];
         $name = htmlspecialchars($r['name']);
         $sku = htmlspecialchars($r['sku'] ?: substr($r['name'],0,60));
@@ -121,8 +120,7 @@ if (empty($rows)) {
           <td class="px-4 py-4 text-right">
             <div class="inline-flex items-center gap-2">
               <a href="edit_product.php?id=<?php echo $id; ?>" class="btn-mini">Edit</a>
-
-              <a href="products.php?toggle=<?php echo $id; ?>" onclick="return confirm('Toggle product active state?');" class="btn-mini">Toggle</a>
+              <!-- Toggle removed (no is_active) -->
 
               <button type="button" class="delete-btn btn-danger" data-delete-id="<?php echo $id; ?>">Delete</button>
             </div>

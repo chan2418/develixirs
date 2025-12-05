@@ -1,0 +1,69 @@
+/* Quill Font Mappings */
+.ql-font-roboto { font-family: 'Roboto', sans-serif; }
+.ql-font-open-sans { font-family: 'Open Sans', sans-serif; }
+.ql-font-lato { font-family: 'Lato', sans-serif; }
+.ql-font-montserrat { font-family: 'Montserrat', sans-serif; }
+.ql-font-raleway { font-family: 'Raleway', sans-serif; }
+.ql-font-poppins { font-family: 'Poppins', sans-serif; }
+.ql-font-ubuntu { font-family: 'Ubuntu', sans-serif; }
+.ql-font-nunito { font-family: 'Nunito', sans-serif; }
+.ql-font-pt-sans { font-family: 'PT Sans', sans-serif; }
+.ql-font-oswald { font-family: 'Oswald', sans-serif; }
+.ql-font-work-sans { font-family: 'Work Sans', sans-serif; }
+.ql-font-quicksand { font-family: 'Quicksand', sans-serif; }
+.ql-font-source-sans-pro { font-family: 'Source Sans Pro', sans-serif; }
+.ql-font-noto-sans { font-family: 'Noto Sans', sans-serif; }
+.ql-font-rubik { font-family: 'Rubik', sans-serif; }
+.ql-font-inter { font-family: 'Inter', sans-serif; }
+.ql-font-mulish { font-family: 'Mulish', sans-serif; }
+.ql-font-karla { font-family: 'Karla', sans-serif; }
+.ql-font-barlow { font-family: 'Barlow', sans-serif; }
+.ql-font-titillium-web { font-family: 'Titillium Web', sans-serif; }
+.ql-font-josefin-sans { font-family: 'Josefin Sans', sans-serif; }
+.ql-font-mukta { font-family: 'Mukta', sans-serif; }
+.ql-font-merriweather-sans { font-family: 'Merriweather Sans', sans-serif; }
+.ql-font-hind { font-family: 'Hind', sans-serif; }
+.ql-font-oxygen { font-family: 'Oxygen', sans-serif; }
+.ql-font-cabin { font-family: 'Cabin', sans-serif; }
+.ql-font-arimo { font-family: 'Arimo', sans-serif; }
+.ql-font-red-hat-display { font-family: 'Red Hat Display', sans-serif; }
+.ql-font-dm-sans { font-family: 'DM Sans', sans-serif; }
+.ql-font-ibm-plex-sans { font-family: 'IBM Plex Sans', sans-serif; }
+.ql-font-fira-sans { font-family: 'Fira Sans', sans-serif; }
+.ql-font-libre-franklin { font-family: 'Libre Franklin', sans-serif; }
+.ql-font-yanone { font-family: 'Yanone Kaffeesatz', sans-serif; }
+.ql-font-saira { font-family: 'Saira', sans-serif; }
+
+/* Serif fonts */
+.ql-font-playfair { font-family: 'Playfair Display', serif; }
+.ql-font-merriweather { font-family: 'Merriweather', serif; }
+.ql-font-crimson { font-family: 'Crimson Text', serif; }
+.ql-font-libre-baskerville { font-family: 'Libre Baskerville', serif; }
+.ql-font-ibm-plex-serif { font-family: 'IBM Plex Serif', serif; }
+.ql-font-spectral { font-family: 'Spectral', serif; }
+
+/* Display fonts */
+.ql-font-fjalla-one { font-family: 'Fjalla One', sans-serif; }
+.ql-font-bebas-neue { font-family: 'Bebas Neue', cursive; }
+.ql-font-abril-fatface { font-family: 'Abril Fatface', cursive; }
+.ql-font-alfa-slab-one { font-family: 'Alfa Slab One', cursive; }
+.ql-font-anton { font-family: 'Anton', sans-serif; }
+.ql-font-lobster { font-family: 'Lobster', cursive; }
+.ql-font-righteous { font-family: 'Righteous', cursive; }
+.ql-font-fredoka-one { font-family: 'Fredoka One', cursive; }
+.ql-font-bungee { font-family: 'Bungee', cursive; }
+
+/* Handwriting & Script fonts */
+.ql-font-architects-daughter { font-family: 'Architects Daughter', cursive; }
+.ql-font-pacifico { font-family: 'Pacifico', cursive; }
+.ql-font-dancing-script { font-family: 'Dancing Script', cursive; }
+.ql-font-satisfy { font-family: 'Satisfy', cursive; }
+.ql-font-great-vibes { font-family: 'Great Vibes', cursive; }
+.ql-font-caveat { font-family: 'Caveat', cursive; }
+.ql-font-indie-flower { font-family: 'Indie Flower', cursive; }
+.ql-font-shadows-into-light { font-family: 'Shadows Into Light', cursive; }
+.ql-font-kalam { font-family: 'Kalam', cursive; }
+.ql-font-permanent-marker { font-family: 'Permanent Marker', cursive; }
+
+/* Monospace */
+.ql-font-ibm-plex-mono { font-family: 'IBM Plex Mono', monospace; }

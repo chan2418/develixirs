@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/coupon_helpers.php';
 session_start();
 
 if (!isset($_SESSION['user_id'])) {
@@ -22,6 +23,9 @@ try {
 // Fetch cart items
 $cartItems = [];
 $cartTotal = 0;
+$appliedCoupon = getAppliedCoupon();
+$discountAmount = 0;
+
 try {
     $stmt = $pdo->prepare("
         SELECT c.id, c.product_id, c.quantity, p.name, p.price, p.images
@@ -34,6 +38,11 @@ try {
     
     foreach ($cartItems as $item) {
         $cartTotal += $item['price'] * $item['quantity'];
+    }
+    
+    // Apply discount if coupon is applied
+    if ($appliedCoupon) {
+        $discountAmount = $appliedCoupon['discount_amount'];
     }
 } catch (PDOException $e) {
     $cartItems = [];
@@ -345,14 +354,31 @@ function get_first_image($images) {
         <span>Price (<?php echo count($cartItems); ?> items)</span>
         <span>₹<?php echo number_format($cartTotal, 2); ?></span>
       </div>
+      <?php if ($appliedCoupon): ?>
+        <div class="price-row" style="color: #28a745;">
+          <span><i class="fa fa-tag"></i> Coupon (<?php echo htmlspecialchars($appliedCoupon['code']); ?>)</span>
+          <span>-₹<?php echo number_format($discountAmount, 2); ?></span>
+        </div>
+      <?php endif; ?>
       <div class="price-row">
         <span>Delivery Charges</span>
-        <span style="color:#388e3c;">FREE</span>
+        <?php 
+          $deliveryCharge = ($cartTotal < 1000) ? 80 : 0;
+        ?>
+        <span style="color:<?php echo ($deliveryCharge > 0) ? '#333' : '#388e3c'; ?>;">
+          <?php echo ($deliveryCharge > 0) ? '₹' . number_format($deliveryCharge, 2) : 'FREE'; ?>
+        </span>
       </div>
       <div class="total-row">
         <span>Total Payable</span>
-        <span>₹<?php echo number_format($cartTotal, 2); ?></span>
+        <span>₹<?php echo number_format($cartTotal - $discountAmount + $deliveryCharge, 2); ?></span>
       </div>
+      <?php if ($discountAmount > 0): ?>
+        <div style="background: #d4edda; color: #155724; padding: 10px; border-radius: 6px; font-size: 13px; text-align: center; margin-top: 15px;">
+          <i class="fa fa-check-circle"></i>
+          You saved ₹<?php echo number_format($discountAmount, 2); ?>!
+        </div>
+      <?php endif; ?>
     </div>
   </div>
 </div>
@@ -429,6 +455,8 @@ document.querySelectorAll('input[name="delivery_address"]').forEach(radio => {
     });
 });
 </script>
+
+<?php include 'footer.php'; ?>
 
 </body>
 </html>

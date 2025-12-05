@@ -38,13 +38,15 @@ $icons = [
   'Categories'=> '📂',
   'Users'     => '👥',
   'Settings'  => '⚙️',
-  'Appearance'=> '🖼️'
+  'Appearance'=> '🖼️',
+  'Offers & Coupons' => '🎟️'
 ];
 
 // Primary nav entries (other than Dashboard / parents rendered explicitly)
 $nav = [
   ['label'=>'Categories','href'=>'/admin/categories.php','match'=>['categories','categories.php','category']],
   ['label'=>'Users','href'=>'/admin/users.php','match'=>['users','users.php','user']],
+  ['label'=>'Offers & Coupons','href'=>'/admin/coupons.php','match'=>['coupons','coupons.php','coupon','coupons_add','coupons_edit']],
   ['label'=>'Settings','href'=>'/admin/settings.php','match'=>['settings','settings.php']],
 ];
 

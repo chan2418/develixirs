@@ -27,7 +27,7 @@ try {
 
 // Preferred path: uploaded file name in your uploads folder (publically served location).
 $uploadsDirWeb = '/uploads/labels/';          // web-accessible folder (adjust if different)
-$uploadsDirFs  = __DIR__ . '/../public/uploads/labels/'; // server filesystem path (adjust)
+$uploadsDirFs  = __DIR__ . '/../uploads/labels/'; // server filesystem path (adjust)
 
 // Developer fallback (the file you uploaded in the environment)
 $developerFallback = '/mnt/data/OD335927864916938100.pdf';
@@ -50,8 +50,8 @@ if (!$fsPath && file_exists($developerFallback) && is_readable($developerFallbac
 }
 
 if (!$fsPath) {
-    http_response_code(404);
-    echo 'Label not found.';
+    // Fallback: If no uploaded file found, generate one on the fly
+    header("Location: generate_label_pdf.php?id={$id}");
     exit;
 }
 

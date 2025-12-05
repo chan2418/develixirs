@@ -233,6 +233,37 @@ try {
     $tabSale      = fetch_home_section($pdo, 'sale', 3);
     $tabTop       = fetch_home_section($pdo, 'top_rated', 3);
 
+    // ===== LATEST BLOGS FOR HOMEPAGE =====
+    $latestBlogs = [];
+    try {
+        $stmtBlogs = $pdo->query("
+            SELECT id, title, slug, content, featured_image, created_at
+            FROM blogs
+            WHERE is_published = 1
+            ORDER BY created_at DESC
+            LIMIT 2
+        ");
+        $latestBlogs = $stmtBlogs->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        $latestBlogs = [];
+    }
+
+    // ===== LATEST REVIEWS FOR HOMEPAGE =====
+    $homeReviews = [];
+    try {
+        $stmtReviews = $pdo->query("
+            SELECT pr.*, p.name as product_name, p.images as product_images
+            FROM product_reviews pr
+            JOIN products p ON pr.product_id = p.id
+            WHERE pr.status = 'approved' AND pr.rating >= 4
+            ORDER BY pr.created_at DESC
+            LIMIT 4
+        ");
+        $homeReviews = $stmtReviews->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        $homeReviews = [];
+    }
+
 } catch (PDOException $e) {
     // uncomment for debugging:
     // echo "DB error: " . $e->getMessage();
@@ -243,9 +274,25 @@ try {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Devilixirs – Herbal Shop Demo</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<?php
+// Include SEO helper
+require_once __DIR__ . '/includes/seo_meta.php';
+
+// Generate SEO meta tags
+echo generate_seo_meta([
+    'title' => 'DevElixir Natural Cosmetics | Authentic Ayurvedic Beauty Products Online',
+    'description' => 'Shop authentic ayurvedic beauty products, natural cosmetics, and herbal skincare at DevElixir. Ancient wellness secrets since 2005. Free shipping on orders ₹1000+',
+    'keywords' => 'ayurvedic beauty products, natural cosmetics india, herbal skincare online, organic baby care, hair care products, skin care coimbatore, DevElixir',
+    'url' => 'https://develixirs.com/',
+    'type' => 'website'
+]);
+
+// Add Organization Schema
+echo generate_organization_schema();
+
+// Add Website Schema with search
+echo generate_website_schema();
+?>
 
   <!-- Google Font -->
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -492,62 +539,8 @@ try {
       position:static; /* allow dropdown full width */
     }
 
-    .mega-menu{
-      position:absolute;
-      left:0;
-      right:0;
-      top:100%;
-      margin-top:0;
-      background:#ffffff;
-      border-top:1px solid var(--border);
-      box-shadow:0 14px 35px rgba(0,0,0,.14);
-      padding:22px 0 26px;
-      display:none;
-      z-index:60;
-    }
-
-    /* show on hover (desktop) */
-    .nav li.has-mega:hover .mega-menu{
-      display:block;
-    }
-
-    .mega-menu-inner{
-      max-width:1200px;
-      margin:0 auto;
-      padding:0 15px;
-      display:grid;
-      grid-template-columns:repeat(3,minmax(0,1fr));
-      gap:40px;
-    }
-
-    .mega-column-title{
-      font-size:12px;
-      text-transform:uppercase;
-      margin-bottom:10px;
-      font-weight:600;
-      letter-spacing:.12em;
-      color:var(--text);
-    }
-
-    .mega-list{
-      list-style:none;
-      margin:0;
-      padding:0;
-    }
-
-    .mega-list li{
-      margin-bottom:6px;
-    }
-
-    .mega-item-link{
-      display:block;
-      padding:8px 10px;
-      border-radius:8px;
-      transition:.2s ease;
-    }
-
+    /* Mega menu styles moved to assets/css/navbar.css */
     .mega-item-link:hover{
-      background:#f8f4e6;
       transform:translateX(3px);
     }
 
@@ -1119,131 +1112,7 @@ try {
       opacity:.9;
     }
 
-    /* FOOTER */
-    .footer{
-      background:#050b0b;
-      color:#ddd;
-      padding:40px 0 0;
-      margin-top:40px;
-    }
-    .footer-inner{
-      max-width:1200px;
-      margin:0 auto;
-      padding:0 15px 30px;
-      display:grid;
-      grid-template-columns:2fr 1.4fr 1.4fr 1.6fr 2fr;
-      gap:30px;
-    }
-    .footer-logo{
-      font-size:22px;
-      font-weight:700;
-      letter-spacing:.14em;
-      margin-bottom:8px;
-    }
-    .footer-logo span{
-      display:block;
-      font-size:10px;
-      letter-spacing:.25em;
-      font-weight:400;
-    }
-    .footer-about{
-      font-size:12px;
-      line-height:1.7;
-      margin-bottom:16px;
-      color:#bfbfbf;
-    }
-    .footer-contact-item{
-      display:flex;
-      align-items:flex-start;
-      gap:10px;
-      font-size:12px;
-      margin-bottom:8px;
-    }
-    .footer-contact-item i{
-      width:22px;
-      height:22px;
-      border-radius:2px;
-      background:#1a241d;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      font-size:11px;
-      margin-top:2px;
-    }
-    .footer-title{
-      font-size:13px;
-      text-transform:uppercase;
-      margin-bottom:14px;
-    }
-    .footer-links li{
-      font-size:12px;
-      margin-bottom:6px;
-      color:#bfbfbf;
-      cursor:pointer;
-    }
-    .footer-links li:hover{
-      color:#fff;
-    }
-    .footer-links li::before{
-      content:'\f105';
-      font-family:'Font Awesome 6 Free';
-      font-weight:900;
-      margin-right:6px;
-      font-size:10px;
-    }
-    .footer-gallery{
-      display:grid;
-      grid-template-columns:repeat(3,1fr);
-      gap:6px;
-    }
-    .footer-gallery img{
-      width:100%;
-      height:60px;
-      object-fit:cover;
-      border-radius:4px;
-    }
-    .footer-bottom{
-      border-top:1px solid #222c24;
-      margin-top:10px;
-      padding:12px 15px 16px;
-      max-width:1200px;
-      margin-left:auto;
-      margin-right:auto;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      font-size:11px;
-      color:#bfbfbf;
-    }
-    .footer-payments{
-      display:flex;
-      gap:8px;
-      font-size:11px;
-    }
-    .footer-payments span{
-      padding:4px 7px;
-      border-radius:2px;
-      background:#1b241d;
-    }
-
-    /* BACK TO TOP */
-    .back-top{
-      position:fixed;
-      right:25px;
-      bottom:25px;
-      width:42px;
-      height:42px;
-      border-radius:50%;
-      background:#A41B42;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      color:#fff;
-      font-size:18px;
-      cursor:pointer;
-      box-shadow:0 3px 12px rgba(0,0,0,.25);
-      z-index:10;
-    }
+    /* FOOTER & BACK TO TOP styles are now in footer.php */
 
     /* RESPONSIVE */
     @media (max-width:992px){
@@ -1315,7 +1184,49 @@ try {
 
     @media (max-width:480px){
       .product-grid{
-        grid-template-columns:1fr;
+        grid-template-columns:repeat(2, 1fr);
+        gap: 12px;
+      }
+      
+      /* Hide categories sidebar on mobile */
+      .side-column{
+        display: none;
+      }
+      
+      /* Make main content full width when sidebar is hidden */
+      .page-grid{
+        grid-template-columns: 1fr;
+      }
+      
+      /* Reduce tabbed products section height on mobile */
+      .tabbed-products-section {
+        margin-top: 20px !important;
+        padding: 0 12px 15px !important;
+      }
+      
+      .tabs-bar {
+        margin-bottom: 10px !important;
+      }
+      
+      .tab-ribbon {
+        padding: 8px 4px !important;
+        font-size: 11px !important;
+      }
+      
+      .tab-column-card {
+        padding: 8px !important;
+        margin-bottom: 8px !important;
+      }
+      
+      .tab-col-product img {
+        width: 50px !important;
+        height: 50px !important;
+      }
+      
+      /* Reduce tab-column background height */
+      .tab-column {
+        padding: 10px !important;
+        min-height: auto !important;
       }
     }
 
@@ -1398,6 +1309,28 @@ try {
       margin-bottom:14px;
     }
 
+    .footer-social {
+        display: flex;
+        gap: 15px;
+        margin-top: 20px;
+    }
+    .footer-social a {
+        width: 36px;
+        height: 36px;
+        background: #222;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        border-radius: 50%;
+        transition: all 0.3s ease;
+        font-size: 14px;
+    }
+    .footer-social a:hover {
+        background: var(--primary);
+        color: #fff;
+        transform: translateY(-3px);
+    }
     .ad-cta{
       display:inline-flex;
       align-items:center;
@@ -2009,56 +1942,6 @@ try {
 </head>
 <body>
 
-  <!-- MOBILE HEADER -->
-  <header class="mobile-header">
-    <button class="mobile-menu-toggle">
-      <i class="fa-solid fa-bars"></i>
-    </button>
-
-    <div class="mobile-header-title">
-      MENU
-    </div>
-
-    <button class="mobile-cart-btn">
-      <i class="fa-solid fa-cart-shopping"></i>
-      <span class="mobile-cart-count">0</span>
-    </button>
-  </header>
-
-  <!-- OFF-CANVAS MOBILE MENU -->
-  <div class="mobile-menu-overlay">
-    <div class="mobile-menu-panel">
-      <div class="mobile-menu-top">
-        <span class="mobile-menu-title">Menu</span>
-        <button class="mobile-menu-close">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
-      </div>
-
-      <div class="mobile-menu-search">
-        <input type="text" placeholder="Search ..." />
-        <button><i class="fa-solid fa-magnifying-glass"></i></button>
-      </div>
-
-      <ul class="mobile-menu-list">
-        <li class="active"><a href="#">Home</a><span class="plus">+</span></li>
-        <li><a href="#">Shop</a><span class="plus">+</span></li>
-        <li><a href="product.php">Product</a><span class="plus">+</span></li>
-        <li><a href="#">Blog</a><span class="plus">+</span></li>
-        <li><a href="#">Contact</a><span class="plus">+</span></li>
-        <!-- <li><a href="#">Elements</a><span class="plus">+</span></li> -->
-        <li><a href="#">Wishlist (0)</a></li>
-        <li><a href="#">Login</a></li>
-      </ul>
-
-      <div class="mobile-menu-colors">
-        <span class="color-box c1"></span>
-        <span class="color-box c2"></span>
-        <span class="color-box c3"></span>
-        <span class="color-box c4"></span>
-      </div>
-    </div>
-  </div>
 
   <!-- MAIN -->
   <main class="main">
@@ -2108,7 +1991,7 @@ try {
               <?php if (!empty($picksProducts)): ?>
                 <?php foreach ($picksProducts as $p): ?>
                   <?php $img = htmlspecialchars(get_first_image($p['images'] ?? '')); ?>
-                  <div class="mini-product">
+                  <a href="product_view.php?id=<?php echo (int)$p['id']; ?>" class="mini-product" style="text-decoration:none; color:inherit; display:flex;">
                     <img src="<?php echo $img; ?>" alt="Product">
                     <div class="mini-info">
                       <div class="mini-name">
@@ -2119,7 +2002,7 @@ try {
                         ₹<?php echo number_format((float)$p['price'], 2); ?>
                       </div>
                     </div>
-                  </div>
+                  </a>
                 <?php endforeach; ?>
               <?php else: ?>
                 <div style="padding:10px 16px; font-size:12px; color:#777;">
@@ -2361,7 +2244,7 @@ try {
               <?php if (!empty($newProducts)): ?>
                 <?php foreach ($newProducts as $p): ?>
                   <?php $img = htmlspecialchars(get_first_image($p['images'] ?? '')); ?>
-                  <div class="product-card">
+                  <a href="product_view.php?id=<?php echo (int)$p['id']; ?>" class="product-card" style="text-decoration:none; color:inherit; display:block;">
                     <div class="product-image">
                       <img src="<?php echo $img; ?>" alt="Product">
                     </div>
@@ -2372,7 +2255,7 @@ try {
                       ₹<?php echo number_format((float)$p['price'], 2); ?>
                     </div>
                     <div class="product-stars">★★★★★</div>
-                  </div>
+                  </a>
                 <?php endforeach; ?>
               <?php else: ?>
                 <p style="font-size:12px; color:#777;">No products available yet.</p>
@@ -2423,7 +2306,7 @@ try {
                 <?php if (!empty($bestProducts)): ?>
                   <?php foreach ($bestProducts as $p): ?>
                     <?php $img = htmlspecialchars(get_first_image($p['images'] ?? '')); ?>
-                    <div class="product-card">
+                    <a href="product_view.php?id=<?php echo (int)$p['id']; ?>" class="product-card" style="text-decoration:none; color:inherit; display:block;">
                       <div class="product-image">
                         <img src="<?php echo $img; ?>" alt="Product">
                       </div>
@@ -2434,7 +2317,7 @@ try {
                         ₹<?php echo number_format((float)$p['price'], 2); ?>
                       </div>
                       <div class="product-stars">★★★★★</div>
-                    </div>
+                    </a>
                   <?php endforeach; ?>
                 <?php else: ?>
                   <p style="font-size:12px; color:#777;">No best sellers available yet.</p>
@@ -2452,39 +2335,31 @@ try {
                 </div>
               </div>
               <div class="blog-grid">
-                <article class="blog-card">
-                  <div class="blog-card-image">
-                    <img src="https://images.pexels.com/photos/3738335/pexels-photo-3738335.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
-                  </div>
-                  <div class="blog-card-body">
-                    <div class="blog-title">5 Herbs That Love Your Scalp</div>
-                    <div class="blog-meta">
-                      <span>January 7, 2025</span>
-                      <span>By <a href="#">Devilixirs</a></span>
-                    </div>
-                    <p class="blog-excerpt">
-                      Discover how neem, bhringraj, amla, fenugreek and hibiscus work together
-                      to support thicker, healthier-looking hair when used consistently.
-                    </p>
-                  </div>
-                </article>
-
-                <article class="blog-card">
-                  <div class="blog-card-image">
-                    <img src="https://images.pexels.com/photos/3738342/pexels-photo-3738342.jpeg?auto=compress&cs=tinysrgb&w=800" alt="">
-                  </div>
-                  <div class="blog-card-body">
-                    <div class="blog-title">Building A Clean Skin Routine</div>
-                    <div class="blog-meta">
-                      <span>January 6, 2025</span>
-                      <span>By <a href="#">Devilixirs</a></span>
-                    </div>
-                    <p class="blog-excerpt">
-                      A simple three-step ritual with sulfate-free cleansers, hydration boosters
-                      and herbal moisturisers that your skin will thank you for.
-                    </p>
-                  </div>
-                </article>
+                <?php if (!empty($latestBlogs)): ?>
+                  <?php foreach ($latestBlogs as $blog): ?>
+                    <article class="blog-card">
+                      <a href="blog_single.php?slug=<?= htmlspecialchars($blog['slug']) ?>" style="text-decoration:none;color:inherit;">
+                        <div class="blog-card-image">
+                          <img src="<?= htmlspecialchars($blog['featured_image'] ?: '/assets/images/blog-default.jpg') ?>" alt="<?= htmlspecialchars($blog['title']) ?>">
+                        </div>
+                        <div class="blog-card-body">
+                          <div class="blog-title"><?= htmlspecialchars($blog['title']) ?></div>
+                          <div class="blog-meta">
+                            <span><i class="fa-regular fa-calendar"></i> <?= date('F j, Y', strtotime($blog['created_at'])) ?></span>
+                          </div>
+                          <p class="blog-excerpt">
+                            <?php 
+                              $excerpt = strip_tags($blog['content']);
+                              echo htmlspecialchars(strlen($excerpt) > 120 ? substr($excerpt, 0, 120) . '...' : $excerpt);
+                            ?>
+                          </p>
+                        </div>
+                      </a>
+                    </article>
+                  <?php endforeach; ?>
+                <?php else: ?>
+                  <p style="grid-column:1/-1;text-align:center;color:#999;padding:40px 0;">No blog posts available yet.</p>
+                <?php endif; ?>
               </div>
             </div>
 
@@ -2503,7 +2378,7 @@ try {
                   <?php if (!empty($tabLatest)): ?>
                     <?php foreach ($tabLatest as $p): ?>
                       <?php $img = htmlspecialchars(get_first_image($p['images'] ?? '')); ?>
-                      <div class="tab-column-card">
+                      <a href="product_view.php?id=<?php echo (int)$p['id']; ?>" class="tab-column-card" style="text-decoration:none; color:inherit; display:block;">
                         <div class="tab-col-product">
                           <img src="<?php echo $img; ?>" alt="Product">
                           <div class="tab-col-info">
@@ -2514,7 +2389,7 @@ try {
                             <div class="tab-col-stars">★★★★★</div>
                           </div>
                         </div>
-                      </div>
+                      </a>
                     <?php endforeach; ?>
                   <?php else: ?>
                     <p style="font-size:11px; color:#777; padding:8px 0;">No latest products.</p>
@@ -2526,7 +2401,7 @@ try {
                   <?php if (!empty($tabTrendy)): ?>
                     <?php foreach ($tabTrendy as $p): ?>
                       <?php $img = htmlspecialchars(get_first_image($p['images'] ?? '')); ?>
-                      <div class="tab-column-card">
+                      <a href="product_view.php?id=<?php echo (int)$p['id']; ?>" class="tab-column-card" style="text-decoration:none; color:inherit; display:block;">
                         <div class="tab-col-product">
                           <img src="<?php echo $img; ?>" alt="Product">
                           <div class="tab-col-info">
@@ -2537,7 +2412,7 @@ try {
                             <div class="tab-col-stars">★★★★★</div>
                           </div>
                         </div>
-                      </div>
+                      </a>
                     <?php endforeach; ?>
                   <?php else: ?>
                     <p style="font-size:11px; color:#777; padding:8px 0;">No trendy products.</p>
@@ -2549,7 +2424,7 @@ try {
                   <?php if (!empty($tabSale)): ?>
                     <?php foreach ($tabSale as $p): ?>
                       <?php $img = htmlspecialchars(get_first_image($p['images'] ?? '')); ?>
-                      <div class="tab-column-card">
+                      <a href="product_view.php?id=<?php echo (int)$p['id']; ?>" class="tab-column-card" style="text-decoration:none; color:inherit; display:block;">
                         <div class="tab-col-product">
                           <img src="<?php echo $img; ?>" alt="Product">
                           <div class="tab-col-info">
@@ -2560,7 +2435,7 @@ try {
                             <div class="tab-col-stars">★★★★★</div>
                           </div>
                         </div>
-                      </div>
+                      </a>
                     <?php endforeach; ?>
                   <?php else: ?>
                     <p style="font-size:11px; color:#777; padding:8px 0;">No sale products.</p>
@@ -2572,7 +2447,7 @@ try {
                   <?php if (!empty($tabTop)): ?>
                     <?php foreach ($tabTop as $p): ?>
                       <?php $img = htmlspecialchars(get_first_image($p['images'] ?? '')); ?>
-                      <div class="tab-column-card">
+                      <a href="product_view.php?id=<?php echo (int)$p['id']; ?>" class="tab-column-card" style="text-decoration:none; color:inherit; display:block;">
                         <div class="tab-col-product">
                           <img src="<?php echo $img; ?>" alt="Product">
                           <div class="tab-col-info">
@@ -2583,7 +2458,7 @@ try {
                             <div class="tab-col-stars">★★★★★</div>
                           </div>
                         </div>
-                      </div>
+                      </a>
                     <?php endforeach; ?>
                   <?php else: ?>
                     <p style="font-size:11px; color:#777; padding:8px 0;">No top rated products.</p>
@@ -2598,123 +2473,191 @@ try {
       </div>
 
     </div>
+    </div>
+    
+    <!-- CUSTOMER REVIEWS SECTION -->
+    <?php if (!empty($homeReviews)): ?>
+    <section class="section-reviews" style="padding: 60px 0; background: #fff;">
+      <div class="container">
+        <div class="section-header" style="text-align:center; margin-bottom:40px;">
+          <h2 style="font-family:'Playfair Display', serif; font-size:32px; color:#333; margin-bottom:10px;">Customer Love</h2>
+          <div style="width:60px; height:3px; background:#A41B42; margin:0 auto 15px;"></div>
+          <p style="color:#777; font-size:14px;">See what our happy customers have to say</p>
+        </div>
+        
+        <div class="reviews-scroll-container" style="display:flex; overflow-x:auto; overflow-y:hidden; gap:20px; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-bottom: 10px;">
+          <?php foreach ($homeReviews as $review): 
+              $prodImg = get_first_image($review['product_images']);
+          ?>
+            <div class="home-review-card" style="background:#f9f9f9; padding:30px; border-radius:16px; border:1px solid #eee; transition:all 0.3s ease; flex: 0 0 350px; scroll-snap-align: start;">
+              <div class="review-stars" style="color:#ffb400; font-size:16px; margin-bottom:15px;">
+                <?= str_repeat('★', (int)$review['rating']) ?><?= str_repeat('☆', 5 - (int)$review['rating']) ?>
+              </div>
+              <p class="review-text" style="font-size:15px; line-height:1.7; color:#444; margin-bottom:25px; min-height:80px;">
+                "<?= htmlspecialchars(mb_strimwidth($review['comment'], 0, 150, '...')) ?>"
+              </p>
+              <div class="review-meta" style="display:flex; align-items:center; gap:15px; padding-top:20px; border-top:1px solid #e5e5e5;">
+                <a href="product_view.php?id=<?= $review['product_id'] ?>" class="review-prod-img" style="width:60px; height:60px; border-radius:10px; overflow:hidden; flex-shrink:0; border:1px solid #ddd;">
+                  <img src="<?= htmlspecialchars($prodImg) ?>" alt="Product" style="width:100%; height:100%; object-fit:cover;">
+                </a>
+                <div class="review-info">
+                  <div class="reviewer-name" style="font-weight:700; font-size:15px; color:#222; margin-bottom:4px;">
+                    <?= htmlspecialchars($review['reviewer_name'] ?: 'Verified Customer') ?>
+                  </div>
+                  <div class="reviewed-product" style="font-size:12px; color:#777;">
+                    Review for <a href="product_view.php?id=<?= $review['product_id'] ?>" style="color:#A41B42; font-weight:600; text-decoration:none;"><?= htmlspecialchars($review['product_name']) ?></a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      </div>
+      
+      <style>
+        .home-review-card:hover {
+          transform: translateY(-5px);
+          box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+          background: #fff;
+          border-color: #A41B42;
+        }
+        
+        /* Hide scrollbar for cleaner look */
+        .reviews-scroll-container::-webkit-scrollbar {
+          display: none;
+        }
+        
+        /* Prevent horizontal page overflow */
+        .section-reviews {
+          overflow: hidden;
+        }
+        
+        .home-review-card:hover {
+          transform: translateY(-5px);
+          box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+          background: #fff;
+          border-color: #A41B42;
+        }
+        
+        /* Mobile: Optimize for horizontal scrolling */
+        @media (max-width: 768px) {
+          .reviews-scroll-container {
+            gap: 15px !important;
+            padding: 0 15px 10px 15px;
+            margin: 0 -15px;
+          }
+          
+          .home-review-card {
+            flex: 0 0 85% !important;
+            padding: 20px !important;
+          }
+          
+          .review-stars {
+            font-size: 14px !important;
+            margin-bottom: 10px !important;
+          }
+          
+          .review-text {
+            font-size: 13px !important;
+            line-height: 1.6 !important;
+            margin-bottom: 15px !important;
+            min-height: 60px !important;
+          }
+          
+          .review-meta {
+            padding-top: 12px !important;
+            gap: 10px !important;
+          }
+          
+          .review-prod-img {
+            width: 50px !important;
+            height: 50px !important;
+          }
+          
+          .reviewer-name {
+            font-size: 14px !important;
+          }
+          
+          .reviewed-product {
+            font-size: 11px !important;
+          }
+        }
+        
+        /* Very small screens: Full width cards */
+        @media (max-width: 480px) {
+          .home-review-card {
+            flex: 0 0 90% !important;
+          }
+        }
+      </style>
+      
+      <script>
+        // Auto-scroll reviews carousel
+        document.addEventListener('DOMContentLoaded', function() {
+          const reviewsContainer = document.querySelector('.reviews-scroll-container');
+          
+          if (reviewsContainer) {
+            let scrollInterval;
+            let isPaused = false;
+            
+            // Auto-scroll function
+            function autoScroll() {
+              if (!isPaused && reviewsContainer) {
+                const cardWidth = reviewsContainer.querySelector('.home-review-card').offsetWidth;
+                const gap = 20; // gap between cards
+                const scrollAmount = cardWidth + gap;
+                
+                // Check if we've reached the end
+                if (reviewsContainer.scrollLeft + reviewsContainer.offsetWidth >= reviewsContainer.scrollWidth - 10) {
+                  // Reset to beginning
+                  reviewsContainer.scrollTo({ left: 0, behavior: 'smooth' });
+                } else {
+                  // Scroll to next card
+                  reviewsContainer.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+                }
+              }
+            }
+            
+            // Start auto-scrolling every 4 seconds
+            scrollInterval = setInterval(autoScroll, 4000);
+            
+            // Pause on hover (desktop)
+            reviewsContainer.addEventListener('mouseenter', function() {
+              isPaused = true;
+            });
+            
+            reviewsContainer.addEventListener('mouseleave', function() {
+              isPaused = false;
+            });
+            
+            // Pause on touch/scroll (mobile)
+            reviewsContainer.addEventListener('touchstart', function() {
+              isPaused = true;
+              // Resume after 5 seconds of no interaction
+              clearTimeout(reviewsContainer.resumeTimeout);
+              reviewsContainer.resumeTimeout = setTimeout(function() {
+                isPaused = false;
+              }, 5000);
+            });
+            
+            reviewsContainer.addEventListener('scroll', function() {
+              isPaused = true;
+              clearTimeout(reviewsContainer.resumeTimeout);
+              reviewsContainer.resumeTimeout = setTimeout(function() {
+                isPaused = false;
+              }, 5000);
+            });
+          }
+        });
+      </script>
+    </section>
+    <?php endif; ?>
+
   </main>
 
   <!-- FOOTER -->
-  <footer class="footer">
-    <div class="footer-inner">
-      <div>
-        <div class="footer-logo">
-          DEVILIXIRS
-          <span>HERBAL&nbsp;CARE</span>
-        </div>
-        <p class="footer-about">
-          Devilixirs brings together traditional herbs and clean formulations to help you build
-          a simple, effective hair and skin routine.
-        </p>
-        <div class="footer-contact-item">
-          <i class="fa-solid fa-location-dot"></i>
-          <span>123 Herbal Street, Chennai, India</span>
-        </div>
-        <div class="footer-contact-item">
-          <i class="fa-solid fa-phone"></i>
-          <span>Support: +91 90000 00000</span>
-        </div>
-        <div class="footer-contact-item">
-          <i class="fa-solid fa-envelope"></i>
-          <span>care@devilixirs.com</span>
-        </div>
-      </div>
-
-      <div>
-        <h4 class="footer-title">Informations</h4>
-        <ul class="footer-links">
-          <li>About Devilixirs</li>
-          <li>Our Ingredients</li>
-          <li>How We Formulate</li>
-          <li>New Arrivals</li>
-          <li>Best Sellers</li>
-          <li>Gift Cards</li>
-          <li>Newsletter</li>
-        </ul>
-      </div>
-
-      <div>
-        <h4 class="footer-title">Links</h4>
-        <ul class="footer-links">
-          <li>Shop All</li>
-          <li>Hair Care</li>
-          <li>Skin Care</li>
-          <li>Combos</li>
-          <li>Track Order</li>
-          <li>Terms &amp; Conditions</li>
-          <li>Privacy Policy</li>
-        </ul>
-      </div>
-
-      <div>
-        <h4 class="footer-title">Customer Service</h4>
-        <ul class="footer-links">
-          <li>Contact Us</li>
-          <li>Returns &amp; Refunds</li>
-          <li>Shipping Info</li>
-          <li>FAQs</li>
-          <li>My Account</li>
-          <li>Order History</li>
-        </ul>
-      </div>
-
-      <div>
-        <h4 class="footer-title">Gallery</h4>
-        <div class="footer-gallery">
-          <img src="https://images.pexels.com/photos/3738341/pexels-photo-3738341.jpeg?auto=compress&cs=tinysrgb&w=400" alt="">
-          <img src="https://images.pexels.com/photos/3738343/pexels-photo-3738343.jpeg?auto=compress&cs=tinysrgb&w=400" alt="">
-          <img src="https://images.pexels.com/photos/3738344/pexels-photo-3738344.jpeg?auto=compress&cs=tinysrgb&w=400" alt="">
-          <img src="https://images.pexels.com/photos/3738338/pexels-photo-3738338.jpeg?auto=compress&cs=tinysrgb&w=400" alt="">
-          <img src="https://images.pexels.com/photos/3738339/pexels-photo-3738339.jpeg?auto=compress&cs=tinysrgb&w=400" alt="">
-          <img src="https://images.pexels.com/photos/3738340/pexels-photo-3738340.jpeg?auto=compress&cs=tinysrgb&w=400" alt="">
-          <img src="https://images.pexels.com/photos/3738335/pexels-photo-3738335.jpeg?auto=compress&cs=tinysrgb&w=400" alt="">
-          <img src="https://images.pexels.com/photos/3738336/pexels-photo-3738336.jpeg?auto=compress&cs=tinysrgb&w=400" alt="">
-          <img src="https://images.pexels.com/photos/3738342/pexels-photo-3738342.jpeg?auto=compress&cs=tinysrgb&w=400" alt="">
-        </div>
-      </div>
-    </div>
-
-    <div class="footer-bottom">
-      <span>Copyright © 2025 <strong>Devilixirs</strong>. All Rights Reserved.</span>
-      <div class="footer-payments">
-        <span>UPI</span>
-        <span>Rupay</span>
-        <span>MasterCard</span>
-        <span>Visa</span>
-      </div>
-    </div>
-  </footer>
-
-  <!-- Back to top button -->
-  <div class="back-top">
-    <i class="fa-solid fa-angle-up"></i>
-  </div>
-
-  <!-- MOBILE BOTTOM NAV -->
-  <nav class="mobile-bottom-nav">
-    <a href="#">
-      <i class="fa-solid fa-house"></i>
-      <span>Home</span>
-    </a>
-    <a href="#">
-      <i class="fa-solid fa-cart-shopping"></i>
-      <span>Cart (0)</span>
-    </a>
-    <a href="#">
-      <i class="fa-regular fa-heart"></i>
-      <span>Wishlist (0)</span>
-    </a>
-    <a href="#">
-      <i class="fa-regular fa-user"></i>
-      <span>Login</span>
-    </a>
-  </nav>
+  <!-- FOOTER -->
+  <?php include 'footer.php'; ?>
 
   <!-- JS -->
   <script>
@@ -2750,13 +2693,15 @@ try {
       const closeBtn = document.querySelector('.mobile-menu-close');
 
       if(openBtn && overlay){
-        openBtn.addEventListener('click', function(){
+        openBtn.addEventListener('click', function(e){
+          e.preventDefault();
           overlay.classList.add('open');
         });
       }
 
       if(closeBtn && overlay){
-        closeBtn.addEventListener('click', function(){
+        closeBtn.addEventListener('click', function(e){
+          e.preventDefault();
           overlay.classList.remove('open');
         });
       }

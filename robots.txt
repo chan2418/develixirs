@@ -1,0 +1,40 @@
+# robots.txt for DevElixir Natural Cosmetics
+# https://develixirs.com/robots.txt
+
+User-agent: *
+Allow: /
+
+# Block admin areas
+Disallow: /admin/
+Disallow: /includes/
+
+# Block cart and checkout (no need to index)
+Disallow: /cart.php
+Disallow: /checkout.php
+Disallow: /payment.php
+
+# Block user account pages
+Disallow: /my-profile.php
+Disallow: /login.php
+Disallow: /register.php
+
+# Block AJAX endpoints
+Disallow: /ajax_*.php
+Disallow: /*ajax*.php
+
+# Block search results with parameters to avoid duplicate content
+Disallow: /*?*search=
+Disallow: /*?*filter=
+
+# Allow CSS and JS for better rendering
+Allow: /assets/css/
+Allow: /assets/js/
+
+# Allow product images
+Allow: /assets/uploads/products/
+
+# Sitemap location
+Sitemap: https://develixirs.com/sitemap.xml
+
+# Crawl delay (1 second between requests)
+Crawl-delay: 1

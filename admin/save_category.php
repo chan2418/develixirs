@@ -3,6 +3,7 @@
 
 require_once __DIR__ . '/_auth.php';
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/image_compressor.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -76,7 +77,21 @@ function slugify($str) {
     }
     return $s;
 }
+
+// If this is a subcategory (has a parent), include parent name in slug
 $slug = slugify($title);
+if ($parent_id !== null && $parent_id > 0) {
+    try {
+        $stmtParent = $pdo->prepare("SELECT name FROM categories WHERE id = ?");
+        $stmtParent->execute([$parent_id]);
+        $parentName = $stmtParent->fetchColumn();
+        if ($parentName) {
+            $slug = slugify($parentName) . '-' . $slug;
+        }
+    } catch (PDOException $e) {
+        // If can't fetch parent, just use the title slug
+    }
+}
 
 /* ---------- HANDLE IMAGE UPLOAD (OPTIONAL) ---------- */
 $imageFilename = null;
@@ -107,8 +122,10 @@ if (!empty($_FILES['image']) && $_FILES['image']['error'] !== UPLOAD_ERR_NO_FILE
                 $imageFilename = time() . '-' . bin2hex(random_bytes(5)) . '.' . $ext;
                 $dest          = $uploadDir . $imageFilename;
 
-                if (!move_uploaded_file($f['tmp_name'], $dest)) {
-                    $errors[] = 'Could not save uploaded image.';
+                // Compress and save image
+                $result = compressImage($f['tmp_name'], $dest);
+                if (!$result['success']) {
+                    $errors[] = 'Could not compress/save uploaded image: ' . $result['message'];
                 }
             }
         }

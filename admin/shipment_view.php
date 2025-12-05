@@ -103,10 +103,10 @@ function fmt_dt($dt){
     <div style="margin-bottom:8px"><?= status_badge($sh['status']) ?></div>
     <div class="actions">
         <?php if (!empty($labelUrl) || true): // always use generate_label endpoint ?>
-        <a href="generate_label.php?id=<?= (int)$sh['id'] ?>" class="btn ghost" download>Download Label</a>
+        <a href="download_label.php?id=<?= (int)$sh['id'] ?>" class="btn ghost" download>Download Label</a>
         <a href="generate_label.php?id=<?= (int)$sh['id'] ?>&preview=1" target="_blank" class="btn">Preview</a>
         <?php else: ?>
-        <button class="btn ghost" onclick="alert('No label available');">No label</button>
+        <button class="btn ghost" onclick="window.location.href='generate_label_pdf.php?id=<?= (int)$sh['id'] ?>'">Download Label</button>
         <?php endif; ?>
         <a href="shipments.php" class="btn">Back</a>
     </div>
@@ -173,13 +173,14 @@ function fmt_dt($dt){
           <?php if (!empty($sh['label_file'])): ?>
             <div class="small">Stored file: <?= h($sh['label_file']) ?></div>
             <div class="mt-3">
-              <a href="<?= h($labelUrl) ?>" class="btn ghost" download>Download</a>
-              <a href="<?= h($labelUrl) ?>" target="_blank" class="btn">Preview</a>
+            <div class="mt-3">
+              <a href="download_label.php?id=<?= (int)$sh['id'] ?>" class="btn ghost" download>Download</a>
+              <a href="download_label.php?id=<?= (int)$sh['id'] ?>" target="_blank" class="btn">Preview</a>
             </div>
           <?php else: ?>
-            <div class="small">No label uploaded. Use the upload form to save a PDF label.</div>
+            <div class="small">No label uploaded. You can generate a label PDF below.</div>
             <div class="mt-3">
-              <a href="<?= h($labelUrl) ?>" class="btn ghost" download>Download Sample Label</a>
+              <a href="generate_label_pdf.php?id=<?= (int)$sh['id'] ?>" class="btn ghost" download>Download Label</a>
             </div>
           <?php endif; ?>
         </div>

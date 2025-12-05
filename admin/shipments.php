@@ -178,11 +178,7 @@ try {
                   <a href="shipment_view.php?id=<?= (int)$s['id'] ?>" class="px-3 py-1 rounded-lg text-sm text-indigo-600 border border-indigo-100">View</a>
 
                   <?php if (!empty($s['label_file'])): ?>
-                    <?php
-                      // safe URL to label file (ensure stored in public/uploads/labels or similar)
-                      $label_url = '/uploads/labels/' . rawurlencode($s['label_file']);
-                    ?>
-                    <a href="<?= h($label_url) ?>" class="px-3 py-1 rounded-lg text-sm border border-gray-200" download>Label</a>
+                    <a href="download_label.php?id=<?= (int)$s['id'] ?>" class="px-3 py-1 rounded-lg text-sm border border-gray-200" download>Label</a>
                   <?php endif; ?>
 
                   <?php if (($s['status'] ?? '') !== 'delivered'): ?>

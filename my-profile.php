@@ -110,7 +110,7 @@ $stmtOrders = $pdo->prepare("
     SELECT 
         o.id,
         o.order_number,
-        o.status,
+        o.order_status AS status,
         o.created_at,
         o.total_amount AS grand_total
     FROM orders o
@@ -1211,7 +1211,7 @@ $userReviews = $stmtReviews->fetchAll(PDO::FETCH_ASSOC);
           <?php foreach ($orders as $order): ?>
             <?php
               $stmtItem = $pdo->prepare("
-                SELECT oi.quantity, oi.price, p.name, p.images
+                SELECT oi.qty, oi.price, p.name, p.images
                 FROM order_items oi
                 JOIN products p ON p.id = oi.product_id
                 WHERE oi.order_id = ?
@@ -1527,7 +1527,7 @@ $userReviews = $stmtReviews->fetchAll(PDO::FETCH_ASSOC);
                   <?php endif; ?>
                 </div>
               </div>
-              <div class="wishlist-delete" title="Remove">&#128465;</div>
+              <div class="wishlist-delete" title="Remove" data-wishlist-id="<?php echo $item['wishlist_id']; ?>" data-product-id="<?php echo $item['id']; ?>">&#128465;</div>
             </div>
           <?php endforeach; ?>
         <?php endif; ?>
@@ -1659,31 +1659,41 @@ $userReviews = $stmtReviews->fetchAll(PDO::FETCH_ASSOC);
         }
     }
 
-    // Sidebar navigation
-    sidebarLinks.forEach(link => {
-      link.addEventListener('click', function(e) {
-        e.preventDefault();
+    // Sidebar navigation - Event Delegation
+    document.addEventListener('click', function(e) {
+      const link = e.target.closest('.sidebar-link');
+      if (!link) return;
 
-        sidebarLinks.forEach(l => l.classList.remove('active'));
-        this.classList.add('active');
+      e.preventDefault();
 
-        const sectionKey = this.getAttribute('data-section');
-        if (!sectionKey) return;
+      // Remove active class from all links
+      document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+      link.classList.add('active');
 
-        sections.forEach(sec => {
-          sec.style.display = (sec.id === 'section-' + sectionKey) ? 'block' : 'none';
-        });
+      const sectionKey = link.getAttribute('data-section');
+      if (!sectionKey) return;
 
-        const sectionTitleEl = this.closest('.sidebar-section')?.querySelector('.sidebar-title');
-        const groupTitle = sectionTitleEl ? sectionTitleEl.textContent.trim() : 'Account';
-
-        if (isMobile()) {
-          wrapper.classList.add('show-main');
-          if (mobileSectionLabel) {
-            mobileSectionLabel.textContent = groupTitle;
-          }
-        }
+      // Hide all sections
+      document.querySelectorAll('.account-section').forEach(sec => {
+        sec.style.display = 'none';
       });
+
+      // Show target section
+      const targetSection = document.getElementById('section-' + sectionKey);
+      if (targetSection) {
+        targetSection.style.display = 'block';
+      }
+
+      // Mobile handling
+      const sectionTitleEl = link.closest('.sidebar-section')?.querySelector('.sidebar-title');
+      const groupTitle = sectionTitleEl ? sectionTitleEl.textContent.trim() : 'Account';
+
+      if (isMobile()) {
+        wrapper.classList.add('show-main');
+        if (mobileSectionLabel) {
+          mobileSectionLabel.textContent = groupTitle;
+        }
+      }
     });
 
     // Mobile back button
@@ -1774,6 +1784,73 @@ $userReviews = $stmtReviews->fetchAll(PDO::FETCH_ASSOC);
       });
     });
 
+    // Wishlist Delete Functionality
+    document.addEventListener('click', function(e) {
+      const deleteBtn = e.target.closest('.wishlist-delete');
+      if (!deleteBtn) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const productId = deleteBtn.getAttribute('data-product-id');
+      const wishlistId = deleteBtn.getAttribute('data-wishlist-id');
+      const wishlistItem = deleteBtn.closest('.wishlist-item');
+
+      if (!confirm('Remove this item from your wishlist?')) return;
+
+      // Optimistic UI update - remove immediately
+      wishlistItem.style.opacity = '0.5';
+      wishlistItem.style.pointerEvents = 'none';
+
+      fetch('ajax_wishlist.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `action=toggle&product_id=${productId}`
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          // Remove from DOM with animation
+          wishlistItem.style.transition = 'all 0.3s ease';
+          wishlistItem.style.maxHeight = wishlistItem.offsetHeight + 'px';
+          setTimeout(() => {
+            wishlistItem.style.maxHeight = '0';
+            wishlistItem.style.padding = '0';
+            wishlistItem.style.margin = '0';
+            wishlistItem.style.border = 'none';
+          }, 10);
+          
+          setTimeout(() => {
+            wishlistItem.remove();
+            
+            // Update count in header
+            const wishlistList = document.querySelector('.wishlist-list');
+            const remainingItems = wishlistList.querySelectorAll('.wishlist-item').length;
+            const headerCount = document.querySelector('.wishlist-header h2');
+            if (headerCount) {
+              headerCount.textContent = `My Wishlist (${remainingItems})`;
+            }
+            
+            // Show empty message if no items left
+            if (remainingItems === 0) {
+              wishlistList.innerHTML = '<p style="font-size:13px;color:#777;">Your wishlist is empty.</p>';
+            }
+          }, 300);
+        } else {
+          // Revert on error
+          wishlistItem.style.opacity = '1';
+          wishlistItem.style.pointerEvents = 'auto';
+          alert(data.message || 'Failed to remove item');
+        }
+      })
+      .catch(err => {
+        console.error('Wishlist delete error:', err);
+        wishlistItem.style.opacity = '1';
+        wishlistItem.style.pointerEvents = 'auto';
+        alert('Network error. Please try again.');
+      });
+    });
+
     // Cancel edit functionality
     if (cancelEditBtn) {
       cancelEditBtn.addEventListener('click', function(e) {
@@ -1802,6 +1879,19 @@ $userReviews = $stmtReviews->fetchAll(PDO::FETCH_ASSOC);
     }
   });
 </script>
+
+<script>
+  // Check for order success
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('order_success') === 'true') {
+    const orderId = urlParams.get('id');
+    alert('Payment Successful! Your Order #' + orderId + ' has been placed.');
+    // Clean URL
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+</script>
+
+<?php include 'footer.php'; ?>
 
 </body>
 </html>

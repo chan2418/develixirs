@@ -55,7 +55,7 @@ try {
 // active values to keep checkboxes checked
 $activeFilterValues = [];   // [param_key => [values]]
 
-function get_first_image($images) {
+function get_product_page_first_image($images) {
     // same default as index.php
     $default = '/assets/images/avatar-default.png';
 
@@ -229,16 +229,14 @@ foreach ($filterGroups as $g) {
 }
 
 // 2) Category filter (from cat= in URL – optional)
-// 2) Category filter (from cat= in URL – optional)
 // If a parent category is clicked, include all its subcategories too.
-// 2) Category filter (from cat= in URL – optional)
 // Only if there is NO "category[]" filter present (i.e. not coming from Men Care filter / sidebar)
 $hasCategoryFilter = !empty($_GET['category']);
 
 if ($categoryId !== null && $categoryId > 0 && !$hasCategoryFilter) {
     // 👉 here you can keep either the simple version:
-    // $whereParts[]           = "category_id = :category_id";
-    // $params[':category_id'] = $categoryId;
+    // $whereParts[]           = "cat_id = :cat_id";
+    // $params[':cat_id'] = $categoryId;
 
     // or the extended parent+children logic if you want for ?cat= links
     $categoryIdsForFilter = [$categoryId];
@@ -283,13 +281,88 @@ if ($priceMax !== null) {
     $params[':price_max'] = $priceMax;
 }
 
-// 4) Final WHERE SQL
+// 4) Search filter (q=)
+// 4) Search filter (q=) - STRONG SEARCH
+$searchQuery = isset($_GET['q']) ? trim($_GET['q']) : '';
+if ($searchQuery !== '') {
+    // Split by space to allow "face wash" to match "face herbal wash"
+    $keywords = explode(' ', $searchQuery);
+    $keywordGroups = [];
+    
+    foreach ($keywords as $index => $word) {
+        $word = trim($word);
+        if (empty($word)) continue;
+        
+        $pName = ":sq_name_{$index}";
+        $pDesc = ":sq_desc_{$index}";
+        $pCat  = ":sq_cat_{$index}";
+        
+        $keywordGroups[] = "(products.name LIKE {$pName} OR products.description LIKE {$pDesc} OR categories.name LIKE {$pCat})";
+        $params[$pName] = '%' . $word . '%';
+        $params[$pDesc] = '%' . $word . '%';
+        $params[$pCat]  = '%' . $word . '%';
+    }
+    
+    if (!empty($keywordGroups)) {
+        // AND logic: Product must match ALL keywords (in either name or description)
+        $whereParts[] = '(' . implode(' AND ', $keywordGroups) . ')';
+    }
+}
+
+// 5) Final WHERE SQL
 $whereSql = '';
 if (!empty($whereParts)) {
     $whereSql = 'WHERE ' . implode(' AND ', $whereParts);
 }
 
 /* ----- sorting ----- */
+/* ----- sorting ----- */
+// Default sort logic
+$orderBy = 'id DESC';
+
+// If searching, prioritize relevance (name match)
+if ($searchQuery !== '' && $sort === 'default') {
+    $relevanceParts = [];
+    foreach ($keywords as $word) {
+        $word = trim($word);
+        if (empty($word)) continue;
+        // Score 2 for name match, 1 for description match
+        // We need to bind these params or use the existing ones if we can ensure index matching.
+        // Since we are inside the loop where we generated params, we can reuse the :sq_name_X params if we are careful.
+        // But $orderBy is constructed AFTER the loop.
+        // We need to reconstruct the relevance SQL safely.
+        // Actually, we can just inject the values since we are using prepared statements for the main query, 
+        // but ORDER BY usually can't take params in some drivers? 
+        // PDO allows params in ORDER BY? No, usually not for expressions.
+        // Wait, we can put expressions in SELECT list and order by alias?
+        // Or just put the expression in ORDER BY.
+        // To be safe against SQL injection, we should use the params we already created.
+        
+        // We'll use the same params :sq_name_0, etc.
+        // But we need to make sure they are available to the query. They are in $params.
+        
+        $pName = ":sq_name_{$index}"; // Note: $index is from the loop above, but we are outside it now.
+        // We need to loop again or store the parts.
+    }
+    
+    // Let's rebuild the parts using the same loop structure
+    // BUT: We need SEPARATE parameters for ORDER BY because PDO doesn't allow reusing
+    // the same named parameter when emulation is off!
+    $relevanceScore = [];
+    foreach ($keywords as $index => $word) {
+        $word = trim($word);
+        if (empty($word)) continue;
+        $pRel = ":rel_name_{$index}";  // NEW parameter name for ORDER BY
+        // Score 2 points if name matches
+        $relevanceScore[] = "(CASE WHEN products.name LIKE {$pRel} THEN 2 ELSE 0 END)";
+        $params[$pRel] = '%' . $word . '%';  // Bind the same value but with different param name
+    }
+    
+    if (!empty($relevanceScore)) {
+        $orderBy = "(" . implode(' + ', $relevanceScore) . ") DESC, id DESC";
+    }
+}
+
 switch ($sort) {
     case 'popularity':
         $orderBy = 'sold_count DESC';
@@ -303,17 +376,36 @@ switch ($sort) {
     case 'price_desc':
         $orderBy = 'price DESC';
         break;
-    default:
-        $orderBy = 'id DESC'; // default sorting
+    // default case is handled above
 }
 
 /* ----- total count for pagination ----- */
 $totalProducts = 0;
 try {
-    $sqlCount = "SELECT COUNT(*) FROM products {$whereSql}";
+    $sqlCount = "SELECT COUNT(*) FROM products LEFT JOIN categories ON products.category_id = categories.id {$whereSql}";
     $stmtCount = $pdo->prepare($sqlCount);
     $stmtCount->execute($params);
     $totalProducts = (int)$stmtCount->fetchColumn();
+
+    // 🔹 FALLBACK SEARCH: If 0 results and we have multiple keywords, try "OR" logic instead of "AND"
+    if ($totalProducts === 0 && $searchQuery !== '' && count($keywords) > 1) {
+        // Remove the last WHERE part (which is the strict AND search condition)
+        // NOTE: This assumes search logic was the last thing added to $whereParts.
+        // If code changes, this might need to be more robust (e.g. by key).
+        array_pop($whereParts);
+
+        // Re-add with OR
+        $whereParts[] = '(' . implode(' OR ', $keywordGroups) . ')';
+        
+        // Rebuild SQL
+        $whereSql = 'WHERE ' . implode(' AND ', $whereParts);
+        
+        // Re-run Count
+        $sqlCount = "SELECT COUNT(*) FROM products LEFT JOIN categories ON products.category_id = categories.id {$whereSql}";
+        $stmtCount = $pdo->prepare($sqlCount);
+        $stmtCount->execute($params);
+        $totalProducts = (int)$stmtCount->fetchColumn();
+    }
 } catch (PDOException $e) {
     $totalProducts = 0;
 }
@@ -324,8 +416,9 @@ $totalPages = $totalProducts > 0 ? (int)ceil($totalProducts / $perPage) : 1;
 $products = [];
 try {
     $sqlProducts = "
-        SELECT *
+        SELECT products.*, categories.name as category_name
         FROM products
+        LEFT JOIN categories ON products.category_id = categories.id
         {$whereSql}
         ORDER BY {$orderBy}
         LIMIT :limit OFFSET :offset
@@ -343,8 +436,56 @@ try {
 
     $stmtProducts->execute();
     $products = $stmtProducts->fetchAll(PDO::FETCH_ASSOC);
+
+    // --- DEBUG BLOCK ---
+    if (isset($_GET['debug']) && $_GET['debug'] === '1') {
+        echo "<div style='background:#f8f9fa; padding:20px; border:2px solid red; margin:20px; z-index:9999; position:relative;'>";
+        echo "<h3>DEBUG MODE</h3>";
+        
+        echo "<h4>1. SQL Query:</h4>";
+        echo "<pre>" . htmlspecialchars($sqlProducts) . "</pre>";
+        
+        echo "<h4>2. Parameters:</h4>";
+        echo "<pre>" . print_r($params, true) . "</pre>";
+        
+        echo "<h4>3. Products Found: " . count($products) . "</h4>";
+        
+        echo "<h4>4. Total Count Query:</h4>";
+        echo "<pre>" . htmlspecialchars($sqlCount) . "</pre>";
+        echo "Total Products Count: " . $totalProducts;
+
+        echo "<h4>5. Table Structure (products):</h4>";
+        try {
+            $cols = $pdo->query("SHOW COLUMNS FROM products")->fetchAll(PDO::FETCH_ASSOC);
+            echo "<table border='1' style='border-collapse:collapse;'>";
+            echo "<tr><th>Field</th><th>Type</th><th>Null</th><th>Key</th><th>Default</th><th>Extra</th></tr>";
+            foreach ($cols as $c) {
+                echo "<tr>";
+                foreach ($c as $v) echo "<td style='padding:4px;'>" . htmlspecialchars($v) . "</td>";
+                echo "</tr>";
+            }
+            echo "</table>";
+        } catch (Exception $e) {
+            echo "Error showing columns: " . $e->getMessage();
+        }
+        
+        echo "<h4>6. Raw Dump of First 5 Products (ignoring filters):</h4>";
+        try {
+            $raw = $pdo->query("SELECT * FROM products LIMIT 5")->fetchAll(PDO::FETCH_ASSOC);
+            echo "<pre>" . print_r($raw, true) . "</pre>";
+        } catch (Exception $e) {
+            echo "Error raw dump: " . $e->getMessage();
+        }
+
+        echo "</div>";
+    }
+    // --- END DEBUG BLOCK ---
+
 } catch (PDOException $e) {
     $products = [];
+    if (isset($_GET['debug'])) {
+        echo "<div style='background:#fee; color:red; padding:20px; border:1px solid red;'>SQL Error: " . $e->getMessage() . "</div>";
+    }
 }
 
 /* ==================== BANNERS FOR PRODUCT PAGE (CATEGORY AWARE) ==================== */
@@ -538,7 +679,7 @@ function renderProductResults($products, $totalPages, $page, $sort) { ?>
                 ? (float)$p['old_price']
                 : null;
 
-            $img = get_first_image($p['images'] ?? '');
+            $img = get_product_page_first_image($p['images'] ?? '');
 
             $rating      = isset($p['rating']) ? (float)$p['rating'] : 0;
             $ratingCount = isset($p['rating_count']) ? (int)$p['rating_count'] : 0;
@@ -1624,67 +1765,10 @@ ul{
   </section> -->
 
   <!-- FOOTER -->
-  <footer class="footer">
-    <div class="footer-inner">
-      <div>
-        <div class="logo" style="font-size:21px;margin-bottom:8px;">
-          DEVILIXIRS
-          <span>HERBAL&nbsp;CARE</span>
-        </div>
-        <p style="color:#bfbfbf;line-height:1.7;margin-bottom:14px;">
-          Clean, simple herbal blends for hair, skin and home. Crafted in small batches with love from Chennai.
-        </p>
-      </div>
+  <!-- FOOTER -->
+  <?php include 'footer.php'; ?>
 
-      <div>
-        <h4 class="footer-title">Customer Service</h4>
-        <ul class="footer-links">
-          <li>Help &amp; Contact</li>
-          <li>Returns &amp; Refunds</li>
-          <li>Shipping</li>
-          <li>Order Tracking</li>
-        </ul>
-      </div>
 
-      <div>
-        <h4 class="footer-title">Company</h4>
-        <ul class="footer-links">
-          <li>About Us</li>
-          <li>Blog</li>
-          <li>Our Ingredients</li>
-          <li>Wholesale</li>
-        </ul>
-      </div>
-
-      <div>
-        <h4 class="footer-title">Archive</h4>
-        <ul class="footer-links">
-          <li>Designer Picks</li>
-          <li>Gift Boxes</li>
-          <li>Seasonal Offers</li>
-          <li>Lookbook</li>
-        </ul>
-      </div>
-    </div>
-
-    <div class="footer-bottom">
-      <span>Copyright © 2025 <strong>Devilixirs</strong>. All Rights Reserved.</span>
-      <div class="footer-payments">
-        <span>Visa</span>
-        <span>MasterCard</span>
-        <span>Rupay</span>
-        <span>UPI</span>
-      </div>
-    </div>
-  </footer>
-
-  <!-- Back to top -->
-  <div class="back-top" onclick="window.scrollTo({top:0,behavior:'smooth'});">
-    <i class="fa-solid fa-angle-up"></i>
-  </div>
-
-  <!-- 🔹 Shared navbar JS -->
-  <script src="assets/js/navbar.js"></script>
 
   <!-- Slider + Filters + AJAX -->
   <script>
@@ -1878,18 +1962,22 @@ document.addEventListener('DOMContentLoaded', function() {
     .then(data => {
         if (data.success && data.ids) {
             data.ids.forEach(id => {
-                const btn = document.querySelector(`.wishlist-btn[data-product-id="${id}"] i`);
-                if (btn) {
-                    btn.classList.remove('fa-regular');
-                    btn.classList.add('fa-solid');
-                    btn.style.color = 'red';
-                }
+                const buttons = document.querySelectorAll(`.wishlist-btn[data-product-id="${id}"]`);
+                buttons.forEach(btn => {
+                    const icon = btn.querySelector('i');
+                    if (icon) {
+                        icon.classList.remove('fa-regular');
+                        icon.classList.add('fa-solid');
+                        icon.style.color = 'red';
+                        btn.setAttribute('data-in-wishlist', 'true');
+                    }
+                });
             });
         }
     })
     .catch(err => console.error('Wishlist load error:', err));
 
-    // 2. Handle click
+    // 2. Handle click with immediate visual feedback
     document.body.addEventListener('click', function(e) {
         const btn = e.target.closest('.wishlist-btn');
         if (!btn) return;
@@ -1899,7 +1987,22 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const productId = btn.getAttribute('data-product-id');
         const icon = btn.querySelector('i');
+        const isInWishlist = btn.getAttribute('data-in-wishlist') === 'true';
 
+        // Immediate visual feedback (optimistic update)
+        if (isInWishlist) {
+            icon.classList.remove('fa-solid');
+            icon.classList.add('fa-regular');
+            icon.style.color = '';
+            btn.setAttribute('data-in-wishlist', 'false');
+        } else {
+            icon.classList.remove('fa-regular');
+            icon.classList.add('fa-solid');
+            icon.style.color = 'red';
+            btn.setAttribute('data-in-wishlist', 'true');
+        }
+
+        // Send request to server
         fetch('ajax_wishlist.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -1907,26 +2010,107 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .then(r => r.json())
         .then(data => {
-            if (data.success) {
-                if (data.status === 'added') {
+            if (!data.success) {
+                // Revert on error
+                if (isInWishlist) {
                     icon.classList.remove('fa-regular');
                     icon.classList.add('fa-solid');
                     icon.style.color = 'red';
+                    btn.setAttribute('data-in-wishlist', 'true');
                 } else {
                     icon.classList.remove('fa-solid');
                     icon.classList.add('fa-regular');
                     icon.style.color = '';
+                    btn.setAttribute('data-in-wishlist', 'false');
                 }
-                
-                // Update header count if exists
-                // const countEl = document.querySelector('.wishlist-count');
-                // if(countEl) countEl.textContent = data.count;
-            } else {
                 alert(data.message || 'Error updating wishlist');
+            } else {
+                // Update all buttons with same product ID on the page
+                const allButtons = document.querySelectorAll(`.wishlist-btn[data-product-id="${productId}"]`);
+                allButtons.forEach(b => {
+                    const i = b.querySelector('i');
+                    if (data.status === 'added') {
+                        i.classList.remove('fa-regular');
+                        i.classList.add('fa-solid');
+                        i.style.color = 'red';
+                        b.setAttribute('data-in-wishlist', 'true');
+                    } else {
+                        i.classList.remove('fa-solid');
+                        i.classList.add('fa-regular');
+                        i.style.color = '';
+                        b.setAttribute('data-in-wishlist', 'false');
+                    }
+                });
+                
+                // Show toast notification
+                showToast(data.status === 'added' ? 'Added to wishlist!' : 'Removed from wishlist!', 'success');
+                
+                // 🔹 Update navbar wishlist counter
+                if (data.wishlist_count !== undefined) {
+                    const wishlistCountEl = document.querySelector('.wishlist-count');
+                    if (wishlistCountEl) {
+                        wishlistCountEl.textContent = data.wishlist_count;
+                        if (data.wishlist_count > 0) {
+                            wishlistCountEl.style.display = 'flex';
+                            wishlistCountEl.style.position = 'absolute';
+                            wishlistCountEl.style.top = '-6px';
+                            wishlistCountEl.style.right = '-6px';
+                        } else {
+                            wishlistCountEl.style.display = 'none';
+                        }
+                    }
+                    
+                    // Update mobile wishlist count
+                    const mobileWishlistSpans = document.querySelectorAll('.mobile-bottom-nav a[href*="wishlist"] span, .mobile-menu-list a[href*="wishlist"]');
+                    mobileWishlistSpans.forEach(span => {
+                        if (span.textContent.includes('Wishlist')) {
+                            span.textContent = `Wishlist (${data.wishlist_count})`;
+                        }
+                    });
+                }
             }
         })
-        .catch(err => console.error('Wishlist toggle error:', err));
+        .catch(err => {
+            console.error('Wishlist toggle error:', err);
+            // Revert on error
+            if (isInWishlist) {
+                icon.classList.remove('fa-regular');
+                icon.classList.add('fa-solid');
+                icon.style.color = 'red';
+                btn.setAttribute('data-in-wishlist', 'true');
+            } else {
+                icon.classList.remove('fa-solid');
+                icon.classList.add('fa-regular');
+                icon.style.color = '';
+                btn.setAttribute('data-in-wishlist', 'false');
+            }
+            alert('Network error. Please try again.');
+        });
     });
+
+    // Toast function for wishlist
+    function showToast(message, type) {
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            background: ${type === 'success' ? '#4CAF50' : '#f44336'};
+            color: white;
+            padding: 16px 24px;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 10000;
+            animation: slideIn 0.3s ease;
+        `;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.style.animation = 'slideOut 0.3s ease';
+            setTimeout(() => toast.remove(), 300);
+        }, 2000);
+    }
 });
 </script>
 
@@ -2015,16 +2199,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 const cartCountEl = document.querySelector('.cart-count');
                 if (cartCountEl) {
                     cartCountEl.textContent = data.count;
-                    cartCountEl.style.display = data.count > 0 ? 'flex' : 'none';
+                    if (data.count > 0) {
+                        cartCountEl.style.display = 'flex';
+                        cartCountEl.style.position = 'absolute';
+                        cartCountEl.style.top = '-6px';
+                        cartCountEl.style.right = '-6px';
+                    } else {
+                        cartCountEl.style.display = 'none';
+                    }
                 }
                 
                 // Update navbar total
-                const cartTotalEls = document.querySelectorAll('.icon-btn span:last-child');
-                cartTotalEls.forEach(el => {
-                    if (el.textContent.includes('₹')) {
-                        el.textContent = '₹' + data.total.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-                    }
-                });
+                const cartTotalEl = document.querySelector('.cart-total');
+                if (cartTotalEl && data.total !== undefined) {
+                    cartTotalEl.textContent = '₹' + data.total.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                }
                 
                 // Show success feedback
                 setTimeout(() => {

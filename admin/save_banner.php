@@ -2,6 +2,7 @@
 // admin/save_banner.php
 require_once __DIR__ . '/_auth.php';
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/image_compressor.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -171,8 +172,10 @@ try {
         $newName = time() . '-' . bin2hex(random_bytes(5)) . '.' . $f['ext'];
         $dest    = $uploadDir . $newName;
 
-        if (!move_uploaded_file($f['tmp_name'], $dest)) {
-            throw new RuntimeException('Failed to move uploaded file.');
+        // Compress and save image
+        $result = compressImage($f['tmp_name'], $dest);
+        if (!$result['success']) {
+            throw new RuntimeException('Failed to compress/save image: ' . $result['message']);
         }
 
         $bannerName = $alt_text !== '' ? $alt_text : ('Banner ' . date('Y-m-d H:i:s'));

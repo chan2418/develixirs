@@ -44,7 +44,7 @@ if ($action === 'toggle') {
         $cnt->execute([':uid' => $userId]);
         $count = $cnt->fetchColumn();
 
-        echo json_encode(['success' => true, 'status' => $status, 'count' => $count]);
+        echo json_encode(['success' => true, 'status' => $status, 'wishlist_count' => $count]);
     } catch (PDOException $e) {
         echo json_encode(['success' => false, 'message' => 'Database error']);
     }

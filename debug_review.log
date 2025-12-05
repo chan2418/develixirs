@@ -1,0 +1,13 @@
+2025-11-29 17:49:29 - Attempt: User 2 submitting for Product 29. Rating: 5
+2025-11-29 17:49:29 - Error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'full_name' in 'field list'
+2025-11-29 17:50:08 - Attempt: User 2 submitting for Product 29. Rating: 5
+2025-11-29 17:50:08 - Error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'full_name' in 'field list'
+2025-11-29 17:52:04 - Attempt: User 2 submitting for Product 29. Rating: 0
+2025-11-29 17:52:14 - Attempt: User 2 submitting for Product 29. Rating: 5
+2025-11-29 17:52:14 - Success: Review inserted for Product ID 29 by chandrusri247@gmail.com
+2025-11-29 17:55:29 - Attempt: User 2 submitting for Product 29. Rating: 5
+2025-11-29 17:56:05 - Attempt: User 2 submitting for Product 19. Rating: 5
+2025-11-29 17:58:27 - Attempt: User 2 submitting for Product 27. Rating: 5
+2025-11-29 18:02:05 - Attempt: User 2 submitting for Product 29. Rating: 5
+2025-11-29 18:03:30 - Attempt: User 2 submitting for Product 18. Rating: 5
+2025-11-29 18:04:19 - Attempt: User 2 submitting for Product 16. Rating: 5

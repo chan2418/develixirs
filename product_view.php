@@ -25,7 +25,7 @@ try {
     $stmt = $pdo->prepare("
         SELECT 
             p.*,
-            c.id   AS cat_id,
+            c.id   AS category_id,
             c.name AS cat_name
         FROM products p
         LEFT JOIN categories c ON c.id = p.category_id
@@ -62,18 +62,31 @@ try {
             'id' => 0, // 0 indicates main product (empty check passes)
             'variant_name' => $mainVariantName ?: 'Default',
             'price' => $product['price'],
+            'compare_price' => $product['compare_price'],
+            'discount_percent' => $product['discount_percent'],
             'stock' => $product['stock'],
             'sku' => $product['sku'],
             'image' => null, 
             'images' => null,
             'custom_title' => null,
-            'custom_description' => null
+            'custom_description' => null,
+            'short_description' => $product['short_description'] ?? ''
         ];
         array_unshift($variants, $mainVariant);
     }
     
     // Fetch FAQs for all variants
     if (!empty($variants)) {
+        // Auto-calculate variant prices if needed
+        foreach ($variants as &$v) {
+            $cp = isset($v['compare_price']) ? (float)$v['compare_price'] : 0;
+            $dp = isset($v['discount_percent']) ? (float)$v['discount_percent'] : 0;
+            if ($cp > 0 && $dp > 0) {
+                $v['price'] = $cp - ($cp * ($dp / 100));
+            }
+        }
+        unset($v); // break reference
+
         $variantIds = array_column($variants, 'id');
         $placeholders = implode(',', array_fill(0, count($variantIds), '?'));
         $stmtVarFaq = $pdo->prepare("SELECT * FROM variant_faqs WHERE variant_id IN ($placeholders) ORDER BY variant_id, display_order");
@@ -146,10 +159,35 @@ $thumbImages = array_slice($imageList, 1, 3);
 $productName   = $product['name'] ?? 'Product';
 $categoryName  = $product['cat_name'] ?? 'Shop';
 
-$price         = isset($product['price']) ? (float)$product['price'] : 0;
-$oldPrice      = (isset($product['old_price']) && $product['old_price'] > $price)
-                    ? (float)$product['old_price']
-                    : null;
+// Use first variant's pricing data if variants exist, otherwise use main product
+if (!empty($variants) && isset($variants[0])) {
+    $firstVariant = $variants[0];
+    $price         = isset($firstVariant['price']) ? (float)$firstVariant['price'] : 0;
+    $comparePrice  = (isset($firstVariant['compare_price']) && $firstVariant['compare_price'] > 0)
+                        ? (float)$firstVariant['compare_price']
+                        : null;
+    $discountPercent = isset($firstVariant['discount_percent']) ? (float)$firstVariant['discount_percent'] : null;
+} else {
+    // No variants - use main product pricing
+    $price         = isset($product['price']) ? (float)$product['price'] : 0;
+    $comparePrice  = (isset($product['compare_price']) && $product['compare_price'] > 0)
+                        ? (float)$product['compare_price']
+                        : null;
+    $discountPercent = isset($product['discount_percent']) ? (float)$product['discount_percent'] : null;
+}
+
+// Auto-calculate price if compare price and discount exist
+if ($comparePrice && $discountPercent && $discountPercent > 0) {
+    $price = $comparePrice - ($comparePrice * ($discountPercent / 100));
+}
+
+// Ensure compare price is greater than price for display logic
+if ($comparePrice && $comparePrice <= $price) {
+    $comparePrice = null;
+}
+
+// Calculate savings if compare price exists
+$savings = $comparePrice ? ($comparePrice - $price) : 0;
 
 $rating        = isset($product['rating']) ? (float)$product['rating'] : 0;
 $ratingCount   = isset($product['rating_count']) ? (int)$product['rating_count'] : 0;
@@ -159,11 +197,12 @@ $inStock       = isset($product['stock']) ? ((int)$product['stock'] > 0) : true;
 
 // Short description: use short_desc if exists, else first part of description
 $shortDesc = '';
-if (!empty($product['short_desc'])) {
-    $shortDesc = $product['short_desc'];
+if (!empty($product['short_description'])) {
+    $shortDesc = $product['short_description'];
 } elseif (!empty($product['description'])) {
     $shortDesc = mb_substr(strip_tags($product['description']), 0, 260) . '…';
 }
+// DEBUG removed
 
 // Long description & other blocks (optional DB columns)
 $longDescription = $product['description']      ?? '';
@@ -225,14 +264,70 @@ if (empty($imageList)) {
 $mainImage   = $imageList[0];
 $thumbImages = array_slice($imageList, 1, 3); // max 3 thumbs
 
+// Fetch Product Reviews
+$reviews = [];
+try {
+    $stmtReviews = $pdo->prepare("
+        SELECT *
+        FROM product_reviews
+        WHERE product_id = ? AND status = 'approved'
+        ORDER BY created_at DESC
+    ");
+    $stmtReviews->execute([$productId]);
+    $reviews = $stmtReviews->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    $reviews = [];
+    echo "<!-- Review Fetch Error: " . $e->getMessage() . " -->";
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Devilixirs – <?php echo htmlspecialchars($productName, ENT_QUOTES); ?></title>
-  <meta name="description" content="<?php echo htmlspecialchars($shortDesc ?: $productName, ENT_QUOTES); ?>" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<?php
+// Include SEO helper
+require_once __DIR__ . '/includes/seo_meta.php';
+
+// Prepare product data for schema
+$productUrl = 'https://develixirs.com/product_view.php?id=' . $productId;
+$firstImage = !empty($imageList) ? 'https://develixirs.com/' . ltrim($imageList[0], '/') : 'https://develixirs.com/assets/images/product-default.jpg';
+
+// Generate SEO meta tags
+echo generate_seo_meta([
+    'title' => $productName . ' - DevElixir Natural Cosmetics',
+    'description' => strip_tags($shortDesc) ?: ('Buy ' . $productName . ' online at DevElixir. Authentic ayurvedic beauty products with natural ingredients. Free shipping on orders ₹1000+'),
+    'keywords' => $productName . ', ayurvedic ' . strtolower($categoryName) . ', natural beauty products, herbal cosmetics',
+    'url' => $productUrl,
+    'image' => $firstImage,
+    'type' => 'product'
+]);
+
+// Generate Product Schema
+$productSchemaData = [
+    'name' => $productName,
+    'description' => strip_tags($shortDesc ?: $longDescription),
+    'image' => $firstImage,
+    'url' => $productUrl,
+    'price' => $price,
+    'sku' => $product['sku'] ?? ('PROD-' . $productId)
+];
+
+// Add ratings if available
+if ($rating > 0 && $ratingCount > 0) {
+    $productSchemaData['rating'] = $rating;
+    $productSchemaData['review_count'] = $ratingCount;
+}
+
+echo generate_product_schema($productSchemaData);
+
+// Generate Breadcrumb Schema
+$breadcrumbs = [
+    ['name' => 'Home', 'url' => 'https://develixirs.com/'],
+    ['name' => $categoryName, 'url' => 'https://develixirs.com/shop.php?category=' . ($product['category_id'] ?? '')],
+    ['name' => $productName, 'url' => $productUrl]
+];
+echo generate_breadcrumb_schema($breadcrumbs);
+?>
 
   <!-- Google Font -->
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -477,6 +572,40 @@ ul{ list-style:none; }
 .variant-stock.out-stock {
   color: #d32f2f;
 }
+
+/* Mobile: Horizontal scroll for variants */
+@media (max-width: 768px) {
+  .variant-options-grid {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 12px;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 10px;
+  }
+  
+  .variant-options-grid::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .variant-card {
+    flex: 0 0 75%;
+    scroll-snap-align: start;
+    min-height: 120px;
+    padding: 18px;
+  }
+  
+  .variant-name {
+    font-size: 15px;
+  }
+  
+  .variant-current-price {
+    font-size: 20px;
+  }
+}
 .product-main-image::after{
   content:"";
   position:absolute;
@@ -694,26 +823,67 @@ ul{ list-style:none; }
   font-weight:600;
 }
 
-.price{
-  font-size:32px;
-  font-weight:800;
-  color:var(--berry);
+.price-section{
   margin:20px 0;
-  padding:16px 0;
+  padding:20px 0;
   border-top:2px solid #f0f0f0;
   border-bottom:2px solid #f0f0f0;
-  animation:priceGlow 3s ease infinite;
 }
-.price .old-price{
-  font-size:15px;
+
+.discount-badge{
+  display:inline-block;
+  background:linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+  color:#fff;
+  padding:6px 16px;
+  border-radius:20px;
+  font-size:14px;
+  font-weight:700;
+  margin-bottom:12px;
+  letter-spacing:0.5px;
+  box-shadow:0 2px 8px rgba(255,107,107,0.3);
+  animation:pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform:scale(1); }
+  50% { transform:scale(1.05); }
+}
+
+.price-row{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  margin-bottom:10px;
+}
+
+.price-row .old-price{
+  font-size:20px;
   text-decoration:line-through;
-  color:#777;
-  margin-right:8px;
+  color:#999;
+  font-weight:500;
+}
+
+.price-row .current-price{
+  font-size:36px;
+  font-weight:800;
+  color:var(--berry);
+  animation:priceGlow 3s ease infinite;
 }
 
 @keyframes priceGlow {
   0%, 100% { text-shadow:0 0 0 rgba(164,27,66,0); }
-  50% { text-shadow:0 0 8px rgba(164,27,66,.4); }
+  50% { text-shadow:0 0 12px rgba(164,27,66,.5); }
+}
+
+.savings-text{
+  font-size:15px;
+  color:#2e7d32;
+  font-weight:500;
+  background:#e8f5e9;
+  padding:8px 16px;
+  border-radius:8px;
+  display:inline-block;
+  border-left:4px solid #2e7d32;
 }
 
 .short-desc{
@@ -1279,46 +1449,64 @@ input:focus{
 }
 
 .footer{
-  background:linear-gradient(135deg, #0d0d0d 0%, #1a1a1a 100%);
-  color:#ddd;
-  padding:40px 0 0;
+  background:#111;
+  color:#e0e0e0;
+  padding:50px 0 20px;
+  font-family: 'Poppins', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 .footer-inner{
   max-width:1200px;
   margin:0 auto;
-  padding:0 15px 30px;
+  padding:0 15px 20px;
   display:grid;
-  grid-template-columns:1.6fr 1.2fr 1.2fr 1.4fr;
+  grid-template-columns:repeat(4,minmax(0,1fr));
   gap:30px;
-  font-size:12px;
 }
 .footer-title{
-  font-size:13px;
-  text-transform:uppercase;
-  margin-bottom:14px;
-  color:var(--primary);
+  font-size:15px;
   font-weight:600;
+  margin-bottom:12px;
+  text-transform:uppercase;
+  letter-spacing:0.5px;
+  color:#fff;
+  font-family: 'Poppins', sans-serif;
+}
+.footer-links{
+  list-style:none;
+  padding:0;
+  margin:0;
 }
 .footer-links li{
-  margin-bottom:6px;
-  color:#bfbfbf;
-  cursor:pointer;
-  transition:all .3s ease;
+  font-size:13px;
+  margin-bottom:8px;
+  color:#ccc;
+  font-family: 'Poppins', sans-serif;
+  line-height: 1.6;
 }
-.footer-links li:hover{
-  color:#fff;
-  transform:translateX(5px);
+.footer-links a{
+  color:#ccc;
+  text-decoration:none;
+  transition:all .3s ease;
+  font-family: 'Poppins', sans-serif;
+}
+.footer-links a:hover{
+  color:#D4AF37;
 }
 .footer-bottom{
-  border-top:1px solid #222;
-  padding:14px 15px 18px;
+  border-top:1px solid #333;
+  margin-top:10px;
+  padding:16px 15px;
   max-width:1200px;
-  margin:0 auto;
+  margin-left:auto;
+  margin-right:auto;
   display:flex;
   justify-content:space-between;
   align-items:center;
-  font-size:11px;
-  color:#bfbfbf;
+  font-size:12px;
+  color:#bbb;
+  font-family: 'Poppins', sans-serif;
 }
 .footer-payments{
   display:flex;
@@ -1379,7 +1567,150 @@ input:focus{
 @media(max-width:768px){
   .page-wrap{
     grid-template-columns:1fr;
+    gap: 25px;
+    margin: 30px auto 50px;
+    padding: 0 15px;
   }
+  
+  /* Fix product-media for mobile */
+  .product-media {
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 0;
+  }
+  
+  .product-main-image-wrapper {
+    border-radius: 8px;
+  }
+  
+  .product-main-image {
+    border-radius: 8px;
+  }
+  
+  .product-main-image img {
+    max-height: 400px;
+    width: 100%;
+    object-fit: contain;
+    background: #fff;
+  }
+  
+  .thumb-gallery {
+    gap: 6px;
+    margin-top: 12px;
+  }
+  
+  .thumb-item {
+    flex: 0 0 calc(25% - 5px);
+    min-width: 70px;
+    border-width: 2px;
+  }
+  
+  .thumb-item img {
+    height: 75px;
+  }
+  
+  /* Image navigation buttons - hide on small mobile */
+  .image-nav-btn {
+    width: 35px;
+    height: 35px;
+  }
+  
+  .image-nav-btn i {
+    font-size: 14px;
+  }
+  
+  .prev-btn {
+    left: 8px;
+  }
+  
+  .next-btn {
+    right: 8px;
+  }
+  
+  /* Fix product-summary for mobile */
+  .product-summary {
+    padding: 18px;
+    border-radius: 8px;
+    position: static;
+    margin-top: 20px;
+  }
+  
+  .product-title {
+    font-size: 18px;
+    line-height: 1.4;
+    margin-bottom: 12px;
+  }
+  
+  .product-meta {
+    font-size: 11px;
+    margin-bottom: 8px;
+  }
+  
+  .rating-row {
+    font-size: 11px;
+    margin-bottom: 6px;
+  }
+  
+  .rating-stars {
+    font-size: 11px;
+  }
+  
+  .stock {
+    font-size: 11px;
+    margin-bottom: 10px;
+  }
+  
+  .price-section {
+    margin: 15px 0;
+    padding: 15px 0;
+  }
+  
+  .price-row .current-price {
+    font-size: 26px;
+  }
+  
+  .price-row .old-price {
+    font-size: 16px;
+  }
+  
+  .discount-badge {
+    font-size: 11px;
+    padding: 4px 10px;
+    margin-bottom: 10px;
+  }
+  
+  .savings-text {
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+  
+  .short-desc {
+    font-size: 12px;
+    line-height: 1.6;
+    margin-bottom: 14px;
+    padding-top: 12px;
+  }
+  
+  .option-label {
+    font-size: 12px;
+    margin-bottom: 5px;
+  }
+  
+  /* Action buttons */
+  .action-row {
+    gap: 8px;
+  }
+  
+  .btn-add-cart {
+    font-size: 13px;
+    padding: 12px 20px;
+  }
+  
+  .btn-buy-now {
+    font-size: 13px;
+    padding: 12px 20px;
+  }
+  
   .tabs-area{
     grid-template-columns:1fr;
   }
@@ -1412,7 +1743,215 @@ input:focus{
   .product-hero h1{
     font-size:24px;
   }
+
+  .footer-bottom{
+    flex-direction:column;
+    text-align:center;
+    gap:10px;
+  }
 }
+
+/* Extra small mobile (iPhone 12 Pro and similar - 390px) */
+@media (max-width: 480px) {
+  .page-wrap {
+    padding: 0 10px;
+    margin: 20px auto 40px;
+    gap: 15px;
+  }
+  
+  .product-media {
+    padding: 10px;
+  }
+  
+  .product-main-image img {
+    max-height: 300px;
+  }
+  
+  .thumb-item {
+    flex: 0 0 calc(25% - 4px);
+    min-width: 65px;
+  }
+  
+  .thumb-item img {
+    height: 65px;
+  }
+  
+  .product-summary {
+    padding: 15px;
+    margin-top: 15px;
+  }
+  
+  .product-title {
+    font-size: 16px;
+    margin-bottom: 10px;
+  }
+  
+  .product-meta {
+    font-size: 10px;
+  }
+  
+  .rating-row {
+    font-size: 10px;
+  }
+  
+  .rating-stars {
+    font-size: 10px;
+  }
+  
+  .stock {
+    font-size: 10px;
+  }
+  
+  .price-section {
+    margin: 12px 0;
+    padding: 12px 0;
+  }
+  
+  .price-row .current-price {
+    font-size: 24px;
+  }
+  
+  .price-row .old-price {
+    font-size: 14px;
+  }
+  
+  .discount-badge {
+    font-size: 10px;
+    padding: 3px 8px;
+  }
+  
+  .savings-text {
+    font-size: 11px;
+    padding: 5px 10px;
+  }
+  
+  .short-desc {
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  
+  .option-label {
+    font-size: 11px;
+  }
+  
+  .btn-add-cart,
+  .btn-buy-now {
+    font-size: 12px;
+    padding: 10px 16px;
+  }
+  
+  .variant-card {
+    flex: 0 0 85%;
+    padding: 15px;
+  }
+  
+  .variant-name {
+    font-size: 14px;
+  }
+  
+  .variant-current-price {
+    font-size: 18px;
+  }
+}
+
+/* Very small mobile (360px - compact Android phones) */
+@media (max-width: 390px) {
+  .page-wrap {
+    padding: 0 8px;
+    margin: 15px auto 30px;
+    gap: 12px;
+  }
+  
+  .product-media {
+    padding: 8px;
+  }
+  
+  .product-main-image img {
+    max-height: 280px;
+  }
+  
+  .thumb-item {
+    flex: 0 0 calc(25% - 3px);
+    min-width: 60px;
+  }
+  
+  .thumb-item img {
+    height: 60px;
+  }
+  
+  .image-nav-btn {
+    width: 30px;
+    height: 30px;
+  }
+  
+  .image-nav-btn i {
+    font-size: 12px;
+  }
+  
+  .product-summary {
+    padding: 12px;
+    margin-top: 12px;
+  }
+  
+  .product-title {
+    font-size: 15px;
+    margin-bottom: 8px;
+  }
+  
+  .price-section {
+    margin: 10px 0;
+    padding: 10px 0;
+  }
+  
+  .price-row .current-price {
+    font-size: 22px;
+  }
+  
+  .price-row .old-price {
+    font-size: 13px;
+  }
+  
+  .discount-badge {
+    font-size: 9px;
+    padding: 3px 6px;
+  }
+  
+  .savings-text {
+    font-size: 10px;
+    padding: 4px 8px;
+  }
+  
+  .short-desc {
+    font-size: 10px;
+    line-height: 1.4;
+    margin-bottom: 10px;
+  }
+  
+  .btn-add-cart,
+  .btn-buy-now {
+    font-size: 11px;
+    padding: 9px 14px;
+  }
+  
+  .variant-card {
+    flex: 0 0 90%;
+    padding: 12px;
+    min-height: 110px;
+  }
+  
+  .variant-name {
+    font-size: 13px;
+  }
+  
+  .variant-current-price {
+    font-size: 16px;
+  }
+  
+  .variant-stock {
+    font-size: 11px;
+  }
+}
+
 
 @media(max-width:576px){
   .hero-cats{
@@ -1497,16 +2036,30 @@ input:focus{
         <?php echo $inStock ? 'In Stock' : 'Out of Stock'; ?>
       </div>
 
-      <div class="price">
-        <?php if ($oldPrice): ?>
-          <span class="old-price">₹<?php echo number_format($oldPrice, 2); ?></span>
+      <div class="price-section">
+        <?php if ($discountPercent && $discountPercent > 0): ?>
+          <div class="discount-badge">
+            <?php echo number_format($discountPercent, 0); ?>% OFF
+          </div>
         <?php endif; ?>
-        ₹<?php echo number_format($price, 2); ?>
+        
+        <div class="price-row">
+          <?php if ($comparePrice): ?>
+            <span class="old-price">₹<?php echo number_format($comparePrice, 2); ?></span>
+          <?php endif; ?>
+          <span class="current-price">₹<?php echo number_format($price, 2); ?></span>
+        </div>
+        
+        <?php if ($savings > 0): ?>
+          <div class="savings-text">
+            You Save: <strong>₹<?php echo number_format($savings, 2); ?></strong>
+          </div>
+        <?php endif; ?>
       </div>
 
       <?php if (!empty($shortDesc)): ?>
         <div class="short-desc">
-          <?php echo nl2br(htmlspecialchars($shortDesc, ENT_QUOTES)); ?>
+          <?php echo $shortDesc; ?>
         </div>
       <?php endif; ?>
 
@@ -1532,6 +2085,8 @@ input:focus{
               <div class="variant-card <?php echo $idx === 0 ? 'active' : ''; ?>"
                       data-id="<?php echo $v['id']; ?>"
                       data-price="<?php echo $v['price']; ?>"
+                      data-compare-price="<?php echo $v['compare_price'] ?? ''; ?>"
+                      data-discount-percent="<?php echo $v['discount_percent'] ?? ''; ?>"
                       data-stock="<?php echo $v['stock']; ?>"
                       data-sku="<?php echo htmlspecialchars($v['sku']); ?>"
                       data-image="<?php echo !empty($v['image']) ? '/assets/uploads/products/' . htmlspecialchars($v['image']) : ''; ?>"
@@ -1566,7 +2121,7 @@ input:focus{
       <script>
         document.addEventListener("DOMContentLoaded", function() {
           const variantBtns = document.querySelectorAll('.variant-card');
-          const priceDisplay = document.querySelector('.price');
+          const priceDisplay = document.querySelector('.price-section');
           const stockDisplay = document.querySelector('.stock');
           const variantInput = document.getElementById('selectedVariantId');
           
@@ -1577,7 +2132,7 @@ input:focus{
             ingredients: `<?php echo addslashes($ingredientsText); ?>`,
             howToUse: `<?php echo addslashes($howToUseText); ?>`,
             metaTitle: `<?php echo addslashes($productName); ?>`, // Default to product name
-            metaDescription: `<?php echo addslashes($shortDesc); ?>`, // Default to short desc
+            metaDescription: `<?php echo addslashes(strip_tags($shortDesc)); ?>`, // Default to short desc
             images: <?php echo json_encode($imageList); ?>.map(img => img.startsWith('/') ? img : '/' + img),
             faqs: <?php echo json_encode($faqs); ?>
           };
@@ -1682,11 +2237,44 @@ input:focus{
               // Update FAQs
               updateFAQs(Array.isArray(variantFaqs) && variantFaqs.length > 0 ? variantFaqs : defaultData.faqs);
 
-              // Update Price & Stock
-              const price = parseFloat(btn.dataset.price);
-              if (priceDisplay) {
-                priceDisplay.innerHTML = '<?php if ($oldPrice): ?><span class="old-price">₹<?php echo number_format($oldPrice, 2); ?></span><?php endif; ?>' + '₹' + price.toFixed(2);
+              // Update Price, Compare Price, Discount & Stock
+              let price = parseFloat(btn.dataset.price);
+              const comparePrice = parseFloat(btn.dataset.comparePrice) || 0;
+              const discountPercent = parseFloat(btn.dataset.discountPercent) || 0;
+              
+              // Auto-calculate price if compare price and discount exist
+              if (comparePrice > 0 && discountPercent > 0) {
+                  price = comparePrice - (comparePrice * (discountPercent / 100));
               }
+              
+              if (priceDisplay) {
+                // Calculate savings
+                const savings = comparePrice > 0 ? (comparePrice - price) : 0;
+                
+                // Rebuild the entire price display HTML to ensure consistency
+                let html = '';
+                
+                // 1. Discount Badge (Top)
+                if (discountPercent > 0) {
+                  html += `<div class="discount-badge">${Math.round(discountPercent)}% OFF</div>`;
+                }
+                
+                // 2. Price Row (Old + Current)
+                html += `<div class="price-row">`;
+                if (comparePrice > 0) {
+                  html += `<span class="old-price">₹${comparePrice.toFixed(2)}</span>`;
+                }
+                html += `<span class="current-price">₹${price.toFixed(2)}</span>`;
+                html += `</div>`;
+                
+                // 3. Savings Text (Bottom)
+                if (savings > 0) {
+                  html += `<div class="savings-text">You Save: <strong>₹${savings.toFixed(2)}</strong></div>`;
+                }
+                
+                priceDisplay.innerHTML = html;
+              }
+
               
               const stock = parseInt(btn.dataset.stock);
               if (stockDisplay) {
@@ -1829,8 +2417,8 @@ input:focus{
           <input class="qty-input" type="text" value="1" name="quantity">
           <button type="button" class="qty-btn" data-action="inc">+</button>
         </div>
-        <!-- For now this is a dummy button. Later you can POST to cart.php -->
-        <button class="btn-add-cart" type="button">
+        <!-- Add to Cart Button -->
+        <button class="btn-add-cart" type="button" data-product-id="<?php echo $productId; ?>">
           <i class="fa-solid fa-bag-shopping"></i> &nbsp;Add To Cart
         </button>
       </div>
@@ -1864,7 +2452,7 @@ input:focus{
           <h3>Description</h3>
           <?php if (!empty($longDescription)): ?>
             <p>
-              <?php echo nl2br(htmlspecialchars($longDescription, ENT_QUOTES)); ?>
+              <?php echo $longDescription; ?>
             </p>
           <?php else: ?>
             <p>
@@ -1877,7 +2465,7 @@ input:focus{
         <div class="tab-pane" id="tab-ing">
           <h3>Ingredients</h3>
           <?php if (!empty($ingredientsText)): ?>
-            <p><?php echo nl2br(htmlspecialchars($ingredientsText, ENT_QUOTES)); ?></p>
+            <div><?php echo $ingredientsText; ?></div>
           <?php else: ?>
             <p>Ingredients information will be updated soon.</p>
           <?php endif; ?>
@@ -1887,7 +2475,7 @@ input:focus{
         <div class="tab-pane" id="tab-use">
           <h3>How to use</h3>
           <?php if (!empty($howToUseText)): ?>
-            <p><?php echo nl2br(htmlspecialchars($howToUseText, ENT_QUOTES)); ?></p>
+            <div><?php echo $howToUseText; ?></div>
           <?php else: ?>
             <p>Usage instructions will be updated soon.</p>
           <?php endif; ?>
@@ -1998,14 +2586,57 @@ input:focus{
 
   <!-- REVIEWS SECTION -->
   <section class="reviews-section">
-    <div class="section-title">
-      <h2>Customer Reviews</h2>
+    <div class="container">
+      <?php if (isset($_SESSION['success'])): ?>
+        <div style="background:#d4edda;color:#155724;padding:15px;margin-bottom:20px;border-radius:4px;border:1px solid #c3e6cb;">
+          <?php echo $_SESSION['success']; unset($_SESSION['success']); ?>
+        </div>
+      <?php endif; ?>
+      
+      <?php if (isset($_SESSION['error'])): ?>
+        <div style="background:#f8d7da;color:#721c24;padding:15px;margin-bottom:20px;border-radius:4px;border:1px solid #f5c6cb;">
+          <?php echo $_SESSION['error']; unset($_SESSION['error']); ?>
+        </div>
+      <?php endif; ?>
     </div>
+
+    <div class="section-title">
+      <h2>Customer Reviews (<?= count($reviews) ?>)</h2>
+    </div>
+    
+    <!-- Display Existing Reviews -->
+    <?php if (!empty($reviews)): ?>
+      <div class="reviews-list" style="margin-bottom:40px;">
+        <?php foreach ($reviews as $review): ?>
+          <div class="review-item" style="background:#fff;border:1px solid #e0e0e0;border-radius:12px;padding:24px;margin-bottom:20px;">
+            <div class="review-header" style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px;">
+              <div>
+                <div class="review-author" style="font-weight:600;font-size:15px;margin-bottom:6px;">
+                  <?= htmlspecialchars($review['reviewer_name'] ?: 'Anonymous') ?>
+                </div>
+                <div class="review-rating" style="color:#ffb400;font-size:16px;margin-bottom:8px;">
+                  <?= str_repeat('★', (int)$review['rating']) ?><?= str_repeat('☆', 5 - (int)$review['rating']) ?>
+                </div>
+              </div>
+              <div class="review-date" style="font-size:12px;color:#999;">
+                <?= date('M j, Y', strtotime($review['created_at'])) ?>
+              </div>
+            </div>
+            <div class="review-comment" style="color:#333;line-height:1.7;font-size:14px;">
+              <?= nl2br(htmlspecialchars($review['comment'])) ?>
+            </div>
+          </div>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
+    
+    <!-- Review Form -->
     <div class="review-form-container">
       <h3>Write a review</h3>
 
 
-      <form action="#" method="post">
+      <form id="reviewForm" action="submit_review.php" method="post" enctype="multipart/form-data">
+        <input type="hidden" name="product_id" value="<?php echo $productId; ?>">
         <div class="form-row">
 
           <div class="rating-input">
@@ -2027,15 +2658,139 @@ input:focus{
           <textarea id="review" name="review" rows="4" required></textarea>
         </div>
 
-        <div class="form-row">
-          <label for="review_images">Upload Images (optional)</label>
-          <input type="file" id="review_images" name="review_images[]" accept="image/*" multiple class="file-input">
-        </div>
-
         <button type="submit" class="btn-submit-review">Submit Review</button>
       </form>
     </div>
   </section>
+
+<div id="toast-container" style="position: fixed; top: 20px; right: 20px; z-index: 9999;"></div>
+
+<script>
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    
+    // Toast Styles
+    toast.style.minWidth = '300px';
+    toast.style.padding = '16px 24px';
+    toast.style.marginBottom = '10px';
+    toast.style.borderRadius = '8px';
+    toast.style.background = '#fff';
+    toast.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+    toast.style.display = 'flex';
+    toast.style.alignItems = 'center';
+    toast.style.gap = '12px';
+    toast.style.transform = 'translateX(120%)';
+    toast.style.transition = 'transform 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55)';
+    toast.style.borderLeft = type === 'success' ? '5px solid #2e7d32' : '5px solid #d32f2f';
+    
+    // Icon
+    const icon = type === 'success' ? '<i class="fas fa-check-circle" style="color:#2e7d32;font-size:20px;"></i>' : '<i class="fas fa-exclamation-circle" style="color:#d32f2f;font-size:20px;"></i>';
+    
+    toast.innerHTML = `
+        ${icon}
+        <div style="font-size:14px;font-weight:500;color:#333;">${message}</div>
+    `;
+    
+    container.appendChild(toast);
+    
+    // Trigger animation
+    requestAnimationFrame(() => {
+        toast.style.transform = 'translateX(0)';
+    });
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        toast.style.transform = 'translateX(120%)';
+        setTimeout(() => {
+            toast.remove();
+        }, 300);
+    }, 4000);
+}
+
+document.getElementById('reviewForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    // Validate Rating
+    const rating = document.querySelector('input[name="rating"]:checked');
+    if (!rating) {
+        showToast('Please select a star rating before submitting.', 'error');
+        return;
+    }
+    
+    const formData = new FormData(this);
+    const submitBtn = this.querySelector('.btn-submit-review');
+    const originalText = submitBtn.textContent;
+    
+    submitBtn.textContent = 'Submitting...';
+    submitBtn.disabled = true;
+    
+    fetch('submit_review.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Create new review element
+            const reviewHtml = `
+                <div class="review-item" style="background:#fff;border:1px solid #e0e0e0;border-radius:12px;padding:24px;margin-bottom:20px;animation:fadeIn 0.5s ease;">
+                    <div class="review-header" style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px;">
+                        <div>
+                            <div class="review-author" style="font-weight:600;font-size:15px;margin-bottom:6px;">
+                                ${data.review.reviewer_name}
+                            </div>
+                            <div class="review-rating" style="color:#ffb400;font-size:16px;margin-bottom:8px;">
+                                ${'★'.repeat(data.review.rating)}${'☆'.repeat(5 - data.review.rating)}
+                            </div>
+                        </div>
+                        <div class="review-date" style="font-size:12px;color:#999;">
+                            ${data.review.created_at}
+                        </div>
+                    </div>
+                    <div class="review-comment" style="color:#333;line-height:1.7;font-size:14px;">
+                        ${data.review.comment}
+                    </div>
+                </div>
+            `;
+            
+            // Prepend to reviews list
+            const reviewsList = document.querySelector('.reviews-list');
+            if (reviewsList) {
+                reviewsList.insertAdjacentHTML('afterbegin', reviewHtml);
+            } else {
+                // If no reviews list exists yet (first review)
+                const sectionTitle = document.querySelector('.section-title');
+                const newList = document.createElement('div');
+                newList.className = 'reviews-list';
+                newList.style.marginBottom = '40px';
+                newList.innerHTML = reviewHtml;
+                sectionTitle.insertAdjacentElement('afterend', newList);
+            }
+            
+            // Update count
+            const countHeader = document.querySelector('.section-title h2');
+            const currentCount = parseInt(countHeader.textContent.match(/\d+/)[0]);
+            countHeader.textContent = `Customer Reviews (${currentCount + 1})`;
+            
+            // Reset form
+            this.reset();
+            showToast(data.message, 'success');
+            
+        } else {
+            showToast(data.message, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('An error occurred. Please try again.', 'error');
+    })
+    .finally(() => {
+        submitBtn.textContent = originalText;
+        submitBtn.disabled = false;
+    });
+});
+</script>
 
   <!-- RELATED PRODUCTS SECTION -->
   <?php
@@ -2372,6 +3127,35 @@ input:focus{
     .related-product-card:hover {
       transform: translateY(-5px);
       box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+    }
+    
+    /* Mobile: Show 2 related products at a time */
+    @media (max-width: 768px) {
+      .related-products-section {
+        margin: 30px auto;
+        padding: 15px;
+      }
+      
+      .related-products-section .section-title {
+        font-size: 1.2rem;
+        margin-bottom: 15px;
+      }
+      
+      .related-products-carousel {
+        gap: 12px;
+        padding: 5px 0;
+      }
+      
+      .related-product-card {
+        flex: 0 0 48%;
+        min-width: 48%;
+      }
+      
+      .related-products-carousel::-webkit-scrollbar {
+        height: 6px;
+      }
+    }
+    .related-product-card:hover {
       border-color: #3B502C;
     }
     .related-product-card .product-link {
@@ -2545,60 +3329,8 @@ input:focus{
     <div class="footer-inner">
       <div>
         <div style="font-size:21px;margin-bottom:8px;font-weight:700;letter-spacing:.18em;">
-          DEVILIXIRS
-          <span style="display:block;font-size:10px;letter-spacing:.25em;font-weight:400;">HERBAL&nbsp;CARE</span>
-        </div>
-        <p style="color:#bfbfbf;line-height:1.7;margin-bottom:14px;">
-          Clean, simple herbal blends for hair, skin and home. Crafted in small batches with love from Chennai.
-        </p>
-      </div>
-
-      <div>
-        <h4 class="footer-title">Customer Service</h4>
-        <ul class="footer-links">
-          <li>Help &amp; Contact</li>
-          <li>Returns &amp; Refunds</li>
-          <li>Shipping</li>
-          <li>Order Tracking</li>
-        </ul>
-      </div>
-
-      <div>
-        <h4 class="footer-title">Company</h4>
-        <ul class="footer-links">
-          <li>About Us</li>
-          <li>Blog</li>
-          <li>Our Ingredients</li>
-          <li>Wholesale</li>
-        </ul>
-      </div>
-
-      <div>
-        <h4 class="footer-title">Archive</h4>
-        <ul class="footer-links">
-          <li>Designer Picks</li>
-          <li>Gift Boxes</li>
-          <li>Seasonal Offers</li>
-          <li>Lookbook</li>
-        </ul>
-      </div>
-    </div>
-
-    <div class="footer-bottom">
-      <span>Copyright © 2025 <strong>Devilixirs</strong>. All Rights Reserved.</span>
-      <div class="footer-payments">
-        <span>Visa</span>
-        <span>MasterCard</span>
-        <span>Rupay</span>
-        <span>UPI</span>
-      </div>
-    </div>
-  </footer>
-
-  <!-- Back to top -->
-  <div class="back-top" onclick="window.scrollTo({top:0,behavior:'smooth'});">
-    <i class="fa-solid fa-angle-up"></i>
-  </div>
+  <!-- FOOTER -->
+  <?php include 'footer.php'; ?>
 
   <script>
     document.addEventListener("DOMContentLoaded", function () {
@@ -2643,6 +3375,56 @@ input:focus{
           qtyInput.value = val;
         });
       });
+
+      // Add to Cart Logic
+      const addToCartBtn = document.querySelector('.btn-add-cart');
+      if (addToCartBtn) {
+        addToCartBtn.addEventListener('click', function() {
+          const productId = this.getAttribute('data-product-id');
+          const quantity = parseInt(document.querySelector('.qty-input').value) || 1;
+          
+          // Visual feedback
+          const originalText = this.innerHTML;
+          this.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Adding...';
+          this.disabled = true;
+          
+          fetch('ajax_cart.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `action=add&product_id=${productId}&quantity=${quantity}`
+          })
+          .then(r => r.json())
+          .then(data => {
+            if (data.success) {
+              this.innerHTML = '<i class="fa-solid fa-check"></i> Added!';
+              this.style.background = '#2e7d32'; // Green success color
+              
+              // Check for coupon status (if coupon was removed due to cart change)
+              if (data.coupon_status && data.coupon_status.status === 'removed') {
+                  alert(data.coupon_status.message);
+              }
+              
+              setTimeout(() => {
+                this.innerHTML = originalText;
+                this.disabled = false;
+                this.style.background = ''; // Reset color
+                // Optional: Update cart count in header if you have one
+                // updateCartCount(data.count); 
+              }, 2000);
+            } else {
+              alert(data.message || 'Failed to add to cart');
+              this.innerHTML = originalText;
+              this.disabled = false;
+            }
+          })
+          .catch(err => {
+            console.error(err);
+            alert('An error occurred. Please try again.');
+            this.innerHTML = originalText;
+            this.disabled = false;
+          });
+        });
+      }
     });
   </script>
 

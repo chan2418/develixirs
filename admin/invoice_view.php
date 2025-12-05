@@ -36,28 +36,19 @@ try {
                o.total_amount AS order_total_amount,
                o.payment_status, 
                o.order_status, 
-               o.created_at AS order_created_at
+               o.created_at AS order_created_at,
+               o.shipping_charge AS order_shipping,
+               o.coupon_discount AS order_discount,
+               o.coupon_code,
+               o.tax_amount AS order_tax
         FROM invoices i
         JOIN orders o ON i.order_id = o.id
         WHERE i.id = ? LIMIT 1
     ";
-    // $stmt = $pdo->prepare($sql);
-    // $stmt->execute([$id]);
-    // $inv = $stmt->fetch(PDO::FETCH_ASSOC);
-    $stmt = $pdo->prepare("
-        SELECT i.*,
-            o.order_number,
-            o.customer_name,
-            o.total_amount,
-            o.payment_status,
-            o.order_status,
-            o.created_at AS order_created_at
-        FROM invoices i
-        JOIN orders o ON i.order_id = o.id
-        WHERE i.id = ? LIMIT 1
-    ");
+    $stmt = $pdo->prepare($sql);
     $stmt->execute([$id]);
     $inv = $stmt->fetch(PDO::FETCH_ASSOC);
+
 
 } catch (Exception $e) {
     // log server-side and show friendly message
@@ -90,13 +81,14 @@ try {
 }
 
 // --- Numeric invoice columns with safe defaults ---
-$discount            = isset($inv['discount'])         ? (float)$inv['discount']         : 0.00;
-$other_discount      = isset($inv['other_discount'])   ? (float)$inv['other_discount']   : 0.00;
-$shipping            = isset($inv['shipping_charge'])  ? (float)$inv['shipping_charge']  : 0.00;
-$tax_rate            = isset($inv['tax_rate'])         ? (float)$inv['tax_rate']         : 0.00; // percent
-$tax_amount_explicit = (isset($inv['tax_amount']) && $inv['tax_amount'] !== null && $inv['tax_amount'] !== '') ? (float)$inv['tax_amount'] : null;
-$other_fees          = isset($inv['other_fees'])       ? (float)$inv['other_fees']       : 0.00;
-$total_fee           = isset($inv['total_fee'])        ? (float)$inv['total_fee']        : 0.00;
+// Prefer order data if invoice data is missing/zero
+$discount       = !empty($inv['order_discount']) ? (float)$inv['order_discount'] : (isset($inv['discount']) ? (float)$inv['discount'] : 0.00);
+$shipping       = !empty($inv['order_shipping']) ? (float)$inv['order_shipping'] : (isset($inv['shipping_charge']) ? (float)$inv['shipping_charge'] : 0.00);
+$tax_amount     = !empty($inv['order_tax'])      ? (float)$inv['order_tax']      : (isset($inv['tax_amount']) ? (float)$inv['tax_amount'] : 0.00);
+
+$other_discount = isset($inv['other_discount'])   ? (float)$inv['other_discount']   : 0.00;
+$other_fees     = isset($inv['other_fees'])       ? (float)$inv['other_fees']       : 0.00;
+$total_fee      = isset($inv['total_fee'])        ? (float)$inv['total_fee']        : 0.00;
 
 // --- Subtotal calculation: sum invoice_items OR fallback to invoice.amount or order_total_amount ---
 $subtotal = 0.0;
@@ -106,23 +98,12 @@ if (!empty($items)) {
         $subtotal += (float)$it['amount'];
     }
 } else {
-    if (!empty($inv['amount'])) $subtotal = (float)$inv['amount'];
-    elseif (!empty($inv['order_total_amount'])) $subtotal = (float)$inv['order_total_amount'];
-    else $subtotal = 0.0;
-}
-
-// --- Taxable base and tax value calculation ---
-$taxable_base = max(0.0, $subtotal - $discount - $other_discount);
-
-// tax value: prefer explicit tax_amount if present, otherwise compute from tax_rate
-if ($tax_amount_explicit !== null) {
-    $tax_value = round($tax_amount_explicit, 2);
-} else {
-    $tax_value = round($taxable_base * ($tax_rate / 100.0), 2);
+    // fallback logic
+    $subtotal = (float)$inv['order_total_amount'] - $shipping + $discount - $tax_amount;
 }
 
 // --- Final total ---
-$total = $subtotal - $discount - $other_discount + $other_fees + $shipping + $tax_value + $total_fee;
+$total = $subtotal - $discount - $other_discount + $other_fees + $shipping + $tax_amount + $total_fee;
 if ($total < 0) $total = 0.0;
 
 // --- PDF resolution (fallback to developer file if not present in uploads) ---
@@ -182,11 +163,12 @@ if (file_exists($possibleLocal)) {
   <div class="card">
     <div class="invoice-head">
       <div class="brand">
-        <div class="brand-logo">D</div>
+        <img src="/develixir-logo.png" alt="DEVELIXIR" style="height:60px; width:auto; border-radius:8px;">
+        <!-- <div class="brand-logo">D</div>
         <div>
           <div class="h1">DEVELIXIR</div>
           <div class="subtle">Invoice</div>
-        </div>
+        </div> -->
       </div>
 
       <div class="right">
@@ -281,7 +263,7 @@ if (file_exists($possibleLocal)) {
           <div class="row"><div>Total Fee</div><div class="right">₹ <?= money($total_fee) ?></div></div>
         <?php endif; ?>
 
-        <div class="row"><div>Tax <?= $tax_rate ? '(' . money($tax_rate) . '%)' : '' ?></div><div class="right">₹ <?= money($tax_value) ?></div></div>
+        <div class="row"><div>Tax (18% GST)</div><div class="right">₹ <?= money($tax_amount) ?></div></div>
 
         <div class="row total" style="margin-top:8px;">
           <div>Total</div>

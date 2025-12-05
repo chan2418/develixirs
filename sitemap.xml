@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+
+    <!-- Homepage -->
+    <url>
+        <loc>https://develixirs.com/</loc>
+        <lastmod>2025-12-02</lastmod>
+        <changefreq>daily</changefreq>
+        <priority>1.0</priority>
+    </url>
+
+    <!-- Main Pages -->
+    <url>
+        <loc>https://develixirs.com/shop.php</loc>
+        <lastmod>2025-12-02</lastmod>
+        <changefreq>daily</changefreq>
+        <priority>0.9</priority>
+    </url>
+    <url>
+        <loc>https://develixirs.com/product.php</loc>
+        <lastmod>2025-12-02</lastmod>
+        <changefreq>daily</changefreq>
+        <priority>0.9</priority>
+    </url>
+    <url>
+        <loc>https://develixirs.com/blog.php</loc>
+        <lastmod>2025-12-02</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.7</priority>
+    </url>
+    <url>
+        <loc>https://develixirs.com/contact.php</loc>
+        <lastmod>2025-12-02</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.6</priority>
+    </url>
+
+    <!-- Product Pages -->
+    <url>
+        <loc>https://develixirs.com/product_view.php?id=29</loc>
+        <lastmod>2025-12-02 12:26:36</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.8</priority>
+        <image:image>
+            <image:loc>https://develixirs.com/assets/uploads/products/c28997524100.jpg</image:loc>
+            <image:title>Nalpamaradi Kera Thailam Bridal Mom Baby Skin Beauty</image:title>
+        </image:image>
+    </url>
+    <url>
+        <loc>https://develixirs.com/product_view.php?id=27</loc>
+        <lastmod>2025-11-28 06:38:04</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.8</priority>
+        <image:image>
+            <image:loc>https://develixirs.com/assets/uploads/products/1764311884_c5e9e42f0a1c.jpg</image:loc>
+            <image:title>test</image:title>
+        </image:image>
+    </url>
+    <url>
+        <loc>https://develixirs.com/product_view.php?id=21</loc>
+        <lastmod>2025-12-01 17:02:41</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.8</priority>
+        <image:image>
+            <image:loc>https://develixirs.com/assets/uploads/products/6755ca5b18fc.jpg</image:loc>
+            <image:title>test</image:title>
+        </image:image>
+    </url>
+    <url>
+        <loc>https://develixirs.com/product_view.php?id=19</loc>
+        <lastmod>2025-11-26 07:07:53</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.8</priority>
+        <image:image>
+            <image:loc>https://develixirs.com/assets/uploads/products/69904cd66623.png</image:loc>
+            <image:title>Face cleanser Honey Vetiver Anantmool Luster Even Tone Non-Forming</image:title>
+        </image:image>
+    </url>
+    <url>
+        <loc>https://develixirs.com/product_view.php?id=18</loc>
+        <lastmod>2025-11-26 07:07:53</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.8</priority>
+        <image:image>
+            <image:loc>https://develixirs.com/assets/uploads/products/1763967298_042b9bdfba78.jpg</image:loc>
+            <image:title>Eye Kajal Alovera Bringraj Prevent dry eyes &amp; protect from Pollution &amp; infections</image:title>
+        </image:image>
+    </url>
+    <url>
+        <loc>https://develixirs.com/product_view.php?id=17</loc>
+        <lastmod>2025-11-26 07:07:53</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.8</priority>
+        <image:image>
+            <image:loc>https://develixirs.com/assets/uploads/products/fb15b8e998ea.jpg</image:loc>
+            <image:title>Babies Ayurvedic Eye Kajal Pure and Natural Anjana</image:title>
+        </image:image>
+    </url>
+    <url>
+        <loc>https://develixirs.com/product_view.php?id=16</loc>
+        <lastmod>2025-11-26 07:07:53</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.8</priority>
+        <image:image>
+            <image:loc>https://develixirs.com/assets/uploads/products/8e2202201f76.jpg</image:loc>
+            <image:title>Ayurvedic Eye kajal Aloe Vera Bhringraj Charming Anjana 2gm</image:title>
+        </image:image>
+    </url>
+
+    <!-- Blog Posts -->
+    <url>
+        <loc>https://develixirs.com/blog_single.php?slug=whole cake isaland</loc>
+        <lastmod>2025-12-02</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.6</priority>
+    </url>
+    <url>
+        <loc>https://develixirs.com/blog_single.php?slug=baby-care</loc>
+        <lastmod>2025-11-29 12:27:45</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.6</priority>
+    </url>
+    <url>
+        <loc>https://develixirs.com/blog_single.php?slug=mens-care</loc>
+        <lastmod>2025-11-29 12:27:58</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.6</priority>
+    </url>
+    <url>
+        <loc>https://develixirs.com/blog_single.php?slug=panther harish</loc>
+        <lastmod>2025-11-29 08:29:18</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.6</priority>
+    </url>
+
+</urlset>
