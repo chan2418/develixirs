@@ -13,10 +13,10 @@ function safeFetch($stmt) {
 function esc($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
 // --- SUMMARY ---
-$stmt = $pdo->prepare("SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amount),0) AS revenue FROM orders WHERE DATE(created_at) = CURDATE()");
+$stmt = $pdo->prepare("SELECT COUNT(*) AS cnt, COALESCE(SUM(total),0) AS revenue FROM orders WHERE DATE(created_at) = CURDATE()");
 $stmt->execute(); $today = safeFetch($stmt);
 
-$stmt = $pdo->prepare("SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amount),0) AS revenue FROM orders WHERE MONTH(created_at)=MONTH(CURDATE()) AND YEAR(created_at)=YEAR(CURDATE())");
+$stmt = $pdo->prepare("SELECT COUNT(*) AS cnt, COALESCE(SUM(total),0) AS revenue FROM orders WHERE MONTH(created_at)=MONTH(CURDATE()) AND YEAR(created_at)=YEAR(CURDATE())");
 $stmt->execute(); $month = safeFetch($stmt);
 
 $totals = [];
@@ -30,7 +30,7 @@ $totals['pending'] = (int)($stmt->fetchColumn() ?: 0);
 
 // --- SALES LAST 30 DAYS ---
 $stmt = $pdo->prepare("
-    SELECT DATE(created_at) AS day, COALESCE(SUM(total_amount),0) AS revenue
+    SELECT DATE(created_at) AS day, COALESCE(SUM(total),0) AS revenue
     FROM orders
     WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 29 DAY)
     GROUP BY DATE(created_at)
@@ -75,7 +75,7 @@ $stmt->execute();
 $recentCustomers = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // --- RECENT ORDERS ---
-$stmt = $pdo->query("SELECT id, order_number, customer_name, total_amount, payment_status, order_status, created_at FROM orders ORDER BY created_at DESC LIMIT 8");
+$stmt = $pdo->query("SELECT id, order_number, customer_name, total, payment_status, order_status, created_at FROM orders ORDER BY created_at DESC LIMIT 8");
 $recentOrders = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // include new layout header/footer (DEVELIXIR)
@@ -279,7 +279,7 @@ include __DIR__ . '/layout/header.php';
                 <tr>
                   <td><?php echo esc($o['order_number']); ?></td>
                   <td><?php echo esc($o['customer_name']); ?></td>
-                  <td>₹<?php echo number_format($o['total_amount'],2); ?></td>
+                  <td>₹<?php echo number_format($o['total'],2); ?></td>
                   <td><?php echo esc($o['order_status']); ?></td>
                 </tr>
               <?php endforeach; ?>

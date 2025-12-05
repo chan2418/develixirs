@@ -153,6 +153,7 @@ $admin_name = $_SESSION['admin_name'] ?? 'Admin';
         <a href="/admin/orders.php" class="<?php echo (basename($_SERVER['PHP_SELF'])=='orders.php')?'active':''; ?>">Orders</a>
         <a href="/admin/categories.php" class="<?php echo (basename($_SERVER['PHP_SELF'])=='categories.php')?'active':''; ?>">Categories</a>
         <a href="/admin/users.php" class="<?php echo (basename($_SERVER['PHP_SELF'])=='users.php')?'active':''; ?>">Users</a>
+        <a href="/admin/coupons.php" class="<?php echo (basename($_SERVER['PHP_SELF'])=='coupons.php')?'active':''; ?>">Offers & Coupons</a>
       </nav>
     </div>
 
@@ -186,6 +187,7 @@ $admin_name = $_SESSION['admin_name'] ?? 'Admin';
     <a href="/admin/orders.php">Orders</a>
     <a href="/admin/categories.php">Categories</a>
     <a href="/admin/users.php">Users</a>
+    <a href="/admin/coupons.php">Offers & Coupons</a>
     <a href="/admin/profile.php">Profile</a>
     <a href="/admin/logout.php">Logout</a>
   </nav>

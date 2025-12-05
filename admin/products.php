@@ -20,13 +20,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['bulk_action'])) {
         $in = implode(',', $ids);
         if ($action === 'delete') {
             $pdo->exec("DELETE FROM products WHERE id IN ($in)");
-        } elseif ($action === 'enable') {
-            $pdo->exec("UPDATE products SET is_active = 1 WHERE id IN ($in)");
-        } elseif ($action === 'disable') {
-            $pdo->exec("UPDATE products SET is_active = 0 WHERE id IN ($in)");
-        }
+        } 
+        // 'is_active' column missing, enable/disable skipped
     }
     header('Location: products.php'); exit;
+}
+
+// ----------------------
+// Toggle Single (GET)
+// ----------------------
+// ----------------------
+// Toggle Single (GET)
+// ----------------------
+if (isset($_GET['toggle'])) {
+    // 'is_active' column missing, toggle skipped
+    header('Location: products.php'); 
+    exit;
 }
 
 // ----------------------
@@ -54,21 +63,16 @@ if ($q !== '') {
 }
 
 if ($status_filter !== '') {
-    if ($status_filter === 'published') { 
-        $whereParts[] = "p.is_active = 1"; 
-    } elseif ($status_filter === 'draft') { 
-        $whereParts[] = "p.is_active = 0"; 
-    }
+    // 'is_active' column missing, so we skip filtering or assume all active
+    // if ($status_filter === 'published') { ... }
 }
 
 /**
  * Category filter:
- * - match either direct (sub) category_id
- * - or parent_category_id
+ * - match category_id
  */
 if ($category_filter) {
-    $whereParts[] = "(p.category_id = ? OR p.parent_category_id = ?)";
-    $params[] = $category_filter;
+    $whereParts[] = "p.category_id = ?";
     $params[] = $category_filter;
 }
 
@@ -85,19 +89,17 @@ $total = (int)$stmt->fetchColumn();
 $pages = max(1, ceil($total / $perPage));
 
 /**
- * Join categories twice:
- *  - c_sub    = sub category (p.category_id)
- *  - c_parent = main / parent category (p.parent_category_id)
+ * Join categories:
+ *  - c_sub = category (p.category_id)
+ *  - Parent category not in table, so we skip it
  */
 $sql = "SELECT 
             p.*,
-            COALESCE(c_parent.title, c_parent.name) AS parent_category_name,
-            COALESCE(c_sub.title, c_sub.name)       AS sub_category_name
+            NULL AS parent_category_name,
+            c_sub.title AS sub_category_name
         FROM products p
         LEFT JOIN categories c_sub 
                ON p.category_id = c_sub.id
-        LEFT JOIN categories c_parent 
-               ON p.parent_category_id = c_parent.id
         WHERE $whereSql
         ORDER BY p.created_at DESC
         LIMIT ? OFFSET ?";
@@ -113,9 +115,9 @@ $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $cats = [];
 try {
     $cats = $pdo->query("
-        SELECT id, COALESCE(title, name) AS name 
+        SELECT id, title AS name 
         FROM categories 
-        ORDER BY COALESCE(title, name) ASC
+        ORDER BY title ASC
     ")->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
     $cats = [];
@@ -124,7 +126,7 @@ try {
 // ----------------------
 // Helpers
 // ----------------------
-function get_first_image($images) {
+function get_product_first_image($images) {
     $default = '/assets/images/avatar-default.png';
     if (!$images) return $default;
     $maybe = @json_decode($images, true);
@@ -145,7 +147,7 @@ function get_first_image($images) {
     return '/assets/uploads/products/' . ltrim($val, '/');
 }
 
-function preserve_qs($overrides = []) {
+function products_preserve_qs($overrides = []) {
     $qs = $_GET;
     foreach ($overrides as $k => $v) { $qs[$k] = $v; }
     return '?'.http_build_query($qs);
@@ -228,10 +230,11 @@ function preserve_qs($overrides = []) {
                 </td>
               </tr>
             <?php else: foreach($rows as $r):
-              $img = htmlspecialchars(get_first_image($r['images']));
+              $img = htmlspecialchars(get_product_first_image($r['images']));
               $stock = (int)$r['stock'];
-              $statusText  = $r['is_active'] ? 'Published' : 'Draft';
-              $statusClass = $r['is_active'] ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-slate-600';
+              // Default to active since column missing
+              $statusText  = 'Published'; 
+              $statusClass = 'bg-green-50 text-green-700';
 
               $parentCat = $r['parent_category_name'] ?? '';
               $subCat    = $r['sub_category_name'] ?? '';

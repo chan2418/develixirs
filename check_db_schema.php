@@ -2,13 +2,9 @@
 require_once __DIR__ . '/includes/db.php';
 
 try {
-    $stmt = $pdo->query("DESCRIBE products");
-    $columns = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    foreach ($columns as $col) {
-        if ($col['Field'] === 'images') {
-            echo "Column: " . $col['Field'] . " | Type: " . $col['Type'] . "\n";
-        }
-    }
+    $stmt = $pdo->query("SELECT id FROM products LIMIT 1");
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    echo "Product ID: " . ($row['id'] ?? 'None') . "\n";
 } catch (Exception $e) {
     echo "Error: " . $e->getMessage();
 }

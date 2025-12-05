@@ -37,9 +37,6 @@ try {
             $_SESSION['admin_logged'] = true;
             $_SESSION['admin_id'] = $user['id'];
             $_SESSION['admin_name'] = $user['name'];
-            // optional: last_login update
-            $update = $pdo->prepare("UPDATE users SET updated_at = NOW() WHERE id = ?");
-            $update->execute([$user['id']]);
             header('Location: dashboard.php');
             exit;
         }

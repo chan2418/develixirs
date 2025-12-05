@@ -200,6 +200,7 @@ $page_title = 'Invoices';
               <td class="small"><?= htmlspecialchars(date('d M Y H:i', strtotime($inv['created_at']))) ?></td>
               <td style="text-align:right" class="actions">
                 <a href="invoice_view.php?id=<?= (int)$inv['id'] ?>" class="btn" style="color:#0b76ff">View</a>
+                <a href="generate_invoice_pdf.php?id=<?= (int)$inv['id'] ?>" class="btn" style="color:#4b5563">PDF</a>
 
                 <?php if ($inv['status'] !== 'cleared'): ?>
                 <form method="post" style="display:inline-block" onsubmit="return confirm('Mark invoice as cleared?')">

@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', function () {
   /* === Mobile off-canvas menu === */
   const overlay = document.querySelector('.mobile-menu-overlay');
-  const openBtn  = document.querySelector('.mobile-menu-toggle');
+  const openBtn = document.querySelector('.mobile-menu-toggle');
   const closeBtn = document.querySelector('.mobile-menu-close');
 
   if (openBtn && overlay) {
@@ -34,10 +34,10 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   /* === Search category dropdown === */
-  const toggle   = document.getElementById('searchCategoryToggle');
+  const toggle = document.getElementById('searchCategoryToggle');
   const dropdown = document.getElementById('searchCategoryDropdown');
-  const label    = document.getElementById('searchCategoryLabel');
-  const input    = document.getElementById('searchCategoryInput');
+  const label = document.getElementById('searchCategoryLabel');
+  const input = document.getElementById('searchCategoryInput');
 
   if (toggle && dropdown && label && input) {
     toggle.addEventListener('click', function (e) {
@@ -48,7 +48,7 @@ document.addEventListener('DOMContentLoaded', function () {
     dropdown.querySelectorAll('li').forEach(function (li) {
       li.addEventListener('click', function (e) {
         e.stopPropagation();
-        const catId   = this.getAttribute('data-cat-id') || '';
+        const catId = this.getAttribute('data-cat-id') || '';
         const catName = this.getAttribute('data-cat-name') || 'All categories';
 
         input.value = catId;
@@ -60,6 +60,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
     document.addEventListener('click', function () {
       toggle.classList.remove('open');
+    });
+  }
+
+  /* === User Profile Dropdown === */
+  const userDropdown = document.querySelector('.user-dropdown');
+  if (userDropdown) {
+    userDropdown.addEventListener('click', function (e) {
+      e.stopPropagation();
+      this.classList.toggle('open');
+    });
+
+    document.addEventListener('click', function () {
+      userDropdown.classList.remove('open');
     });
   }
 });

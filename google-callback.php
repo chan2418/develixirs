@@ -121,6 +121,7 @@ if (isset($_GET['code'])) {
             // User exists, log them in
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['user_name'] = $user['name'];
+            $_SESSION['user_email'] = $user['email'];
             $_SESSION['user_role'] = $user['role'];
 
             // Update google_id if not set
@@ -139,6 +140,7 @@ if (isset($_GET['code'])) {
             
             $_SESSION['user_id'] = $new_user_id;
             $_SESSION['user_name'] = $name;
+            $_SESSION['user_email'] = $email;
             $_SESSION['user_role'] = 'customer';
         }
 

@@ -9,7 +9,7 @@ $adminEmail = htmlspecialchars($_SESSION['admin_email'] ?? '', ENT_QUOTES, 'UTF-
 $pageTitle  = htmlspecialchars($page_title ?? 'DEVELIXIR Admin', ENT_QUOTES, 'UTF-8');
 
 // Use uploaded screenshot path (tool will map local path to a served URL)
-$avatar_src = '/mnt/data/Screenshot 2025-11-18 at 2.38.59 PM.jpeg';
+$avatar_src = 'https://ui-avatars.com/api/?name=' . urlencode($adminName) . '&background=0D8ABC&color=fff';
 ?>
 <!doctype html>
 <html lang="en">
@@ -281,8 +281,7 @@ $avatar_src = '/mnt/data/Screenshot 2025-11-18 at 2.38.59 PM.jpeg';
       markBtn.addEventListener('click', function(ev){
         ev.stopPropagation();
         markRead(r.id, function(){
-          wrap.classList.remove('unread');
-          markBtn.textContent = 'Read';
+          wrap.remove();
           loadNotifications();
         });
       });
@@ -307,7 +306,8 @@ $avatar_src = '/mnt/data/Screenshot 2025-11-18 at 2.38.59 PM.jpeg';
       })
       .then(json => {
         if (!json || !json.ok) { if (notifSub) notifSub.textContent = 'Failed to load'; showEmpty(); return; }
-        const rows = json.rows || [];
+        // Filter to show only unread
+        const rows = (json.rows || []).filter(r => r.is_read == 0);
         const unread = json.unread || 0;
         if (notifBadge) {
           if (unread > 0) { notifBadge.style.display = 'inline-flex'; notifBadge.textContent = String(unread); }

@@ -1,5 +1,6 @@
 <?php
 // blog.php - Display published blogs from database
+session_start();
 require_once __DIR__ . '/includes/db.php';
 
 // Fetch published blog posts
@@ -43,6 +44,21 @@ try {
     $recentBlogs = [];
 }
 
+// Fetch blog banners
+$blogBanners = [];
+try {
+    $stmtBanner = $pdo->prepare("SELECT filename FROM banners WHERE page_slot = 'blog' AND is_active = 1 ORDER BY id DESC");
+    $stmtBanner->execute();
+    $bannerRows = $stmtBanner->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($bannerRows as $row) {
+        if (!empty($row['filename'])) {
+            $blogBanners[] = '/assets/uploads/banners/' . ltrim($row['filename'], '/');
+        }
+    }
+} catch (PDOException $e) {
+    error_log('Banner fetch error: ' . $e->getMessage());
+}
+
 // Helper to truncate text
 function truncate($text, $length = 150) {
     $text = strip_tags($text);
@@ -60,9 +76,22 @@ function e($v) {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Journal – Devilixirs</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<?php
+// Include SEO helper
+require_once __DIR__ . '/includes/seo_meta.php';
+
+// Generate SEO meta tags
+echo generate_seo_meta([
+    'title' => 'Beauty & Wellness Blog - DevElixir Natural Cosmetics',
+    'description' => 'Discover ayurvedic beauty tips, natural skincare routines, herbal wellness guides, and more. Expert advice on natural cosmetics and holistic beauty from DevElixir.',
+    'keywords' => 'ayurvedic beauty blog, natural skincare tips, herbal wellness, beauty tips india, organic cosmetics guide, DevElixir blog',
+    'url' => 'https://develixirs.com/blog.php',
+    'type' => 'website'
+]);
+
+// Add Website Schema
+echo generate_website_schema();
+?>
   
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -76,87 +105,150 @@ function e($v) {
     :root{
       --primary: #D4AF37;
       --primary-dark: #B89026;
-      --text: #333;
+      --text: #1a1a1a;
       --text-light: #666;
-      --bg-light: #f9f9f9;
-      --border: #eaeaea;
+      --bg-light: #f5f5f5;
+      --border: #e0e0e0;
       --font-heading: 'Playfair Display', serif;
       --font-body: 'Poppins', sans-serif;
     }
     
     *{margin:0;padding:0;box-sizing:border-box;}
-    body{font-family:var(--font-body); color:var(--text); background:#fff; line-height:1.7;}
+    body{
+      font-family:var(--font-body); 
+      color:var(--text); 
+      background:#fff; 
+      line-height:1.7;
+    }
     img{max-width:100%; display:block;}
     a{text-decoration:none; color:inherit; transition:0.3s;}
     ul{list-style:none;}
     
     /* HERO SECTION */
     .hero{
-      background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('/assets/images/blog-hero.jpg'); /* You might need a hero image */
-      background-color: #222; /* Fallback */
-      background-size: cover;
-      background-position: center;
+      background: #1a1a1a;
       color: #fff;
-      padding: 100px 0;
+      padding: 80px 20px;
       text-align: center;
       margin-bottom: 60px;
+      margin-top: 120px;
+      position: relative;
+      overflow: hidden;
+      min-height: 400px;
+    }
+    
+    /* Banner Carousel */
+    .banner-carousel {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+    }
+    .banner-slide {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      transition: opacity 1s ease-in-out;
+      background-size: cover;
+      background-position: center;
+    }
+    .banner-slide.active {
+      opacity: 1;
+    }
+    
+    .hero.has-banner {
+      background: #000;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 320"><path fill="rgba(255,255,255,0.1)" d="M0,96L48,112C96,128,192,160,288,186.7C384,213,480,235,576,213.3C672,192,768,128,864,128C960,128,1056,192,1152,197.3C1248,203,1344,149,1392,122.7L1440,96L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path></svg>');
+      opacity: 0.3;
     }
     .hero-inner{
       max-width: 800px;
       margin: 0 auto;
       padding: 0 20px;
+      position: relative;
+      z-index: 1;
     }
     .hero-title{
       font-family: var(--font-heading);
-      font-size: 48px;
+      font-size: 54px;
       font-weight: 700;
       margin-bottom: 15px;
       letter-spacing: 1px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+    }
+    .hero-subtitle {
+      font-size: 18px;
+      opacity: 0.95;
+      margin-bottom: 20px;
+      font-weight: 300;
     }
     .breadcrumb{
-      font-size: 14px;
-      opacity: 0.8;
+      font-size: 13px;
+      opacity: 0.9;
       text-transform: uppercase;
       letter-spacing: 2px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255,255,255,0.2);
+      padding: 8px 20px;
+      border-radius: 30px;
     }
-    .breadcrumb a:hover{ color: var(--primary); }
+    .breadcrumb a:hover{ opacity: 0.8; }
     
     /* LAYOUT */
     .layout{
-      max-width: 1200px;
+      max-width: 1300px;
       margin: 0 auto 80px;
       padding: 0 20px;
       display: grid;
-      grid-template-columns: 1fr 300px;
-      gap: 50px;
+      grid-template-columns: 1fr 340px;
+      gap: 60px;
     }
     
     /* BLOG GRID */
     .blog-grid{
       display: grid;
       grid-template-columns: repeat(2, 1fr);
-      gap: 40px;
+      gap: 35px;
     }
     
     /* POST CARD */
     .post-card{
       background: #fff;
-      border-radius: 4px;
+      border-radius: 12px;
       overflow: hidden;
-      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      transition: all 0.3s ease;
       display: flex;
       flex-direction: column;
       height: 100%;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      border: 1px solid var(--border);
     }
     .post-card:hover{
-      transform: translateY(-5px);
-      box-shadow: 0 15px 30px rgba(0,0,0,0.08);
+      transform: translateY(-8px);
+      box-shadow: 0 12px 24px rgba(212, 175, 55, 0.15);
+      border-color: var(--primary);
     }
     
     .post-thumb{
       position: relative;
       overflow: hidden;
-      padding-top: 65%; /* Aspect Ratio */
+      padding-top: 60%; /* Aspect Ratio */
+      background: #f0f0f0;
     }
     .post-thumb img{
       position: absolute;
@@ -168,26 +260,26 @@ function e($v) {
       transition: transform 0.5s ease;
     }
     .post-card:hover .post-thumb img{
-      transform: scale(1.05);
+      transform: scale(1.08);
     }
     
     .post-category-badge{
       position: absolute;
-      top: 20px;
-      left: 20px;
-      background: #fff;
-      color: var(--text);
+      top: 15px;
+      left: 15px;
+      background: var(--primary);
+      color: #fff;
       padding: 6px 14px;
       font-size: 11px;
-      font-weight: 600;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 1px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      border-radius: 4px;
       z-index: 2;
     }
     
     .post-body{
-      padding: 30px 0 10px;
+      padding: 24px;
       flex: 1;
       display: flex;
       flex-direction: column;
@@ -195,19 +287,25 @@ function e($v) {
     
     .post-meta{
       font-size: 12px;
-      color: #999;
+      color: var(--primary);
       margin-bottom: 12px;
       text-transform: uppercase;
       letter-spacing: 1px;
-      font-weight: 500;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .post-meta i {
+      font-size: 11px;
     }
     
     .post-title{
       font-family: var(--font-heading);
-      font-size: 24px;
+      font-size: 22px;
       font-weight: 700;
       line-height: 1.3;
-      margin-bottom: 15px;
+      margin-bottom: 12px;
       color: var(--text);
     }
     .post-title:hover{
@@ -215,119 +313,167 @@ function e($v) {
     }
     
     .post-excerpt{
-      font-size: 15px;
+      font-size: 14px;
       color: var(--text-light);
-      margin-bottom: 20px;
+      margin-bottom: 18px;
       flex: 1;
-      display: -webkit-box;
-      -webkit-line-clamp: 3;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
+      line-height: 1.6;
     }
     
     .post-readmore{
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 2px;
+      letter-spacing: 1.5px;
       color: var(--primary);
       display: inline-flex;
       align-items: center;
       gap: 8px;
       margin-top: auto;
-      padding-bottom: 5px;
-      border-bottom: 1px solid transparent;
       width: fit-content;
+      padding: 10px 0;
+    }
+    .post-readmore i {
+      transition: transform 0.3s;
     }
     .post-readmore:hover{
       color: var(--primary-dark);
-      border-bottom-color: var(--primary-dark);
+    }
+    .post-readmore:hover i {
+      transform: translateX(5px);
     }
     
     /* SIDEBAR */
     aside{
       position: sticky;
-      top: 100px;
+      top: 160px;
       height: fit-content;
     }
     
     .sidebar-widget{
-      margin-bottom: 40px;
+      background: #fff;
+      padding: 25px;
+      margin-bottom: 30px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      border: 1px solid var(--border);
     }
     
     .widget-title{
       font-family: var(--font-heading);
       font-size: 20px;
       font-weight: 700;
-      margin-bottom: 25px;
-      padding-bottom: 15px;
-      border-bottom: 2px solid var(--primary);
-      display: inline-block;
+      margin-bottom: 20px;
+      color: var(--text);
+      position: relative;
+      padding-bottom: 12px;
+    }
+    .widget-title::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 50px;
+      height: 3px;
+      background: var(--primary);
     }
     
     .recent-post-item{
       display: flex;
-      gap: 15px;
-      margin-bottom: 20px;
-      align-items: center;
+      gap: 12px;
+      margin-bottom: 18px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--border);
+    }
+    .recent-post-item:last-child {
+      margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: none;
     }
     .recent-post-item img{
-      width: 80px;
-      height: 80px;
+      width: 70px;
+      height: 70px;
       object-fit: cover;
-      border-radius: 4px;
+      border-radius: 8px;
+      flex-shrink: 0;
     }
     .recent-post-info h4{
       font-family: var(--font-heading);
-      font-size: 16px;
+      font-size: 14px;
       line-height: 1.4;
-      margin-bottom: 5px;
+      margin-bottom: 6px;
+      font-weight: 600;
     }
     .recent-post-info h4:hover{ color: var(--primary); }
     .recent-post-date{
       font-size: 11px;
       color: #999;
       text-transform: uppercase;
-      letter-spacing: 1px;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
     }
     
     .category-list li{
-      margin-bottom: 12px;
+      margin-bottom: 0;
     }
     .category-list a{
       display: flex;
       justify-content: space-between;
+      align-items: center;
       font-size: 14px;
       color: var(--text-light);
-      padding: 8px 0;
+      padding: 12px 0;
       border-bottom: 1px solid var(--border);
+      transition: all 0.2s;
     }
     .category-list a:hover, .category-list a.active{
       color: var(--primary);
-      padding-left: 5px;
+      padding-left: 8px;
+    }
+    .category-list a i {
+      font-size: 12px;
+      transition: transform 0.2s;
+    }
+    .category-list a:hover i {
+      transform: translateX(3px);
     }
     
     /* EMPTY STATE */
     .empty-state{
       grid-column: 1/-1;
       text-align: center;
-      padding: 80px 0;
-      color: #999;
+      padding: 100px 20px;
+      background: var(--bg-light);
+      border-radius: 12px;
     }
     .empty-state i{
-      font-size: 48px;
+      font-size: 64px;
       margin-bottom: 20px;
-      color: var(--border);
+      color: #ddd;
+    }
+    .empty-state h3 {
+      font-size: 24px;
+      margin-bottom: 10px;
+      color: var(--text);
+    }
+    .empty-state p {
+      color: var(--text-light);
     }
     
     /* RESPONSIVE */
     @media(max-width: 1024px){
-      .layout{ grid-template-columns: 1fr; gap: 60px; }
-      .sidebar-widget{ max-width: 400px; }
+      .layout{ grid-template-columns: 1fr; gap: 50px; }
+      aside { position: static; }
+      .sidebar-widget{ max-width: 500px; margin-left: auto; margin-right: auto; }
     }
     @media(max-width: 768px){
       .blog-grid{ grid-template-columns: 1fr; }
+      .hero{ padding: 50px 20px; margin-top: 70px; }
       .hero-title{ font-size: 36px; }
+      .hero-subtitle { font-size: 16px; }
+      .post-title { font-size: 20px; }
     }
   </style>
 </head>
@@ -336,15 +482,16 @@ function e($v) {
   <?php include __DIR__ . '/navbar.php'; ?>
 
   <!-- HERO -->
-  <section class="hero">
-    <div class="hero-inner">
-      <h1 class="hero-title">The Journal</h1>
-      <div class="breadcrumb">
-        <a href="index.php">Home</a>
-        <span> / </span>
-        <span>Blog</span>
+  <section class="hero <?php echo !empty($blogBanners) ? 'has-banner' : ''; ?>">
+    <?php if (!empty($blogBanners)): ?>
+      <div class="banner-carousel">
+        <?php foreach ($blogBanners as $index => $banner): ?>
+          <div class="banner-slide <?php echo $index === 0 ? 'active' : ''; ?>" 
+               style="background-image: url('<?php echo htmlspecialchars($banner); ?>');">
+          </div>
+        <?php endforeach; ?>
       </div>
-    </div>
+    <?php endif; ?>
   </section>
 
   <!-- MAIN LAYOUT -->
@@ -371,6 +518,7 @@ function e($v) {
               
               <div class="post-body">
                 <div class="post-meta">
+                  <i class="fa-regular fa-calendar"></i>
                   <?= e(date('F j, Y', strtotime($p['created_at']))) ?>
                 </div>
                 
@@ -426,7 +574,10 @@ function e($v) {
               </a>
               <div class="recent-post-info">
                 <h4><a href="blog_single.php?slug=<?= e($r['slug']) ?>"><?= e($r['title']) ?></a></h4>
-                <div class="recent-post-date"><?= e(date('M j, Y', strtotime($r['created_at']))) ?></div>
+                <div class="recent-post-date">
+                  <i class="fa-regular fa-calendar"></i>
+                  <?= e(date('M j, Y', strtotime($r['created_at']))) ?>
+                </div>
               </div>
             </div>
           <?php endforeach; ?>
@@ -438,9 +589,27 @@ function e($v) {
   </main>
 
   <!-- FOOTER -->
-  <footer style="background:#1a1a1a; color:#999; padding:60px 0; text-align:center; font-size:13px; border-top: 1px solid #333;">
-    <p style="letter-spacing: 1px;">&copy; <?= date('Y') ?> <strong>Devilixirs</strong>. All Rights Reserved.</p>
-  </footer>
+  <!-- FOOTER -->
+  <?php include 'footer.php'; ?>
+
+  <script>
+  // Banner carousel auto-scroll
+  <?php if (!empty($blogBanners) && count($blogBanners) > 1): ?>
+  (function() {
+    const slides = document.querySelectorAll('.banner-slide');
+    let currentSlide = 0;
+    
+    function nextSlide() {
+      slides[currentSlide].classList.remove('active');
+      currentSlide = (currentSlide + 1) % slides.length;
+      slides[currentSlide].classList.add('active');
+    }
+    
+    // Change slide every 5 seconds
+    setInterval(nextSlide, 5000);
+  })();
+  <?php endif; ?>
+  </script>
 
 </body>
 </html>

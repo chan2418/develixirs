@@ -37,7 +37,7 @@ function status_badge($s) {
     ];
     $s = strtolower((string)$s);
     $info = $map[$s] ?? ['bg'=>'bg-slate-50','text'=>'text-slate-700','label'=>ucfirst($s)];
-    return '<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold ' . $info['bg'] . ' ' . $info['text'] . '">' . htmlspecialchars($info['label']) . '</span>';
+    return '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ' . $info['bg'] . ' ' . $info['text'] . '">' . htmlspecialchars($info['label']) . '</span>';
 }
 
 function preserve_qs($overrides = []) {
@@ -198,40 +198,47 @@ try {
       <table class="min-w-full divide-y divide-gray-100">
         <thead class="bg-gray-50">
           <tr>
-            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500">#</th>
-            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500">Order</th>
-            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500">Customer</th>
-            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500">Amount</th>
-            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500">Payment</th>
-            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500">Status</th>
-            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500">Created</th>
-            <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500">Actions</th>
+            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Order Details</th>
+            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Customer</th>
+            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Amount</th>
+            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+            <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-100">
           <?php if (empty($orders)): ?>
             <tr>
-              <td colspan="8" class="px-6 py-12 text-center text-sm text-slate-500">No orders found.</td>
+              <td colspan="5" class="px-6 py-12 text-center text-sm text-slate-500">No orders found.</td>
             </tr>
           <?php else: foreach ($orders as $o): ?>
-            <tr class="hover:bg-slate-50">
-              <td class="px-4 py-4 text-sm"><?php echo (int)$o['id']; ?></td>
+            <tr class="hover:bg-slate-50 cursor-pointer border-b border-gray-50 last:border-b-0" onclick="window.location='order_view.php?id=<?php echo (int)$o['id']; ?>'">
               <td class="px-4 py-4">
-                <div class="font-semibold text-slate-800"><?php echo htmlspecialchars($o['order_number']); ?></div>
-                <div class="text-xs text-slate-400">Order ID: <?php echo (int)$o['id']; ?></div>
+                <div class="font-bold text-slate-800"><?php echo htmlspecialchars($o['order_number'] ?? ''); ?></div>
+                <div class="text-xs text-slate-500 mt-0.5"><?php echo htmlspecialchars(date('M d, Y', strtotime($o['created_at'] ?? 'now'))); ?></div>
               </td>
               <td class="px-4 py-4">
-                <div class="font-semibold"><?php echo htmlspecialchars($o['customer_name']); ?></div>
+                <div class="font-medium text-slate-900"><?php echo htmlspecialchars($o['customer_name'] ?? ''); ?></div>
                 <div class="text-xs text-slate-400"><?php echo htmlspecialchars($o['email'] ?? ''); ?></div>
               </td>
-              <td class="px-4 py-4 font-semibold">₹ <?php echo number_format($o['total_amount'], 2); ?></td>
-              <td class="px-4 py-4 text-sm text-slate-600"><?php echo htmlspecialchars(ucfirst($o['payment_status'] ?? '-')); ?></td>
-              <td class="px-4 py-4"><?php echo status_badge($o['order_status'] ?? '-'); ?></td>
-              <td class="px-4 py-4 text-sm text-slate-500"><?php echo htmlspecialchars(date('d M Y H:i', strtotime($o['created_at'] ?? 'now'))); ?></td>
+              <td class="px-4 py-4 font-semibold text-slate-700">₹ <?php echo number_format($o['total_amount'], 2); ?></td>
+              <td class="px-4 py-4">
+                <div class="flex flex-col gap-1">
+                    <div><?php echo status_badge($o['order_status'] ?? '-'); ?></div>
+                    <div class="text-xs text-slate-500">
+                        Payment: <span class="font-medium <?php echo ($o['payment_status']=='paid')?'text-green-600':'text-slate-600'; ?>">
+                            <?php echo ucfirst($o['payment_status'] ?? '-'); ?>
+                        </span>
+                    </div>
+                </div>
+              </td>
               <td class="px-4 py-4 text-right">
-                <div class="inline-flex items-center gap-2">
-                  <a href="order_view.php?id=<?php echo (int)$o['id']; ?>" class="px-3 py-1 rounded-lg text-sm text-indigo-600 border border-indigo-100">View</a>
-                  <a href="order_invoice.php?id=<?php echo (int)$o['id']; ?>" class="px-3 py-1 rounded-lg text-sm border border-gray-200">Invoice</a>
+                <div class="flex items-center justify-end gap-2">
+                  <a href="order_view.php?id=<?php echo (int)$o['id']; ?>" onclick="event.stopPropagation()" class="p-2 rounded-lg text-indigo-600 hover:bg-indigo-50 transition-colors" title="View Order">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                  </a>
+                  <a href="order_invoice.php?id=<?php echo (int)$o['id']; ?>" onclick="event.stopPropagation()" class="p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors" title="Download Invoice">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                  </a>
                 </div>
               </td>
             </tr>

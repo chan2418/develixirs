@@ -6,9 +6,21 @@ require_once __DIR__ . '/includes/db.php';
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Contact Us – Devilixirs</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<?php
+// Include SEO helper
+require_once __DIR__ . '/includes/seo_meta.php';
+
+// Generate SEO meta tags
+echo generate_seo_meta([
+    'title' => 'Contact Us - DevElixir Natural Cosmetics | Coimbatore',
+    'description' => 'Contact DevElixir for authentic ayurvedic beauty products. Visit us in Kovaipudur, Coimbatore or call +91 9500650454. Email: sales@develixirs.com',
+    'keywords' => 'contact develixir, ayurvedic store coimbatore, natural cosmetics shop, herbal beauty products contact',
+    'url' => 'https://develixirs.com/contact.php'
+]);
+
+// Add LocalBusiness Schema
+echo generate_local_business_schema();
+?>
 
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
@@ -116,18 +128,26 @@ require_once __DIR__ . '/includes/db.php';
 
     <!-- CONTACT DETAILS -->
     <div class="info-box">
-      <div><i class="fa-solid fa-phone"></i> +91 9363076177</div>
-      <div><i class="fa-solid fa-envelope"></i> chandrusri247@gmail.com</div>
-      <div><i class="fa-solid fa-location-dot"></i> Arasamaram, Pichanoorpet, Gudiyattham</div>
+      <div><i class="fa-solid fa-phone"></i> +91 9500650454</div>
+      <div><i class="fa-solid fa-envelope"></i> sales@develixirs.com</div>
+      <div><i class="fa-solid fa-location-dot"></i> 
+        DevElixir Natural Cosmetics ™<br>
+        No:6, 3rd Cross Street,<br>
+        Kamatchiamman Garden, Sethukkarai,<br>
+        Gudiyatham-632602, Vellore, Tamilnadu<br>
+        INDIA
+      </div>
       
       <!-- Google Map -->
       <div style="margin-top: 20px; border-radius: 8px; overflow: hidden;">
-        <iframe src="https://maps.google.com/maps?q=Arasamaram%2C+Pichanoorpet%2C+Gudiyattham&t=&z=15&ie=UTF8&iwloc=&output=embed" width="100%" height="250" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+        <iframe src="https://maps.google.com/maps?q=No%3A6%2C+3rd+Cross+Street%2C+Kamatchiamman+Garden%2C+Sethukkarai%2C+Gudiyatham-632602%2C+Vellore%2C+Tamilnadu&t=&z=15&ie=UTF8&iwloc=&output=embed" width="100%" height="250" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
       </div>
     </div>
 
   </div>
 </div>
+
+<?php include 'footer.php'; ?>
 
 </body>
 </html>
