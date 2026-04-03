@@ -1468,9 +1468,10 @@ echo generate_website_schema();
     .home-side-video-widget{
       position: fixed;
       right: 18px;
-      top: calc(50% + 18px);
-      transform: translateY(-50%);
-      width: 210px;
+      top: auto;
+      bottom: 140px;
+      transform: none;
+      width: 150px;
       max-width: calc(100vw - 28px);
       z-index: 1200;
       border-radius: 20px;
@@ -1531,10 +1532,10 @@ echo generate_website_schema();
     @media (max-width: 992px) {
       .home-side-video-widget{
         right: 10px;
-        bottom: 90px;
+        bottom: 115px;
         top: auto;
         transform: none;
-        width: 165px;
+        width: 130px;
       }
       .home-side-video-close{
         width: 30px;
