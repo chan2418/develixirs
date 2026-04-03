@@ -2,6 +2,7 @@
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/coupon_helpers.php';
 require_once __DIR__ . '/includes/order_pricing_helper.php';
+require_once __DIR__ . '/includes/order_summary_component.php';
 session_start();
 
 if (!isset($_SESSION['user_id'])) {
@@ -118,6 +119,33 @@ try {
 } catch (PDOException $e) {
     $cartItems = [];
 }
+
+$summaryProductsTotal = round(max(0, $cartTotal), 2);
+$summaryShipping = round(max(0, $deliveryCharge), 2);
+$summaryDiscount = round(max(0, $discountAmount), 2);
+$summaryGrandTotal = round(max(0, $finalTotal), 2);
+
+$summaryGstRate = 0.0;
+try {
+    $summaryGstRate = order_summary_max_gst_rate($pdo, $cartItems);
+} catch (Throwable $e) {
+    $summaryGstRate = 0.0;
+}
+
+$selectedAddressState = '';
+if (!empty($addresses)) {
+    foreach ($addresses as $addressItem) {
+        if ((int)($addressItem['id'] ?? 0) === $selectedAddressId) {
+            $selectedAddressState = (string)($addressItem['state'] ?? '');
+            break;
+        }
+    }
+}
+if ($selectedAddressState === '' && !empty($addresses)) {
+    $selectedAddressState = (string)($addresses[0]['state'] ?? '');
+}
+$summaryIsIntra = (stripos($selectedAddressState, 'Tamil Nadu') !== false);
+$summaryGstType = $summaryIsIntra ? 'CGST+SGST' : 'IGST';
 
 function get_first_image($images) {
     $default = '/assets/images/avatar-default.png';
@@ -485,36 +513,20 @@ function get_first_image($images) {
     <!-- PRICE DETAILS -->
 
     <div class="price-details">
-      <div class="price-header">Price Details</div>
-      <div class="price-row">
-        <span>Price (<?php echo count($cartItems); ?> items)</span>
-        <span>₹<?php echo number_format($cartTotal, 2); ?></span>
-      </div>
-      <?php if ($discountAmount > 0): ?>
-        <div class="price-row" style="color: #28a745;">
-          <span><i class="fa fa-tag"></i> <?php echo htmlspecialchars($discountLabel); ?></span>
-          <span>-₹<?php echo number_format($discountAmount, 2); ?></span>
-        </div>
-      <?php endif; ?>
+      <?php
+        render_order_summary_component([
+            'productsTotal' => $summaryProductsTotal,
+            'shipping' => $summaryShipping,
+            'discount' => $summaryDiscount,
+            'grandTotal' => $summaryGrandTotal,
+            'gstRate' => $summaryGstRate,
+            'gstType' => $summaryGstType,
+            'showDiscountWhenZero' => true,
+        ]);
+      ?>
       <?php if ($couponSavedNotApplied && $appliedCoupon): ?>
-        <div style="margin-bottom: 12px; font-size: 12px; color: #8a6d3b;">
+        <div style="margin-top: 12px; font-size: 12px; color: #8a6d3b;">
           Coupon <strong><?php echo htmlspecialchars($appliedCoupon['code']); ?></strong> is saved, but your subscription gives better savings for this cart.
-        </div>
-      <?php endif; ?>
-      <div class="price-row">
-        <span>Delivery Charges</span>
-        <span style="color:<?php echo ($deliveryCharge > 0) ? '#333' : '#388e3c'; ?>;">
-          <?php echo ($deliveryCharge > 0) ? '₹' . number_format($deliveryCharge, 2) : 'FREE'; ?>
-        </span>
-      </div>
-      <div class="total-row">
-        <span>Total Payable</span>
-        <span>₹<?php echo number_format($finalTotal, 2); ?></span>
-      </div>
-      <?php if ($discountAmount > 0): ?>
-        <div style="background: #d4edda; color: #155724; padding: 10px; border-radius: 6px; font-size: 13px; text-align: center; margin-top: 15px;">
-          <i class="fa fa-check-circle"></i>
-          You saved ₹<?php echo number_format($discountAmount, 2); ?>!
         </div>
       <?php endif; ?>
     </div>
