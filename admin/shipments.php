@@ -128,66 +128,70 @@ try {
     </form>
 
     <div class="overflow-x-auto">
-      <table class="min-w-full divide-y divide-gray-100">
+      <table class="min-w-full divide-y divide-gray-200">
         <thead class="bg-gray-50">
           <tr>
-            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500">#</th>
-            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500">Shipment</th>
-            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500">Order</th>
-            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500">Customer</th>
-            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500">Carrier</th>
-            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500">Tracking</th>
-            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500">Status</th>
-            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500">Created</th>
-            <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500">Actions</th>
+            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Shipment</th>
+            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Order</th>
+            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Customer</th>
+            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Carrier</th>
+            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Status</th>
+            <th class="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase">Actions</th>
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-100">
           <?php if (empty($shipments)): ?>
             <tr>
-              <td colspan="9" class="px-6 py-12 text-center text-sm text-slate-500">No shipments found.</td>
+              <td colspan="6" class="px-6 py-12 text-center text-sm text-slate-500">No shipments found.</td>
             </tr>
           <?php else: foreach ($shipments as $s): ?>
-            <tr class="hover:bg-slate-50">
-              <td class="px-4 py-4 text-sm"><?= (int)$s['id'] ?></td>
-
+            <tr class="hover:bg-slate-50 transition">
+              
+              <!-- Shipment Info -->
               <td class="px-4 py-4">
                 <div class="font-semibold text-slate-800"><?= h($s['shipment_number']) ?></div>
-                <div class="text-xs text-slate-400">Shipment ID: <?= (int)$s['id'] ?></div>
+                <div class="text-xs text-slate-500 mt-1">
+                  <?= !empty($s['shipment_date']) ? h(date('d M Y', strtotime($s['shipment_date']))) : 'Not scheduled' ?>
+                </div>
               </td>
 
+              <!-- Order -->
               <td class="px-4 py-4">
-                <a href="order_view.php?id=<?= (int)$s['order_id'] ?>" class="font-semibold text-indigo-600"><?= h($s['order_number']) ?></a>
-                <div class="text-xs text-slate-400">Order ID: <?= (int)$s['order_id'] ?></div>
+                <a href="order_view.php?id=<?= (int)$s['order_id'] ?>" class="font-semibold text-indigo-600 hover:text-indigo-800">
+                  <?= h($s['order_number']) ?>
+                </a>
+                <div class="text-xs text-slate-400 mt-1">ID: <?= (int)$s['order_id'] ?></div>
               </td>
 
+              <!-- Customer -->
               <td class="px-4 py-4">
-                <div class="font-semibold"><?= h($s['customer_name']) ?></div>
+                <div class="font-medium text-slate-700"><?= h($s['customer_name']) ?></div>
               </td>
 
-              <td class="px-4 py-4 text-sm text-slate-600"><?= h($s['carrier'] ?? '-') ?></td>
+              <!-- Carrier -->
+              <td class="px-4 py-4">
+                <div class="text-sm text-slate-600"><?= h($s['carrier'] ?? '-') ?></div>
+                <?php if (!empty($s['tracking_number'])): ?>
+                  <div class="text-xs text-slate-400 mt-1" title="Tracking"><?= h($s['tracking_number']) ?></div>
+                <?php endif; ?>
+              </td>
 
-              <td class="px-4 py-4 text-sm text-slate-600"><?= h($s['tracking_number'] ?? '') ?></td>
-
+              <!-- Status -->
               <td class="px-4 py-4"><?= status_badge($s['status'] ?? '') ?></td>
 
-              <td class="px-4 py-4 text-sm text-slate-500"><?= h(date('d M Y', strtotime($s['created_at'] ?? 'now'))) ?></td>
-
+              <!-- Actions -->
               <td class="px-4 py-4 text-right">
                 <div class="inline-flex items-center gap-2">
-                  <a href="shipment_view.php?id=<?= (int)$s['id'] ?>" class="px-3 py-1 rounded-lg text-sm text-indigo-600 border border-indigo-100">View</a>
+                  <a href="shipment_view.php?id=<?= (int)$s['id'] ?>" 
+                     class="px-3 py-1.5 rounded-lg text-xs font-medium text-indigo-600 border border-indigo-200 hover:bg-indigo-50 transition">
+                    View
+                  </a>
 
-                  <?php if (!empty($s['label_file'])): ?>
-                    <a href="download_label.php?id=<?= (int)$s['id'] ?>" class="px-3 py-1 rounded-lg text-sm border border-gray-200" download>Label</a>
-                  <?php endif; ?>
-
-                  <?php if (($s['status'] ?? '') !== 'delivered'): ?>
-                    <form method="post" action="shipments_action.php" style="display:inline">
-                      <input type="hidden" name="action" value="mark_shipped">
-                      <input type="hidden" name="id" value="<?= (int)$s['id'] ?>">
-                      <button class="px-3 py-1 rounded-lg bg-green-600 text-white text-sm">Mark Shipped</button>
-                    </form>
-                  <?php endif; ?>
+                  <a href="label_pdf.php?id=<?= (int)$s['id'] ?>" 
+                     class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 border border-gray-200 hover:bg-gray-50 transition" 
+                     download>
+                    Label
+                  </a>
                 </div>
               </td>
             </tr>

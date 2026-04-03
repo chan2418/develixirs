@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CKEditor Upload Test</title>
+    <script src="//cdn.ckeditor.com/4.22.1/full/ckeditor.js"></script>
+</head>
+<body>
+    <h1>CKEditor Upload Test</h1>
+    <textarea id="editor"></textarea>
+    
+    <script>
+        const ckEditorFontCssUrl = 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Cormorant+Garamond:wght@300;400;500;600;700&family=Lato:wght@300;400;700;900&family=Open+Sans:wght@300;400;600;700;800&family=Source+Sans+3:wght@300;400;500;600;700&family=Libre+Baskerville:wght@400;700&family=EB+Garamond:wght@400;500;600;700&family=Montserrat:wght@300;400;500;600;700;800&family=Poppins:wght@300;400;500;600;700;800&family=Cormorant:wght@300;400;500;600;700&family=Nunito:wght@300;400;600;700;800&family=Raleway:wght@300;400;500;600;700;800&display=swap';
+        const ckEditorExtraFontNames =
+            'Playfair Display/Playfair Display, serif;' +
+            'Cormorant Garamond/Cormorant Garamond, serif;' +
+            'Lato/Lato, sans-serif;' +
+            'Open Sans/Open Sans, sans-serif;' +
+            'Source Sans/Source Sans 3, Source Sans Pro, sans-serif;' +
+            'Libre Baskerville/Libre Baskerville, serif;' +
+            'EB Garamond/EB Garamond, serif;' +
+            'Montserrat/Montserrat, sans-serif;' +
+            'Poppins/Poppins, sans-serif;' +
+            'Cormorant/Cormorant, serif;' +
+            'Nunito/Nunito, sans-serif;' +
+            'Raleway/Raleway, sans-serif';
+
+        CKEDITOR.replace('editor', {
+            height: 300,
+            filebrowserUploadUrl: '/admin/upload_test.php',
+            uploadUrl: '/admin/upload_test.php',
+            font_names: (CKEDITOR.config.font_names ? CKEDITOR.config.font_names + ';' : '') + ckEditorExtraFontNames
+        });
+        
+        // Log when upload starts
+        CKEDITOR.on('instanceReady', function(evt) {
+            evt.editor.document.appendStyleSheet(ckEditorFontCssUrl);
+            evt.editor.on('fileUploadRequest', function(e) {
+                console.log('=== UPLOAD REQUEST STARTING ===');
+                console.log('URL:', e.data.fileLoader.uploadUrl);
+                console.log('Request Data:', e.data.requestData);
+            });
+            
+            evt.editor.on('fileUploadResponse', function(e) {
+                console.log('=== UPLOAD RESPONSE ===');
+                console.log('Response:', e.data.fileLoader.xhr.responseText);
+            });
+        });
+    </script>
+    
+    <div style="margin-top: 20px; padding: 10px; background: #f0f0f0;">
+        <h3>Instructions:</h3>
+        <ol>
+            <li>Open browser DevTools (F12)</li>
+            <li>Go to Network tab</li>
+            <li>Click the image button in the editor above</li>
+            <li>Try to upload an image</li>
+            <li>Check the Console and Network tabs for details</li>
+        </ol>
+    </div>
+</body>
+</html>

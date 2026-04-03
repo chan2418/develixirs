@@ -2,7 +2,7 @@
 // admin/home_products.php
 // This page manages ONLY homepage highlight sections:
 // Trendy, Best Sellers, Sale, Top Rated.
-// "New Herbal Products" (latest) is auto-fetched in index.php and NOT editable here.
+// "New Herbal Products" is now managed here, with fallback to latest in index.php.
 
 session_start();
 require_once __DIR__ . '/../includes/db.php';
@@ -13,8 +13,11 @@ if (empty($_SESSION['admin_id'])) {
     exit;
 }
 
-// sections we support (NO 'latest' here)
+// sections we support
 $sections = [
+    'new_herbal'  => 'New Herbal Products',
+    'picks'       => 'DevElixirs Picks',
+    'latest'      => 'Latest Products (Tabs)',
     'trendy'      => 'Trendy Products',
     'best_seller' => 'Best Sellers',
     'sale'        => 'Sale Products',
@@ -22,9 +25,9 @@ $sections = [
 ];
 
 // current section from GET or default
-$currentSection = $_GET['section'] ?? 'trendy';
+$currentSection = $_GET['section'] ?? 'latest';
 if (!isset($sections[$currentSection])) {
-    $currentSection = 'trendy';
+    $currentSection = 'latest';
 }
 
 $message = '';
@@ -32,30 +35,56 @@ $error   = '';
 
 // handle form submit
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $section = $_POST['section'] ?? 'trendy';
+    $section = $_POST['section'] ?? 'latest';
     if (!isset($sections[$section])) {
         $error = 'Invalid section selected.';
     } else {
-        $ids = $_POST['product_ids'] ?? [];
-
-        if (!is_array($ids)) {
-            $ids = [];
-        }
-
         try {
             $pdo->beginTransaction();
+
+            // 1) Update visibility setting for this section
+            $settingKey = 'show_' . $section . '_products'; // e.g. show_trendy_products
+            $isVisible = isset($_POST['is_visible']) ? '1' : '0';
+
+            // Check if setting exists
+            $stmt = $pdo->prepare("SELECT id FROM site_settings WHERE setting_key = ?");
+            $stmt->execute([$settingKey]);
+            if ($stmt->fetch()) {
+                $upd = $pdo->prepare("UPDATE site_settings SET setting_value = ? WHERE setting_key = ?");
+                $upd->execute([$isVisible, $settingKey]);
+            } else {
+                $ins = $pdo->prepare("INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?)");
+                $ins->execute([$settingKey, $isVisible]);
+            }
+
+            // 1.5) Update Title setting for this section
+            $titleKey = 'title_' . $section . '_products';
+            $sectionTitle = $_POST['section_title'] ?? '';
+            
+            $stmt = $pdo->prepare("SELECT id FROM site_settings WHERE setting_key = ?");
+            $stmt->execute([$titleKey]);
+            if ($stmt->fetch()) {
+                $upd = $pdo->prepare("UPDATE site_settings SET setting_value = ? WHERE setting_key = ?");
+                $upd->execute([$sectionTitle, $titleKey]);
+            } else {
+                $ins = $pdo->prepare("INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?)");
+                $ins->execute([$titleKey, $sectionTitle]);
+            }
+
+            // 2) Update products (for ALL sections, including latest)
+            $ids = $_POST['product_ids'] ?? [];
+            if (!is_array($ids)) $ids = [];
 
             // remove old entries for this section
             $del = $pdo->prepare("DELETE FROM homepage_products WHERE section = :section");
             $del->execute(['section' => $section]);
 
-            // insert new ones in chosen order
+            // insert new ones
             if (!empty($ids)) {
                 $ins = $pdo->prepare("
                     INSERT INTO homepage_products (product_id, section, sort_order)
                     VALUES (:pid, :section, :sort_order)
                 ");
-
                 $sort = 1;
                 foreach ($ids as $pid) {
                     $pid = (int)$pid;
@@ -69,8 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $pdo->commit();
-            $message = 'Homepage products updated for section: ' . $sections[$section];
-            // redirect to avoid resubmit
+            $message = 'Settings updated for section: ' . $sections[$section];
             header('Location: product_highlights.php?section=' . urlencode($section) . '&saved=1');
             exit;
 
@@ -85,6 +113,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if (isset($_GET['saved']) && $_GET['saved'] == '1' && !$error) {
     $message = 'Changes saved successfully.';
 }
+
+// Fetch current visibility
+$settingKey = 'show_' . $currentSection . '_products';
+$currentVisibility = '1'; // Default visible
+try {
+    $stmt = $pdo->prepare("SELECT setting_value FROM site_settings WHERE setting_key = ?");
+    $stmt->execute([$settingKey]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($row) {
+        $currentVisibility = $row['setting_value'];
+    }
+} catch (PDOException $e) {}
+
+// Fetch current Title
+$titleKey = 'title_' . $currentSection . '_products';
+$currentTitle = $sections[$currentSection]; // Default to system name
+try {
+    $stmt = $pdo->prepare("SELECT setting_value FROM site_settings WHERE setting_key = ?");
+    $stmt->execute([$titleKey]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($row && !empty($row['setting_value'])) {
+        $currentTitle = $row['setting_value'];
+    }
+} catch (PDOException $e) {}
 
 // fetch all products (you can add pagination later)
 try {
@@ -140,7 +192,6 @@ function get_first_image($images) {
 
     return '/assets/uploads/products/' . ltrim($val, '/');
 }
-
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -160,7 +211,7 @@ function get_first_image($images) {
         <h1 class="text-xl font-semibold text-gray-800">Homepage Product Sections</h1>
       </div>
 
-      <!-- Section tabs (no Latest tab) -->
+      <!-- Section tabs -->
       <div class="flex flex-wrap gap-2 mb-6">
         <?php foreach ($sections as $key => $label): ?>
           <a
@@ -188,6 +239,36 @@ function get_first_image($images) {
 
       <form method="post">
         <input type="hidden" name="section" value="<?php echo htmlspecialchars($currentSection); ?>">
+
+        <!-- VISIBILITY TOGGLE -->
+        <div class="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-between">
+            <div>
+                <h3 class="font-semibold text-gray-800">Section Visibility</h3>
+                <p class="text-xs text-gray-500">Show or hide this section on the homepage.</p>
+            </div>
+            <label class="flex items-center cursor-pointer">
+                <div class="relative">
+                    <input type="checkbox" name="is_visible" value="1" class="sr-only" <?php echo $currentVisibility == '1' ? 'checked' : ''; ?>>
+                    <div class="block bg-gray-200 w-10 h-6 rounded-full settings-toggle-bg"></div>
+                    <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition settings-toggle-dot"></div>
+                </div>
+                <div class="ml-3 text-sm font-medium text-gray-700">
+                    <?php echo $currentVisibility == '1' ? 'Visible' : 'Hidden'; ?>
+                </div>
+            </label>
+        </div>
+        
+        <style>
+            input:checked ~ .settings-toggle-bg { background-color: #4F46E5; }
+            input:checked ~ .settings-toggle-dot { transform: translateX(100%); }
+        </style>
+
+        <!-- SECTION TITLE INPUT -->
+        <div class="mb-6">
+            <label class="block text-sm font-medium text-slate-700 mb-1">Section Title (Frontend Display)</label>
+            <input type="text" name="section_title" value="<?php echo htmlspecialchars($currentTitle); ?>" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <p class="text-xs text-slate-500 mt-1">Leave empty to use default: "<?php echo htmlspecialchars($sections[$currentSection]); ?>"</p>
+        </div>
 
         <p class="text-sm text-gray-600 mb-3">
           Select which products should appear in

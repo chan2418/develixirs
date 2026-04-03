@@ -3,9 +3,10 @@ require_once '../includes/db.php';
 include __DIR__ . '/layout/header.php';
 
 $stmt = $pdo->query("
-    SELECT *
-    FROM filter_groups
-    ORDER BY sort_order ASC, name ASC
+    SELECT fg.*, c.name as category_name
+    FROM filter_groups fg
+    LEFT JOIN categories c ON fg.category_id = c.id
+    ORDER BY fg.category_id ASC, fg.sort_order ASC, fg.name ASC
 ");
 $groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
@@ -149,6 +150,7 @@ $groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
       <th>Name</th>
       <th>Param Key</th>
       <th>Column</th>
+      <th>Applies To</th>
       <th>Sort</th>
       <th>Status</th>
       <th>Options</th>
@@ -161,7 +163,13 @@ $groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
           <td><?php echo (int)$g['id']; ?></td>
           <td><strong><?php echo htmlspecialchars($g['name']); ?></strong></td>
           <td><?php echo htmlspecialchars($g['param_key']); ?></td>
-          <td><?php echo htmlspecialchars($g['column_name']); ?></td>
+          <td>
+              <?php if (!empty($g['category_name'])): ?>
+                  <span class="px-2 py-1 bg-indigo-100 text-indigo-700 rounded text-xs font-semibold"><?= htmlspecialchars($g['category_name']) ?></span>
+              <?php else: ?>
+                  <span class="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">Common</span>
+              <?php endif; ?>
+          </td>
           <td><?php echo (int)$g['sort_order']; ?></td>
           <td>
             <?php if (!empty($g['is_active'])): ?>
@@ -203,7 +211,7 @@ $groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
       <?php endforeach; ?>
     <?php else: ?>
       <tr>
-        <td colspan="8" style="text-align:center; padding:20px; color:#6b7280; font-size:14px;">
+        <td colspan="9" style="text-align:center; padding:20px; color:#6b7280; font-size:14px;">
           No filter groups found. Click “Add Filter Group” to create one.
         </td>
       </tr>

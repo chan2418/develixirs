@@ -12,7 +12,7 @@ if (!isset($pdo)) {
 }
 
 // --- FETCH CATEGORIES ---
-$categories = [];
+$navCategories = [];
 $categoriesWithSubs = [];
 try {
     // Check which field exists in categories table
@@ -22,7 +22,7 @@ try {
     $labelField = in_array('title', $fields) ? 'title' : (in_array('name', $fields) ? 'name' : null);
     
     if ($labelField !== null) {
-        // Fetch top-level categories
+        // Fetch top-level categories (for navbar only)
         $catSql = "
             SELECT id, {$labelField} AS title
             FROM categories
@@ -30,10 +30,10 @@ try {
             ORDER BY title ASC
         ";
         $catStmt = $pdo->query($catSql);
-        $categories = $catStmt->fetchAll(PDO::FETCH_ASSOC);
+        $navCategories = $catStmt->fetchAll(PDO::FETCH_ASSOC);
         
         // Fetch all categories with their subcategories for mega menu
-        foreach ($categories as $cat) {
+        foreach ($navCategories as $cat) {
             $subSql = "
                 SELECT id, {$labelField} AS title
                 FROM categories
@@ -52,7 +52,7 @@ try {
         }
     }
 } catch (PDOException $e) {
-    $categories = [];
+    $navCategories = [];
     $categoriesWithSubs = [];
 }
 
@@ -110,11 +110,185 @@ $isHome = ($currentPage === 'index.php');
 $isProduct = ($currentPage === 'product.php');
 $isBlog = ($currentPage === 'blog.php' || $currentPage === 'blog_single.php');
 $isContact = ($currentPage === 'contact.php');
+
+// --- FETCH ACTIVE COUPONS FOR MARQUEE ---
+// Show on all pages or restrict as needed. Currently enabled globally as per "then we go other pages" goal.
+$activeCoupons = [];
+try {
+    // Check if table exists to avoid errors on some installs
+    $stmtC = $pdo->prepare("SELECT title, code, discount_type, discount_value FROM coupons WHERE status = 'active' AND show_on_marquee = 1 AND DATE(start_date) <= CURDATE() AND (end_date IS NULL OR DATE(end_date) >= CURDATE()) ORDER BY id DESC");
+    $stmtC->execute();
+    $activeCoupons = $stmtC->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    // safe fail
+}
+
+// Removed fallback debug dummy coupon.
+// Coupon marquee will only show if there are actual active coupons in the database.
+
+// --- FETCH DYNAMIC PAGES ---
+$navPages = [];
+try {
+    // Check if pages table exists first
+    $checkPageTable = $pdo->query("SHOW TABLES LIKE 'pages'");
+    if ($checkPageTable->rowCount() > 0) {
+        $pageStmt = $pdo->query("SELECT title, slug FROM pages WHERE status='published' AND is_public=1 ORDER BY title ASC");
+        $navPages = $pageStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+} catch (PDOException $e) { /* ignore */ }
+
+// --- CHECK FOR LOGIN SUCCESS MESSAGE ---
+$loginSuccessMsg = '';
+if (isset($_SESSION['login_success_msg'])) {
+    $loginSuccessMsg = $_SESSION['login_success_msg'];
+    unset($_SESSION['login_success_msg']);
+}
 ?>
 <link rel="icon" type="image/png" href="favicon.png">
-<link rel="stylesheet" href="assets/css/navbar.css">
+<link rel="stylesheet" href="assets/css/navbar.css?v=3">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+<style>
+/* FORCE DROPDOWN Z-INDEX TO FIX OVERLAP */
+.abc { position: relative !important; z-index: 2100 !important; }
+.user-menu { z-index: 2200 !important; }
+</style>
+
+<!-- TOAST NOTIFICATION STYLES & CONTAINER -->
+<style>
+/* PREMIUM TOAST STYLE */
+.custom-toast {
+    visibility: hidden;
+    min-width: 280px;
+    background: rgba(255, 255, 255, 0.98);
+    color: #333;
+    text-align: center;
+    border-radius: 50px; /* Pill shape */
+    padding: 12px 28px;
+    position: fixed;
+    z-index: 10000;
+    left: 50%;
+    top: -80px; /* Start off screen */
+    transform: translateX(-50%);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+    font-size: 14px;
+    font-weight: 500;
+    border: 1px solid #D4AF37; /* Gold Border */
+    backdrop-filter: blur(12px);
+    opacity: 0;
+    transition: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55); /* Bouncy effect */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+}
+
+.custom-toast.show {
+    visibility: visible;
+    opacity: 1;
+    top: 40px; /* Slide down to visible position */
+}
+</style>
+
+<div id="toastNotification" class="custom-toast">
+    <i class="fa-solid fa-circle-check" style="color:#D4AF37; font-size:18px;"></i>
+    <span class="toast-msg" id="toastMessage"></span>
+</div>
+
+<script>
+function showToast(message) {
+    const toast = document.getElementById('toastNotification');
+    const msg = document.getElementById('toastMessage');
+    if(toast && msg) {
+        msg.textContent = message;
+        toast.classList.add('show');
+        setTimeout(() => {
+            toast.classList.remove('show');
+        }, 4000);
+    }
+}
+
+// Check for PHP flash message
+<?php if (!empty($loginSuccessMsg)): ?>
+document.addEventListener('DOMContentLoaded', function() {
+    showToast("<?php echo addslashes($loginSuccessMsg); ?>");
+});
+<?php endif; ?>
+</script>
+
+<!-- PROMO MARQUEE STYLES -->
+<style>
+.coupon-marquee-bar {
+    background: #3B502C; /* Highlight Color */
+    color: #fff;
+    overflow: hidden;
+    padding: 8px 0;
+    position: relative;
+    z-index: 100; /* Lower than mobile header (110) and menu (120) */
+    font-family: 'Poppins', sans-serif;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.coupon-track {
+    display: flex;
+    gap: 50px;
+    white-space: nowrap;
+    animation: marquee 25s linear infinite;
+    width: max-content;
+}
+.coupon-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+.code-badge {
+    background: #fff;
+    color: #3B502C;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 700;
+    font-size: 12px;
+    border: 1px dashed #3B502C;
+}
+.coupon-track:hover {
+    animation-play-state: paused;
+}
+@keyframes marquee {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+}
+
+/* FIX MOBILE HEADER OVERLAP */
+@media (max-width: 768px) {
+    .mobile-header {
+        display: flex !important; /* Force visibility */
+        position: sticky !important; /* Stack instead of float */
+        top: 0;
+        z-index: 2000 !important; /* Above everything including nav (999) */
+        width: 100%;
+    }
+}
+</style>
+
+<?php if (!empty($activeCoupons)): ?>
+<div class="coupon-marquee-bar">
+    <div class="coupon-track">
+        <?php 
+        // Triplicate for smooth loop
+        $displayCoupons = array_merge($activeCoupons, $activeCoupons, $activeCoupons); 
+        foreach ($displayCoupons as $ac): 
+            $discountText = ($ac['discount_type'] ?? 'percentage') == 'percentage' ? number_format($ac['discount_value']) . '% OFF' : '₹' . number_format($ac['discount_value']) . ' OFF';
+        ?>
+        <div class="coupon-item">
+            <i class="fa-solid fa-gift"></i>
+            <span><?php echo htmlspecialchars($ac['title'] ?? 'Offer'); ?>: Use Code <strong class="code-badge"><?php echo htmlspecialchars($ac['code']); ?></strong> for <?php echo $discountText; ?></span>
+        </div>
+        <?php endforeach; ?>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- MOBILE HEADER -->
 <header class="mobile-header">
@@ -165,23 +339,53 @@ $isContact = ($currentPage === 'contact.php');
     <ul class="mobile-menu-list">
       <li class="<?php echo $isHome ? 'active' : ''; ?>"><a href="index.php">Home</a></li>
       
+      <!-- Dynamic Top-Level Categories (Mobile) -->
+      <?php if (!empty($categoriesWithSubs)): ?>
+        <?php foreach ($categoriesWithSubs as $cat): ?>
+          <?php if (!empty($cat['subcategories'])): ?>
+            <!-- Category with subcategories -->
+            <li class="has-submenu">
+              <div class="menu-item-wrapper">
+                <a href="product.php?cat=<?php echo (int)$cat['id']; ?>"><?php echo htmlspecialchars($cat['title'], ENT_QUOTES, 'UTF-8'); ?></a>
+                <span class="plus">+</span>
+              </div>
+              <ul class="mobile-submenu">
+                <?php foreach ($cat['subcategories'] as $subCat): ?>
+                  <li><a href="product.php?cat=<?php echo (int)$subCat['id']; ?>"><?php echo htmlspecialchars($subCat['title'], ENT_QUOTES, 'UTF-8'); ?></a></li>
+                <?php endforeach; ?>
+                <!-- See All Link -->
+                <li><a href="product.php?cat=<?php echo (int)$cat['id']; ?>" style="color: #D4AF37; font-weight: 500;">See All</a></li>
+              </ul>
+            </li>
+          <?php else: ?>
+            <!-- Category without subcategories -->
+            <li class="<?php echo (isset($_GET['cat']) && $_GET['cat'] == $cat['id']) ? 'active' : ''; ?>">
+              <a href="product.php?cat=<?php echo (int)$cat['id']; ?>"><?php echo htmlspecialchars($cat['title'], ENT_QUOTES, 'UTF-8'); ?></a>
+            </li>
+          <?php endif; ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+      
+      <!-- All Products Link -->
+      <li class="<?php echo ($isProduct && !isset($_GET['cat'])) ? 'active' : ''; ?>">
+        <a href="product.php">All Products</a>
+      </li>
+
+      <!-- Dynamic Pages Mobile Menu -->
+      <?php if (!empty($navPages)): ?>
       <li class="has-submenu">
         <div class="menu-item-wrapper">
-          <a href="product.php">Shop</a>
+          <a href="#">Pages</a>
           <span class="plus">+</span>
         </div>
         <ul class="mobile-submenu">
-          <?php if (!empty($categories)): ?>
-            <?php foreach ($categories as $cat): ?>
-              <li><a href="product.php?cat=<?php echo (int)$cat['id']; ?>"><?php echo htmlspecialchars($cat['title'], ENT_QUOTES, 'UTF-8'); ?></a></li>
-            <?php endforeach; ?>
-          <?php else: ?>
-            <li><a href="product.php">All Products</a></li>
-          <?php endif; ?>
+          <?php foreach ($navPages as $np): ?>
+            <li><a href="page.php?slug=<?php echo htmlspecialchars($np['slug']); ?>"><?php echo htmlspecialchars($np['title']); ?></a></li>
+          <?php endforeach; ?>
         </ul>
       </li>
+      <?php endif; ?>
       
-      <li class="<?php echo $isProduct ? 'active' : ''; ?>"><a href="product.php">Product</a></li>
       <li class="<?php echo $isBlog ? 'active' : ''; ?>"><a href="blog.php">Blog</a></li>
       <li class="<?php echo $isContact ? 'active' : ''; ?>"><a href="contact.php">Contact</a></li>
       <li><a href="my-profile.php?tab=wishlist">Wishlist (<?php echo $wishlistCount; ?>)</a></li>
@@ -257,8 +461,8 @@ $isContact = ($currentPage === 'contact.php');
         <!-- DROPDOWN -->
         <ul class="search-category-dropdown" id="searchCategoryDropdown">
           <li data-cat-id="">All categories</li>
-          <?php if (!empty($categories)): ?>
-            <?php foreach ($categories as $cat): ?>
+          <?php if (!empty($navCategories)): ?>
+            <?php foreach ($navCategories as $cat): ?>
               <li
                 data-cat-id="<?php echo (int)$cat['id']; ?>"
                 data-cat-name="<?php echo htmlspecialchars($cat['title'], ENT_QUOTES, 'UTF-8'); ?>"
@@ -312,39 +516,56 @@ $isContact = ($currentPage === 'contact.php');
   <div class="nav-inner">
     <ul>
       <li class="<?php echo $isHome ? 'active' : ''; ?>"><a href="index.php">Home</a></li>
-      <li class="<?php echo $isProduct ? 'active' : ''; ?>"><a href="product.php">Product</a></li>
-
-      <li class="has-mega">
-        <span>Shop</span>
-        <div class="mega-menu">
-          <div class="mega-menu-inner">
-            <?php if (!empty($categoriesWithSubs)): ?>
-              <?php foreach ($categoriesWithSubs as $parentCat): ?>
-                <div>
-                  <div class="mega-column-title"><?php echo htmlspecialchars($parentCat['title'], ENT_QUOTES, 'UTF-8'); ?></div>
-                  <ul class="mega-list">
-                    <?php if (!empty($parentCat['subcategories'])): ?>
-                      <?php foreach ($parentCat['subcategories'] as $subCat): ?>
-                        <li>
-                          <a href="product.php?cat=<?php echo (int)$subCat['id']; ?>" class="mega-item-link">
-                            <span class="mega-name"><?php echo htmlspecialchars($subCat['title'], ENT_QUOTES, 'UTF-8'); ?></span>
-                          </a>
-                        </li>
-                      <?php endforeach; ?>
-                    <?php else: ?>
-                      <!-- No subcategories, do nothing or show empty state if desired -->
-                    <?php endif; ?>
-                  </ul>
-                </div>
-              <?php endforeach; ?>
-            <?php else: ?>
-              <div>
-                <div class="mega-column-title">No Categories Available</div>
-              </div>
+      <!-- Dynamic Top Level Categories -->
+      <!-- Dynamic Top Level Categories -->
+      <?php if (!empty($categoriesWithSubs)): ?>
+        <?php foreach ($categoriesWithSubs as $cat): ?>
+          <li class="<?php echo (isset($_GET['cat']) && $_GET['cat'] == $cat['id']) ? 'active' : ''; ?> <?php echo !empty($cat['subcategories']) ? 'has-dropdown' : ''; ?>">
+            <a href="product.php?cat=<?php echo (int)$cat['id']; ?>" style="text-transform: uppercase;">
+              <?php echo htmlspecialchars($cat['title']); ?> 
+              <?php if(!empty($cat['subcategories'])): ?> <i class="fa-solid fa-angle-down"></i> <?php endif; ?>
+            </a>
+            <?php if (!empty($cat['subcategories'])): ?>
+            <?php 
+                $subCount = count($cat['subcategories']) + 1; // +1 for See All link
+                $multiClass = ($subCount > 10) ? 'multi-column' : '';
+            ?>
+            <ul class="dropdown-menu <?php echo $multiClass; ?>">
+                <?php foreach ($cat['subcategories'] as $subCat): ?>
+                    <li>
+                        <a href="product.php?cat=<?php echo (int)$subCat['id']; ?>">
+                            <?php echo htmlspecialchars($subCat['title']); ?>
+                        </a>
+                    </li>
+                <?php endforeach; ?>
+                <!-- See All Link -->
+                <li>
+                    <a href="product.php?cat=<?php echo (int)$cat['id']; ?>" style="color: #D4AF37 !important; font-weight: 500;">
+                        See All <i class="fa-solid fa-arrow-right" style="font-size: 10px; margin-left: 4px;"></i>
+                    </a>
+                </li>
+            </ul>
             <?php endif; ?>
-          </div>
-        </div>
+          </li>
+        <?php endforeach; ?>
+      <?php endif; ?>
+
+      <!-- All Products Link -->
+      <li class="<?php echo ($isProduct && !isset($_GET['cat'])) ? 'active' : ''; ?>">
+        <a href="product.php" style="text-transform: uppercase;">All Products</a>
       </li>
+
+      <!-- Dynamic Pages Menu (Desktop) -->
+      <?php if (!empty($navPages)): ?>
+      <li class="has-dropdown">
+        <a href="#">Pages <i class="fa-solid fa-angle-down"></i></a>
+        <ul class="dropdown-menu">
+            <?php foreach ($navPages as $np): ?>
+                <li><a href="page.php?slug=<?php echo htmlspecialchars($np['slug']); ?>"><?php echo htmlspecialchars($np['title']); ?></a></li>
+            <?php endforeach; ?>
+        </ul>
+      </li>
+      <?php endif; ?>
 
       <li class="<?php echo $isBlog ? 'active' : ''; ?>"><a href="blog.php">Blog</a></li>
       <li class="<?php echo $isContact ? 'active' : ''; ?>"><a href="contact.php">Contact</a></li>

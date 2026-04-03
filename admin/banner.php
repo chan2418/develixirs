@@ -43,6 +43,8 @@ $homeCenterBanners = [];
 $homeCenterLatest  = null;
 $homeOfferBanners  = [];
 $homeOfferLatest   = null;
+$homeBeforeBlogsBanners = [];
+$homeBeforeBlogsLatest  = null;
 $productSideBanners = [];
 $productSideLatest  = null;
 $productDetailSideBanners = [];
@@ -66,6 +68,12 @@ if ($currentSlot === 'home') {
     $stmt4->execute();
     $homeOfferBanners = $stmt4->fetchAll(PDO::FETCH_ASSOC) ?: [];
     $homeOfferLatest  = $homeOfferBanners[0] ?? null;
+
+    // BEFORE BLOGS BANNER (Wide Carousel)
+    $stmt5 = $pdo->prepare("SELECT * FROM banners WHERE page_slot = 'home_before_blogs' ORDER BY id DESC");
+    $stmt5->execute();
+    $homeBeforeBlogsBanners = $stmt5->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    $homeBeforeBlogsLatest  = $homeBeforeBlogsBanners[0] ?? null;
 }
 if ($currentSlot === 'product') {
     $stmtP = $pdo->prepare("SELECT * FROM banners WHERE page_slot = 'product_sidebar' ORDER BY id DESC");
@@ -292,615 +300,440 @@ unset($_SESSION['form_errors'], $_SESSION['success_msg']);
     <?php endforeach; ?>
   <?php endif; ?>
 
-  <!-- MAIN BANNERS FOR CURRENT SLOT -->
-  <div class="card" style="padding:18px;">
-    <form action="save_banner.php" method="post" enctype="multipart/form-data">
-      <input type="hidden" name="csrf_token" value="<?php echo $csrf; ?>">
-      <input type="hidden" name="page_slot" value="<?php echo htmlspecialchars($currentSlot, ENT_QUOTES, 'UTF-8'); ?>">
+  <!-- HOME SUB-TABS (Visible only on Home slot) -->
+  <?php if ($currentSlot === 'home'): ?>
+    <div class="sub-tabs-container" style="margin-bottom: 24px; border-bottom: 1px solid #e2e8f0; display: flex; gap: 24px;">
+        <button class="sub-tab-btn active" onclick="switchHomeTab('main')" style="padding: 12px 4px; font-weight: 600; background: none; cursor: pointer; transition: all 0.2s;">
+            Main Slider
+        </button>
+        <button class="sub-tab-btn" onclick="switchHomeTab('center')" style="padding: 12px 4px; font-weight: 600; background: none; cursor: pointer; transition: all 0.2s;">
+            Center Carousel
+        </button>
+        <button class="sub-tab-btn" onclick="switchHomeTab('blogs')" style="padding: 12px 4px; font-weight: 600; background: none; cursor: pointer; transition: all 0.2s;">
+            Wide Banner (Before Blogs)
+        </button>
+        <button class="sub-tab-btn" onclick="switchHomeTab('sidebar')" style="padding: 12px 4px; font-weight: 600; background: none; cursor: pointer; transition: all 0.2s;">
+            Sidebar Ad
+        </button>
+        <button class="sub-tab-btn" onclick="switchHomeTab('offer')" style="padding: 12px 4px; font-weight: 600; background: none; cursor: pointer; transition: all 0.2s;">
+            Special Offer
+        </button>
+    </div>
 
-      <div class="banner-upload-row">
-        <div class="banner-upload-left">
-          <label style="font-weight:700;display:block;margin-bottom:6px;">Banner images</label>
-          <label style="display:block;border:2px dashed #d8e1f0;padding:14px;border-radius:10px;cursor:pointer;background:#fbfdff;text-align:center;">
-            <div style="font-weight:700;">Click to choose files or drag &amp; drop</div>
-            <div style="font-size:13px;color:#555;margin-top:6px;">JPG, PNG, WEBP — max 5MB each</div>
-            <input
-              type="file"
-              name="banners[]"
-              accept="image/*"
-              multiple
-              style="display:none;"
-              data-preview-target="bannerPreviewMain">
-          </label>
-        </div>
+    <style>
+        .sub-tab-btn.active { color: #3b82f6 !important; border-bottom-color: #3b82f6 !important; }
+        .sub-tab-btn:hover { color: #1d4ed8 !important; }
+        .home-section-content { display: none; animation: fadeIn 0.3s ease; }
+        .home-section-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+  <?php endif; ?>
 
-        <div class="banner-upload-right">
+  <!-- MAIN BANNER UPLOADER (Generic for all slots, but wrapped for Home tab) -->
+  <?php
+    $mainWrapperId = ($currentSlot === 'home') ? 'home-main' : '';
+    $mainWrapperClass = ($currentSlot === 'home') ? 'home-section-content active' : '';
+  ?>
+  <div id="<?= $mainWrapperId ?>" class="<?= $mainWrapperClass ?>">
+      <div class="card" style="padding:18px;">
+        <h2 style="font-size:16px;font-weight:700;margin-bottom:6px;">
+            <?php echo ($currentSlot === 'home') ? 'Main Hero Slider' : 'Manage Banners'; ?>
+        </h2>
+        <form action="save_banner.php" method="post" enctype="multipart/form-data">
+          <input type="hidden" name="csrf_token" value="<?php echo $csrf; ?>">
+          <input type="hidden" name="page_slot" value="<?php echo htmlspecialchars($currentSlot, ENT_QUOTES, 'UTF-8'); ?>">
+          <input type="hidden" name="is_active" value="1">
 
-          <?php if (in_array($currentSlot, ['category', 'top_category'], true)): ?>
-            <label style="font-weight:700;display:block;margin-bottom:6px;margin-top:4px;">
-              Select <?php echo $currentSlot === 'top_category' ? 'Top Level Category' : 'Subcategory'; ?>
-            </label>
-            <select
-              name="category_id"
-              style="width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef7;margin-bottom:8px;font-size:13px;">
-              <option value="">-- Choose one --</option>
-              <?php
-                $selectedCatId = isset($latest['category_id']) ? (int)$latest['category_id'] : 0;
-                foreach ($categoriesForDropdown as $c):
-                  $cid = (int)$c['id'];
-              ?>
-                <option
-                  value="<?php echo $cid; ?>"
-                  <?php echo $cid === $selectedCatId ? 'selected' : ''; ?>>
-                  <?php echo htmlspecialchars($c['label'], ENT_QUOTES, 'UTF-8'); ?>
-                </option>
-              <?php endforeach; ?>
-            </select>
-            <p style="font-size:11px;color:#64748b;margin-bottom:10px;">
-              The selected <?php echo $currentSlot === 'top_category' ? 'top level category' : 'subcategory'; ?> will be used
-              on the front-end to show this banner for that category page.
-            </p>
-          <?php endif; ?>
+          <div class="banner-upload-row">
+            <div class="banner-upload-left">
+              <label style="font-weight:700;display:block;margin-bottom:6px;">Banner images</label>
+              <label style="display:block;border:2px dashed #d8e1f0;padding:14px;border-radius:10px;cursor:pointer;background:#fbfdff;text-align:center;">
+                <div style="font-weight:700;">Click to choose files or drag &amp; drop</div>
+                <div style="font-size:13px;color:#555;margin-top:6px;">JPG, PNG, WEBP — max 5MB each</div>
+                <input
+                  type="file"
+                  name="banners[]"
+                  accept="image/*"
+                  multiple
+                  style="display:none;"
+                  data-preview-target="bannerPreviewMain">
+              </label>
+              
+              <!-- Media Library Integration -->
+              <div style="margin-top:10px;">
+                 <button type="button" id="addBannerMediaBtn" style="padding:8px 12px; background:#fff; border:1px solid #cbd5e1; border-radius:6px; cursor:pointer; font-size:13px; display:inline-flex; align-items:center; gap:6px;">
+                     <span>📁</span> Select from Library
+                 </button>
+                 <div id="banner_media_container" style="margin-top:10px;"></div>
+              </div>
+            </div>
 
-          <label style="font-weight:700;display:block;margin-bottom:6px;">Alt text (for new banners)</label>
-          <input
-            name="alt_text"
-            class="input-field"
-            value="<?php echo htmlspecialchars($latest['alt_text'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-            placeholder="Alt text for accessibility"
-            style="width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef7;"
-          >
+            <div class="banner-upload-right">
 
-          <label style="font-weight:700;display:block;margin-top:12px;margin-bottom:6px;">
-            Optional Link (where new banners point)
-          </label>
-          <input
-            name="link"
-            value="<?php echo htmlspecialchars($latest['link'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-            placeholder="https://example.com"
-            style="width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef7;"
-          >
+              <?php if (in_array($currentSlot, ['category', 'top_category'], true)): ?>
+                <label style="font-weight:700;display:block;margin-bottom:6px;margin-top:4px;">
+                  Select <?php echo $currentSlot === 'top_category' ? 'Top Level Category' : 'Subcategory'; ?>
+                </label>
+                <select
+                  name="category_id"
+                  style="width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef7;margin-bottom:8px;font-size:13px;">
+                  <option value="">-- Choose one --</option>
+                  <?php
+                    $selectedCatId = isset($latest['category_id']) ? (int)$latest['category_id'] : 0;
+                    foreach ($categoriesForDropdown as $c):
+                      $cid = (int)$c['id'];
+                  ?>
+                    <option
+                      value="<?php echo $cid; ?>"
+                      <?php echo $cid === $selectedCatId ? 'selected' : ''; ?>>
+                      <?php echo htmlspecialchars($c['label'], ENT_QUOTES, 'UTF-8'); ?>
+                    </option>
+                  <?php endforeach; ?>
+                </select>
+              <?php endif; ?>
 
-          <div style="display:flex;gap:8px;margin-top:12px;align-items:center;">
-            <label style="display:flex;gap:8px;align-items:center;font-size:13px;">
-              <input type="checkbox" name="is_active" value="1"
-                <?php if (empty($latest) || (int)($latest['is_active'] ?? 1) === 1) echo 'checked'; ?>>
-              Active (for new banners)
-            </label>
-            <button
-              type="submit"
-              class="btn primary"
-              style="margin-left:auto;padding:8px 16px;border-radius:8px;background:#2563eb;color:#fff;border:none;font-size:13px;cursor:pointer;">
-              Save banners
-            </button>
+              <label style="font-weight:700;display:block;margin-bottom:6px;">Alt text (for latest/all)</label>
+              <input
+                name="alt_text"
+                class="input-field"
+                value="<?php echo htmlspecialchars($latest['alt_text'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                placeholder="Alt text"
+                style="width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef7;"
+              >
+
+              <label style="font-weight:700;display:block;margin-top:12px;margin-bottom:6px;">
+                Link (optional)
+              </label>
+              <input
+                name="link"
+                value="<?php echo htmlspecialchars($latest['link'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                placeholder="https://example.com"
+                style="width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef7;"
+              >
+
+              <div style="display:flex;gap:8px;margin-top:12px;align-items:center;">
+                <button
+                  type="submit"
+                  class="btn primary"
+                  style="margin-left:auto;padding:8px 16px;border-radius:8px;background:#2563eb;color:#fff;border:none;font-size:13px;cursor:pointer;">
+                  Upload / Save
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      <!-- main preview (latest banner for this slot) -->
-      <div class="banner-preview-wrapper">
-        <div style="font-weight:700;margin-bottom:8px;">Latest banner preview</div>
-        <?php if (!empty($latest) && !empty($latest['filename'])):
-          $src = '/assets/uploads/banners/' . ltrim($latest['filename'], '/');
-        ?>
-          <img
-            id="bannerPreviewMain"
-            src="<?php echo htmlspecialchars($src, ENT_QUOTES, 'UTF-8'); ?>"
-            alt="<?php echo htmlspecialchars($latest['alt_text'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-            style="width:100%;max-height:360px;object-fit:cover;border-radius:10px;border:1px solid #eef2f7;"
-          >
-        <?php else: ?>
-          <div
-            id="bannerPreviewMain"
-            style="width:100%;height:220px;border-radius:10px;background:#f3f6fb;display:flex;align-items:center;justify-content:center;color:#64748b;">
-            No banner yet for this page.
+          <div class="banner-preview-wrapper">
+            <div style="font-weight:700;margin-bottom:8px;">Preview (Last uploaded)</div>
+            <?php if (!empty($latest) && !empty($latest['filename'])):
+              $srcMain = '/assets/uploads/banners/' . ltrim($latest['filename'], '/');
+            ?>
+              <img
+                id="bannerPreviewMain"
+                src="<?php echo htmlspecialchars($srcMain, ENT_QUOTES, 'UTF-8'); ?>"
+                alt="<?php echo htmlspecialchars($latest['alt_text'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                style="width:100%;max-height:260px;object-fit:cover;border-radius:10px;border:1px solid #eef2f7;">
+            <?php else: ?>
+              <div
+                id="bannerPreviewMain"
+                style="width:100%;height:160px;border-radius:10px;background:#f3f6fb;display:flex;align-items:center;justify-content:center;color:#64748b;">
+                No banner yet.
+              </div>
+            <?php endif; ?>
+          </div>
+        </form>
+
+        <!-- Existing Banners -->
+        <?php if (!empty($banners)): ?>
+          <div class="card" style="padding:18px;margin-top:20px;">
+            <div style="font-weight:700;margin-bottom:10px;">Existing Banners</div>
+            <div class="banner-existing-grid">
+              <?php foreach ($banners as $b):
+                $src = '/assets/uploads/banners/' . ltrim($b['filename'] ?? '', '/');
+              ?>
+                <div class="banner-existing-item">
+                  <div class="banner-existing-thumb banner-list-thumb">
+                    <img
+                      src="<?php echo htmlspecialchars($src, ENT_QUOTES, 'UTF-8'); ?>"
+                      alt="<?php echo htmlspecialchars($b['alt_text'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                  </div>
+                  <div class="banner-existing-body">
+                    <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                      <?php echo htmlspecialchars($b['alt_text'] ?: 'No alt text', ENT_QUOTES, 'UTF-8'); ?>
+                    </div>
+
+                    <?php if (in_array($currentSlot, ['category', 'top_category'], true) && !empty($b['category_id'])): ?>
+                      <div style="font-size:11px;color:#d97706;margin-top:2px;font-weight:600;">
+                        <span style="color:#4b5563;">Category:</span> 
+                        <?php echo htmlspecialchars($categoryMap[$b['category_id']] ?? 'Unknown (ID:'.$b['category_id'].')', ENT_QUOTES); ?>
+                      </div>
+                    <?php endif; ?>
+
+                    <?php if (!empty($b['link'])): ?>
+                      <div style="font-size:11px;color:#2563eb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">
+                        <?php echo htmlspecialchars($b['link'], ENT_QUOTES, 'UTF-8'); ?>
+                      </div>
+                    <?php endif; ?>
+
+                    <div style="margin-top:6px;font-size:11px;color:#64748b;display:flex;justify-content:space-between;align-items:center;">
+                      <span>ID: <?php echo (int)$b['id']; ?></span>
+                      <?php if (!empty($b['is_active'])): ?>
+                        <span style="padding:2px 6px;border-radius:999px;background:#dcfce7;color:#166534;">Active</span>
+                      <?php else: ?>
+                        <span style="padding:2px 6px;border-radius:999px;background:#f3f4f6;color:#4b5563;">Inactive</span>
+                      <?php endif; ?>
+                    </div>
+
+                    <div style="margin-top:6px; display:flex; justify-content:space-between; align-items:center;">
+                      <form
+                        action="delete_banner.php"
+                        method="post"
+                        onsubmit="return confirm('Delete this banner permanently?');"
+                        style="margin-left:auto;">
+                        <input type="hidden" name="csrf_token" value="<?php echo $csrf; ?>">
+                        <input type="hidden" name="id" value="<?php echo (int)$b['id']; ?>">
+                        <button
+                          type="submit"
+                          style="border:none;background:#dc2626;color:#fff;padding:4px 8px;border-radius:6px;font-size:11px;cursor:pointer;">
+                          Delete
+                        </button>
+                      </form>
+                    </div>
+
+                  </div>
+                </div>
+              <?php endforeach; ?>
+            </div>
           </div>
         <?php endif; ?>
       </div>
-    </form>
-  </div>
-
-  <!-- existing banners list for this slot -->
-  <div class="card" style="padding:18px;margin-top:20px;">
-    <div style="font-weight:700;margin-bottom:10px;">
-      Existing banners – <?php echo htmlspecialchars($allowedSlots[$currentSlot], ENT_QUOTES, 'UTF-8'); ?>
-    </div>
-
-    <?php if (empty($banners)): ?>
-      <div style="color:#64748b;font-size:14px;">No banners found for this page slot.</div>
-    <?php else: ?>
-      <div class="banner-existing-grid">
-        <?php foreach ($banners as $b):
-          $src = '/assets/uploads/banners/' . ltrim($b['filename'] ?? '', '/');
-        ?>
-          <div class="banner-existing-item">
-            <div class="banner-existing-thumb banner-list-thumb">
-              <img
-                src="<?php echo htmlspecialchars($src, ENT_QUOTES, 'UTF-8'); ?>"
-                alt="<?php echo htmlspecialchars($b['alt_text'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
-            </div>
-            <div class="banner-existing-body">
-              <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                <?php echo htmlspecialchars($b['alt_text'] ?: 'No alt text', ENT_QUOTES, 'UTF-8'); ?>
-              </div>
-
-              <?php if (!empty($b['link'])): ?>
-                <div style="font-size:11px;color:#2563eb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">
-                  <?php echo htmlspecialchars($b['link'], ENT_QUOTES, 'UTF-8'); ?>
-                </div>
-              <?php endif; ?>
-
-              <?php if (!empty($b['category_id']) && isset($categoryMap[(int)$b['category_id']])): ?>
-                <div style="font-size:11px;color:#6b7280;margin-top:2px;">
-                  Category: <?php echo htmlspecialchars($categoryMap[(int)$b['category_id']], ENT_QUOTES, 'UTF-8'); ?>
-                </div>
-              <?php endif; ?>
-
-              <div style="margin-top:6px;font-size:11px;color:#64748b;display:flex;justify-content:space-between;align-items:center;">
-                <span>ID: <?php echo (int)$b['id']; ?></span>
-                <?php if (!empty($b['is_active'])): ?>
-                  <span style="padding:2px 6px;border-radius:999px;background:#dcfce7;color:#166534;">Active</span>
-                <?php else: ?>
-                  <span style="padding:2px 6px;border-radius:999px;background:#f3f4f6;color:#4b5563;">Inactive</span>
-                <?php endif; ?>
-              </div>
-
-              <div style="margin-top:6px; display:flex; justify-content:space-between; align-items:center;">
-                <form
-                  action="delete_banner.php"
-                  method="post"
-                  onsubmit="return confirm('Delete this banner permanently?');"
-                  style="margin-left:auto;">
-                  <input type="hidden" name="csrf_token" value="<?php echo $csrf; ?>">
-                  <input type="hidden" name="id" value="<?php echo (int)$b['id']; ?>">
-                  <button
-                    type="submit"
-                    style="border:none;background:#dc2626;color:#fff;padding:4px 8px;border-radius:6px;font-size:11px;cursor:pointer;">
-                    Delete
-                  </button>
-                </form>
-              </div>
-
-            </div>
-          </div>
-        <?php endforeach; ?>
-      </div>
-    <?php endif; ?>
   </div>
 
   <?php if ($currentSlot === 'home'): ?>
-    <!-- EXTRA: LEFT SIDEBAR BANNER FOR HOME PAGE ONLY -->
-    <div class="card" style="padding:18px;margin-top:24px;">
-      <h2 style="font-size:16px;font-weight:700;margin-bottom:6px;">Left Sidebar Banner (Home Page)</h2>
-      <p style="font-size:12px;color:#64748b;margin-bottom:12px;">
-        This banner can be used for the left-hand side promo image on the homepage.
-        It does <strong>not</strong> affect the main hero slider.
-      </p>
 
-      <form action="save_banner.php" method="post" enctype="multipart/form-data">
-        <input type="hidden" name="csrf_token" value="<?php echo $csrf; ?>">
-        <!-- Use a different page_slot so it never mixes with main hero -->
-        <input type="hidden" name="page_slot" value="home_sidebar">
-
-        <div class="banner-upload-row">
-          <div class="banner-upload-left">
-            <label style="font-weight:700;display:block;margin-bottom:6px;">Sidebar banner image</label>
-            <label style="display:block;border:2px dashed #d8e1f0;padding:14px;border-radius:10px;cursor:pointer;background:#fbfdff;text-align:center;">
-              <div style="font-weight:700;">Click to choose file or drag &amp; drop</div>
-              <div style="font-size:13px;color:#555;margin-top:6px;">JPG, PNG, WEBP — max 5MB</div>
-              <input
-                type="file"
-                name="banners[]"
-                accept="image/*"
-                style="display:none;"
-                data-preview-target="bannerPreviewSidebar">
-            </label>
-          </div>
-
-          <div class="banner-upload-right">
-            <label style="font-weight:700;display:block;margin-bottom:6px;">Alt text (sidebar)</label>
-            <input
-              name="alt_text"
-              class="input-field"
-              value="<?php echo htmlspecialchars($homeSideLatest['alt_text'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-              placeholder="Alt text for accessibility"
-              style="width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef7;"
-            >
-
-            <label style="font-weight:700;display:block;margin-top:12px;margin-bottom:6px;">
-              Optional Link
-            </label>
-            <input
-              name="link"
-              value="<?php echo htmlspecialchars($homeSideLatest['link'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-              placeholder="https://example.com"
-              style="width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef7;"
-            >
-
-            <div style="display:flex;gap:8px;margin-top:12px;align-items:center;">
-              <label style="display:flex;gap:8px;align-items:center;font-size:13px;">
-                <input type="checkbox" name="is_active" value="1"
-                  <?php if (empty($homeSideLatest) || (int)($homeSideLatest['is_active'] ?? 1) === 1) echo 'checked'; ?>>
-                Active
-              </label>
-              <button
-                type="submit"
-                class="btn primary"
-                style="margin-left:auto;padding:8px 16px;border-radius:8px;background:#2563eb;color:#fff;border:none;font-size:13px;cursor:pointer;">
-                Save sidebar banner
-              </button>
+    <!-- 2) CENTER CAROUSEL -->
+    <div id="home-center" class="home-section-content">
+        <div class="card" style="padding:18px;margin-top:24px;">
+          <h2 style="font-size:16px;font-weight:700;margin-bottom:6px;">Center Carousel</h2>
+          <p style="font-size:12px;color:#64748b;margin-bottom:12px;">Managing the rotating banners in the middle section.</p>
+          <form action="save_banner.php" method="post" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="<?php echo $csrf; ?>">
+            <input type="hidden" name="page_slot" value="home_center">
+            
+            <div class="banner-upload-row">
+              <div class="banner-upload-left">
+                <label style="font-weight:700;display:block;margin-bottom:6px;">Center banner image</label>
+                <label style="display:block;border:2px dashed #d8e1f0;padding:14px;border-radius:10px;cursor:pointer;background:#fbfdff;text-align:center;">
+                  <div style="font-weight:700;">Click to choose file</div>
+                  <input type="file" name="banners[]" accept="image/*" multiple style="display:none;" data-preview-target="bannerPreviewCenter">
+                </label>
+                <div style="margin-top:10px;">
+                   <button type="button" id="addCenterMediaBtn" style="padding:8px 12px; background:#fff; border:1px solid #cbd5e1; border-radius:6px; cursor:pointer; font-size:13px; display:inline-flex; align-items:center; gap:6px;">
+                       <span>📁</span> Select from Library
+                   </button>
+                   <div id="center_media_container" style="margin-top:10px;"></div>
+                </div>
+              </div>
+              <div class="banner-upload-right">
+                <label style="font-weight:700;display:block;margin-bottom:6px;">Alt text</label>
+                <input name="alt_text" class="input-field" value="<?php echo htmlspecialchars($homeCenterLatest['alt_text'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" placeholder="Alt text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef7;">
+                <label style="font-weight:700;display:block;margin-top:12px;margin-bottom:6px;">Action Link</label>
+                <input name="link" value="<?php echo htmlspecialchars($homeCenterLatest['link'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" placeholder="https://" style="width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef7;">
+                
+                <div style="display:flex;gap:8px;margin-top:12px;align-items:center;">
+                    <label style="display:flex;gap:8px;align-items:center;font-size:13px;"><input type="checkbox" name="is_active" value="1" checked> Active</label>
+                    <button type="submit" class="btn primary" style="margin-left:auto;padding:8px 16px;border-radius:8px;background:#2563eb;color:#fff;border:none;font-size:13px;cursor:pointer;">Save Center Banner</button>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </form>
 
-        <div class="banner-preview-wrapper">
-          <div style="font-weight:700;margin-bottom:8px;">Sidebar banner preview</div>
-          <?php if (!empty($homeSideLatest) && !empty($homeSideLatest['filename'])):
-            $srcSide = '/assets/uploads/banners/' . ltrim($homeSideLatest['filename'], '/');
-          ?>
-            <img
-              id="bannerPreviewSidebar"
-              src="<?php echo htmlspecialchars($srcSide, ENT_QUOTES, 'UTF-8'); ?>"
-              alt="<?php echo htmlspecialchars($homeSideLatest['alt_text'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-              style="width:100%;max-height:260px;object-fit:cover;border-radius:10px;border:1px solid #eef2f7;">
-          <?php else: ?>
-            <div
-              id="bannerPreviewSidebar"
-              style="width:100%;height:180px;border-radius:10px;background:#f3f6fb;display:flex;align-items:center;justify-content:center;color:#64748b;">
-              No sidebar banner yet.
+          <!-- Existing Center Banners -->
+          <?php if (!empty($homeCenterBanners)): ?>
+            <div class="banner-existing-grid" style="margin-top:20px;">
+              <?php foreach ($homeCenterBanners as $b): $src = '/assets/uploads/banners/' . ltrim($b['filename'], '/'); ?>
+                <div class="banner-existing-item">
+                    <div class="banner-existing-thumb banner-list-thumb"><img src="<?= htmlspecialchars($src) ?>" alt=""></div>
+                    <div class="banner-existing-body">
+                        <span>ID: <?= $b['id'] ?></span>
+                        <form action="delete_banner.php" method="post" onsubmit="return confirm('Delete?');" style="display:inline-block;float:right;">
+                            <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+                            <input type="hidden" name="id" value="<?= $b['id'] ?>">
+                            <button type="submit" style="color:red;border:none;background:none;cursor:pointer;">Delete</button>
+                        </form>
+                    </div>
+                </div>
+              <?php endforeach; ?>
             </div>
           <?php endif; ?>
         </div>
-      </form>
     </div>
 
-    <!-- Existing sidebar banners -->
-    <div class="card" style="padding:18px;margin-top:20px;">
-      <div style="font-weight:700;margin-bottom:10px;">Existing sidebar banners – Home Page</div>
-
-      <?php if (empty($homeSideBanners)): ?>
-        <div style="color:#64748b;font-size:14px;">No sidebar banners found for Home Page.</div>
-      <?php else: ?>
-        <div class="banner-existing-grid">
-          <?php foreach ($homeSideBanners as $b):
-            $src = '/assets/uploads/banners/' . ltrim($b['filename'] ?? '', '/');
-          ?>
-            <div class="banner-existing-item">
-              <div class="banner-existing-thumb banner-list-thumb">
-                <img
-                  src="<?php echo htmlspecialchars($src, ENT_QUOTES, 'UTF-8'); ?>"
-                  alt="<?php echo htmlspecialchars($b['alt_text'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+    <!-- 3) WIDE BANNER (BEFORE BLOGS) -->
+    <div id="home-blogs" class="home-section-content">
+        <div class="card" style="padding:18px;margin-top:24px;">
+          <h2 style="font-size:16px;font-weight:700;margin-bottom:6px;">Wide Banner (Before Blogs)</h2>
+          <p style="font-size:12px;color:#64748b;margin-bottom:12px;">Carousel slider before Latest Blogs.</p>
+          <form action="save_banner.php" method="post" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="<?php echo $csrf; ?>">
+            <input type="hidden" name="page_slot" value="home_before_blogs">
+            <input type="hidden" name="is_active" value="1">
+            
+            <div class="banner-upload-row">
+              <div class="banner-upload-left">
+                <label style="font-weight:700;display:block;margin-bottom:6px;">Banner image</label>
+                <label style="display:block;border:2px dashed #d8e1f0;padding:14px;border-radius:10px;cursor:pointer;background:#fbfdff;text-align:center;">
+                  <div style="font-weight:700;">Click to choose file</div>
+                  <input type="file" name="banners[]" accept="image/*" multiple style="display:none;" data-preview-target="bannerPreviewBlogs">
+                </label>
+                <div style="margin-top:10px;">
+                   <button type="button" id="addBlogsMediaBtn" style="padding:8px 12px; background:#fff; border:1px solid #cbd5e1; border-radius:6px; cursor:pointer; font-size:13px; display:inline-flex; align-items:center; gap:6px;">
+                       <span>📁</span> Select from Library
+                   </button>
+                   <div id="blogs_media_container" style="margin-top:10px;"></div>
+                </div>
               </div>
-              <div class="banner-existing-body">
-                <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                  <?php echo htmlspecialchars($b['alt_text'] ?: 'No alt text', ENT_QUOTES, 'UTF-8'); ?>
+              <div class="banner-upload-right">
+                <label style="font-weight:700;display:block;margin-bottom:6px;">Alt text</label>
+                <input name="alt_text" class="input-field" value="<?php echo htmlspecialchars($homeBeforeBlogsLatest['alt_text'] ?? '', ENT_QUOTES); ?>" placeholder="Alt text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef7;">
+                <label style="font-weight:700;display:block;margin-top:12px;margin-bottom:6px;">Link</label>
+                <input name="link" value="<?php echo htmlspecialchars($homeBeforeBlogsLatest['link'] ?? '', ENT_QUOTES); ?>" placeholder="Link" style="width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef7;">
+                
+                <div style="display:flex;gap:8px;margin-top:12px;align-items:center;">
+                    <button type="submit" class="btn primary" style="margin-left:auto;padding:8px 16px;border-radius:8px;background:#2563eb;color:#fff;border:none;cursor:pointer;">Save Blogs Banner</button>
                 </div>
-
-                <?php if (!empty($b['link'])): ?>
-                  <div style="font-size:11px;color:#2563eb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">
-                    <?php echo htmlspecialchars($b['link'], ENT_QUOTES, 'UTF-8'); ?>
-                  </div>
-                <?php endif; ?>
-
-                <div style="margin-top:6px;font-size:11px;color:#64748b;display:flex;justify-content:space-between;align-items:center;">
-                  <span>ID: <?php echo (int)$b['id']; ?></span>
-                  <?php if (!empty($b['is_active'])): ?>
-                    <span style="padding:2px 6px;border-radius:999px;background:#dcfce7;color:#166534;">Active</span>
-                  <?php else: ?>
-                    <span style="padding:2px 6px;border-radius:999px;background:#f3f4f6;color:#4b5563;">Inactive</span>
-                  <?php endif; ?>
-                </div>
-
-                <div style="margin-top:6px; display:flex; justify-content:space-between; align-items:center;">
-                  <form
-                    action="delete_banner.php"
-                    method="post"
-                    onsubmit="return confirm('Delete this sidebar banner permanently?');"
-                    style="margin-left:auto;">
-                    <input type="hidden" name="csrf_token" value="<?php echo $csrf; ?>">
-                    <input type="hidden" name="id" value="<?php echo (int)$b['id']; ?>">
-                    <button
-                      type="submit"
-                      style="border:none;background:#dc2626;color:#fff;padding:4px 8px;border-radius:6px;font-size:11px;cursor:pointer;">
-                      Delete
-                    </button>
-                  </form>
-                </div>
-
               </div>
             </div>
-          <?php endforeach; ?>
-        </div>
-      <?php endif; ?>
-    </div>
+          </form>
 
-    <!-- CENTER SIDEBAR BANNER (HOME PAGE) -->
-    <div class="card" style="padding:18px;margin-top:24px;">
-      <h2 style="font-size:16px;font-weight:700;margin-bottom:6px;">Center Sidebar Banner (Home Page)</h2>
-      <p style="font-size:12px;color:#64748b;margin-bottom:12px;">
-        This banner can be used for a center promo image on the homepage.
-        It is separate from the main hero slider and left sidebar banner.
-      </p>
-
-      <form action="save_banner.php" method="post" enctype="multipart/form-data">
-        <input type="hidden" name="csrf_token" value="<?php echo $csrf; ?>">
-        <!-- Dedicated slot for center banner -->
-        <input type="hidden" name="page_slot" value="home_center">
-
-        <div class="banner-upload-row">
-          <div class="banner-upload-left">
-            <label style="font-weight:700;display:block;margin-bottom:6px;">Center banner image</label>
-            <label style="display:block;border:2px dashed #d8e1f0;padding:14px;border-radius:10px;cursor:pointer;background:#fbfdff;text-align:center;">
-              <div style="font-weight:700;">Click to choose file or drag &amp; drop</div>
-              <div style="font-size:13px;color:#555;margin-top:6px;">JPG, PNG, WEBP — max 5MB</div>
-              <input
-                type="file"
-                name="banners[]"
-                accept="image/*"
-                style="display:none;"
-                data-preview-target="bannerPreviewCenter">
-            </label>
-          </div>
-
-          <div class="banner-upload-right">
-            <label style="font-weight:700;display:block;margin-bottom:6px;">Alt text (center)</label>
-            <input
-              name="alt_text"
-              class="input-field"
-              value="<?php echo htmlspecialchars($homeCenterLatest['alt_text'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-              placeholder="Alt text for accessibility"
-              style="width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef7;"
-            >
-
-            <label style="font-weight:700;display:block;margin-top:12px;margin-bottom:6px;">
-              Optional Link
-            </label>
-            <input
-              name="link"
-              value="<?php echo htmlspecialchars($homeCenterLatest['link'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-              placeholder="https://example.com"
-              style="width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef7;"
-            >
-
-            <div style="display:flex;gap:8px;margin-top:12px;align-items:center;">
-              <label style="display:flex;gap:8px;align-items:center;font-size:13px;">
-                <input type="checkbox" name="is_active" value="1"
-                  <?php if (empty($homeCenterLatest) || (int)($homeCenterLatest['is_active'] ?? 1) === 1) echo 'checked'; ?>>
-                Active
-              </label>
-              <button
-                type="submit"
-                class="btn primary"
-                style="margin-left:auto;padding:8px 16px;border-radius:8px;background:#2563eb;color:#fff;border:none;font-size:13px;cursor:pointer;">
-                Save center banner
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div class="banner-preview-wrapper">
-          <div style="font-weight:700;margin-bottom:8px;">Center banner preview</div>
-          <?php if (!empty($homeCenterLatest) && !empty($homeCenterLatest['filename'])):
-            $srcCenter = '/assets/uploads/banners/' . ltrim($homeCenterLatest['filename'], '/');
-          ?>
-            <img
-              id="bannerPreviewCenter"
-              src="<?php echo htmlspecialchars($srcCenter, ENT_QUOTES, 'UTF-8'); ?>"
-              alt="<?php echo htmlspecialchars($homeCenterLatest['alt_text'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-              style="width:100%;max-height:260px;object-fit:cover;border-radius:10px;border:1px solid #eef2f7;">
-          <?php else: ?>
-            <div
-              id="bannerPreviewCenter"
-              style="width:100%;height:180px;border-radius:10px;background:#f3f6fb;display:flex;align-items:center;justify-content:center;color:#64748b;">
-              No center banner yet.
+          <!-- Existing Before Blogs Banners -->
+          <?php if (!empty($homeBeforeBlogsBanners)): ?>
+            <div class="banner-existing-grid" style="margin-top:20px;">
+              <?php foreach ($homeBeforeBlogsBanners as $b): $src = '/assets/uploads/banners/' . ltrim($b['filename'], '/'); ?>
+                <div class="banner-existing-item">
+                    <div class="banner-existing-thumb banner-list-thumb"><img src="<?= htmlspecialchars($src) ?>" alt=""></div>
+                    <div class="banner-existing-body">
+                        <form action="delete_banner.php" method="post" onsubmit="return confirm('Delete?');" style="float:right;">
+                            <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+                            <input type="hidden" name="id" value="<?= $b['id'] ?>">
+                            <button type="submit" style="color:red;border:none;background:none;cursor:pointer;">Delete</button>
+                        </form>
+                    </div>
+                </div>
+              <?php endforeach; ?>
             </div>
           <?php endif; ?>
         </div>
-      </form>
     </div>
 
-    <!-- Existing center banners -->
-    <div class="card" style="padding:18px;margin-top:20px;">
-      <div style="font-weight:700;margin-bottom:10px;">Existing center banners – Home Page</div>
-
-      <?php if (empty($homeCenterBanners)): ?>
-        <div style="color:#64748b;font-size:14px;">No center banners found for Home Page.</div>
-      <?php else: ?>
-        <div class="banner-existing-grid">
-          <?php foreach ($homeCenterBanners as $b):
-            $src = '/assets/uploads/banners/' . ltrim($b['filename'] ?? '', '/');
-          ?>
-            <div class="banner-existing-item">
-              <div class="banner-existing-thumb banner-list-thumb">
-                <img
-                  src="<?php echo htmlspecialchars($src, ENT_QUOTES, 'UTF-8'); ?>"
-                  alt="<?php echo htmlspecialchars($b['alt_text'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
-              </div>
-              <div class="banner-existing-body">
-                <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                  <?php echo htmlspecialchars($b['alt_text'] ?: 'No alt text', ENT_QUOTES, 'UTF-8'); ?>
-                </div>
-
-                <?php if (!empty($b['link'])): ?>
-                  <div style="font-size:11px;color:#2563eb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">
-                    <?php echo htmlspecialchars($b['link'], ENT_QUOTES, 'UTF-8'); ?>
+    <!-- 4) SIDEBAR AD -->
+    <div id="home-sidebar" class="home-section-content">
+        <div class="card" style="padding:18px;margin-top:24px;">
+            <h2 style="font-size:16px;font-weight:700;margin-bottom:6px;">Sidebar Ad</h2>
+            <p style="font-size:12px;color:#64748b;margin-bottom:12px;">Small vertical banner in sidebar.</p>
+            <form action="save_banner.php" method="post" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+                <input type="hidden" name="page_slot" value="home_sidebar">
+                <input type="hidden" name="is_active" value="1">
+                
+                <div class="banner-upload-row">
+                  <div class="banner-upload-left">
+                    <label style="font-weight:700;display:block;margin-bottom:6px;">Banner image</label>
+                    <label style="display:block;border:2px dashed #d8e1f0;padding:14px;border-radius:10px;cursor:pointer;background:#fbfdff;text-align:center;">
+                      <div style="font-weight:700;">Click to choose file</div>
+                      <input type="file" name="banners[]" accept="image/*" style="display:none;" data-preview-target="bannerPreviewSidebar">
+                    </label>
+                    <!-- Media Library Integration -->
+                    <div style="margin-top:10px;">
+                       <button type="button" id="addSidebarMediaBtn" style="padding:8px 12px; background:#fff; border:1px solid #cbd5e1; border-radius:6px; cursor:pointer; font-size:13px; display:inline-flex; align-items:center; gap:6px;">
+                           <span>📁</span> Select from Library
+                       </button>
+                       <div id="sidebar_media_container" style="margin-top:10px;"></div>
+                    </div>
                   </div>
-                <?php endif; ?>
-
-                <div style="margin-top:6px;font-size:11px;color:#64748b;display:flex;justify-content:space-between;align-items:center;">
-                  <span>ID: <?php echo (int)$b['id']; ?></span>
-                  <?php if (!empty($b['is_active'])): ?>
-                    <span style="padding:2px 6px;border-radius:999px;background:#dcfce7;color:#166534;">Active</span>
-                  <?php else: ?>
-                    <span style="padding:2px 6px;border-radius:999px;background:#f3f4f6;color:#4b5563;">Inactive</span>
-                  <?php endif; ?>
-                </div>
-
-                <div style="margin-top:6px; display:flex; justify-content:space-between; align-items:center;">
-                  <form
-                    action="delete_banner.php"
-                    method="post"
-                    onsubmit="return confirm('Delete this center banner permanently?');"
-                    style="margin-left:auto;">
-                    <input type="hidden" name="csrf_token" value="<?php echo $csrf; ?>">
-                    <input type="hidden" name="id" value="<?php echo (int)$b['id']; ?>">
-                    <button
-                      type="submit"
-                      style="border:none;background:#dc2626;color:#fff;padding:4px 8px;border-radius:6px;font-size:11px;cursor:pointer;">
-                      Delete
-                    </button>
-                  </form>
-                </div>
-
-              </div>
-            </div>
-          <?php endforeach; ?>
-        </div>
-      <?php endif; ?>
-    </div>
-
-        <!-- SIDEBAR OFFER BANNER (HOME PAGE) -->
-    <div class="card" style="padding:18px;margin-top:24px;">
-      <h2 style="font-size:16px;font-weight:700;margin-bottom:6px;">Sidebar Offer Banner (Home Page)</h2>
-      <p style="font-size:12px;color:#64748b;margin-bottom:12px;">
-        This banner is used in the small “Limited Offer” section in the left sidebar on the homepage.
-      </p>
-
-      <form action="save_banner.php" method="post" enctype="multipart/form-data">
-        <input type="hidden" name="csrf_token" value="<?php echo $csrf; ?>">
-        <!-- dedicated slot for the offer card -->
-        <input type="hidden" name="page_slot" value="home_offer">
-
-        <div class="banner-upload-row">
-          <div class="banner-upload-left">
-            <label style="font-weight:700;display:block;margin-bottom:6px;">Offer banner image</label>
-            <label style="display:block;border:2px dashed #d8e1f0;padding:14px;border-radius:10px;cursor:pointer;background:#fbfdff;text-align:center;">
-              <div style="font-weight:700;">Click to choose file or drag &amp; drop</div>
-              <div style="font-size:13px;color:#555;margin-top:6px;">JPG, PNG, WEBP — max 5MB</div>
-              <input
-                type="file"
-                name="banners[]"
-                accept="image/*"
-                style="display:none;"
-                data-preview-target="bannerPreviewOffer">
-            </label>
-          </div>
-
-          <div class="banner-upload-right">
-            <label style="font-weight:700;display:block;margin-bottom:6px;">Alt text (offer)</label>
-            <input
-              name="alt_text"
-              class="input-field"
-              value="<?php echo htmlspecialchars($homeOfferLatest['alt_text'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-              placeholder="Alt text for accessibility"
-              style="width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef7;"
-            >
-
-            <label style="font-weight:700;display:block;margin-top:12px;margin-bottom:6px;">
-              Optional Link
-            </label>
-            <input
-              name="link"
-              value="<?php echo htmlspecialchars($homeOfferLatest['link'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-              placeholder="https://example.com"
-              style="width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef7;"
-            >
-
-            <div style="display:flex;gap:8px;margin-top:12px;align-items:center;">
-              <label style="display:flex;gap:8px;align-items:center;font-size:13px;">
-                <input type="checkbox" name="is_active" value="1"
-                  <?php if (empty($homeOfferLatest) || (int)($homeOfferLatest['is_active'] ?? 1) === 1) echo 'checked'; ?>>
-                Active
-              </label>
-              <button
-                type="submit"
-                class="btn primary"
-                style="margin-left:auto;padding:8px 16px;border-radius:8px;background:#2563eb;color:#fff;border:none;font-size:13px;cursor:pointer;">
-                Save offer banner
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div class="banner-preview-wrapper">
-          <div style="font-weight:700;margin-bottom:8px;">Offer banner preview</div>
-          <?php if (!empty($homeOfferLatest) && !empty($homeOfferLatest['filename'])):
-            $srcOffer = '/assets/uploads/banners/' . ltrim($homeOfferLatest['filename'], '/');
-          ?>
-            <img
-              id="bannerPreviewOffer"
-              src="<?php echo htmlspecialchars($srcOffer, ENT_QUOTES, 'UTF-8'); ?>"
-              alt="<?php echo htmlspecialchars($homeOfferLatest['alt_text'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
-              style="width:100%;max-height:260px;object-fit:cover;border-radius:10px;border:1px solid #eef2f7;">
-          <?php else: ?>
-            <div
-              id="bannerPreviewOffer"
-              style="width:100%;height:160px;border-radius:10px;background:#f3f6fb;display:flex;align-items:center;justify-content:center;color:#64748b;">
-              No sidebar offer banner yet.
-            </div>
-          <?php endif; ?>
-        </div>
-      </form>
-    </div>
-
-    <!-- Existing sidebar offer banners -->
-    <div class="card" style="padding:18px;margin-top:20px;">
-      <div style="font-weight:700;margin-bottom:10px;">Existing sidebar offer banners – Home Page</div>
-
-      <?php if (empty($homeOfferBanners)): ?>
-        <div style="color:#64748b;font-size:14px;">No sidebar offer banners found for Home Page.</div>
-      <?php else: ?>
-        <div class="banner-existing-grid">
-          <?php foreach ($homeOfferBanners as $b):
-            $src = '/assets/uploads/banners/' . ltrim($b['filename'] ?? '', '/');
-          ?>
-            <div class="banner-existing-item">
-              <div class="banner-existing-thumb banner-list-thumb" style="height:100px;">
-                <img
-                  src="<?php echo htmlspecialchars($src, ENT_QUOTES, 'UTF-8'); ?>"
-                  alt="<?php echo htmlspecialchars($b['alt_text'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
-              </div>
-              <div class="banner-existing-body">
-                <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                  <?php echo htmlspecialchars($b['alt_text'] ?: 'No alt text', ENT_QUOTES, 'UTF-8'); ?>
-                </div>
-
-                <?php if (!empty($b['link'])): ?>
-                  <div style="font-size:11px;color:#2563eb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">
-                    <?php echo htmlspecialchars($b['link'], ENT_QUOTES, 'UTF-8'); ?>
+                  <div class="banner-upload-right">
+                    <label style="font-weight:700;display:block;margin-bottom:6px;">Alt text</label>
+                    <input name="alt_text" class="input-field" value="<?php echo htmlspecialchars($homeSideLatest['alt_text'] ?? '', ENT_QUOTES); ?>" placeholder="Alt text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef7;">
+                    <label style="font-weight:700;display:block;margin-top:12px;margin-bottom:6px;">Link</label>
+                    <input name="link" value="<?php echo htmlspecialchars($homeSideLatest['link'] ?? '', ENT_QUOTES); ?>" placeholder="Link" style="width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef7;">
+                    <div style="margin-top:12px;">
+                        <button type="submit" class="btn primary" style="margin-left:auto;padding:8px 16px;border-radius:8px;background:#2563eb;color:#fff;border:none;font-size:13px;cursor:pointer;">Save Sidebar Ad</button>
+                    </div>
                   </div>
-                <?php endif; ?>
-
-                <div style="margin-top:6px;font-size:11px;color:#64748b;display:flex;justify-content:space-between;align-items:center;">
-                  <span>ID: <?php echo (int)$b['id']; ?></span>
-                  <?php if (!empty($b['is_active'])): ?>
-                    <span style="padding:2px 6px;border-radius:999px;background:#dcfce7;color:#166534;">Active</span>
-                  <?php else: ?>
-                    <span style="padding:2px 6px;border-radius:999px;background:#f3f4f6;color:#4b5563;">Inactive</span>
-                  <?php endif; ?>
                 </div>
+            </form>
 
-                <div style="margin-top:6px; display:flex; justify-content:space-between; align-items:center;">
-                  <form
-                    action="delete_banner.php"
-                    method="post"
-                    onsubmit="return confirm('Delete this offer banner permanently?');"
-                    style="margin-left:auto;">
-                    <input type="hidden" name="csrf_token" value="<?php echo $csrf; ?>">
-                    <input type="hidden" name="id" value="<?php echo (int)$b['id']; ?>">
-                    <button
-                      type="submit"
-                      style="border:none;background:#dc2626;color:#fff;padding:4px 8px;border-radius:6px;font-size:11px;cursor:pointer;">
-                      Delete
-                    </button>
-                  </form>
+            <?php if (!empty($homeSideBanners)): ?>
+                <div class="banner-existing-grid" style="margin-top:20px;">
+                  <?php foreach ($homeSideBanners as $b): $src = '/assets/uploads/banners/' . ltrim($b['filename'], '/'); ?>
+                    <div class="banner-existing-item">
+                        <div class="banner-existing-thumb banner-list-thumb"><img src="<?= htmlspecialchars($src) ?>" alt=""></div>
+                        <div class="banner-existing-body">
+                            <form action="delete_banner.php" method="post" onsubmit="return confirm('Delete?');" style="float:right;">
+                                <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+                                <input type="hidden" name="id" value="<?= $b['id'] ?>">
+                                <button type="submit" style="color:red;border:none;background:none;cursor:pointer;">Delete</button>
+                            </form>
+                        </div>
+                    </div>
+                  <?php endforeach; ?>
                 </div>
-
-              </div>
-            </div>
-          <?php endforeach; ?>
+            <?php endif; ?>
         </div>
-      <?php endif; ?>
+    </div>
+
+    <!-- 5) OFFER BANNER -->
+    <div id="home-offer" class="home-section-content">
+        <div class="card" style="padding:18px;margin-top:24px;">
+            <h2 style="font-size:16px;font-weight:700;margin-bottom:6px;">Special Offer Banner</h2>
+            <p style="font-size:12px;color:#64748b;margin-bottom:12px;">Promo banner for limited offers.</p>
+            <form action="save_banner.php" method="post" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+                <input type="hidden" name="page_slot" value="home_offer">
+                <input type="hidden" name="is_active" value="1">
+                
+                <div class="banner-upload-row">
+                  <div class="banner-upload-left">
+                    <label style="font-weight:700;display:block;margin-bottom:6px;">Banner image</label>
+                    <label style="display:block;border:2px dashed #d8e1f0;padding:14px;border-radius:10px;cursor:pointer;background:#fbfdff;text-align:center;">
+                      <div style="font-weight:700;">Click to choose file</div>
+                      <input type="file" name="banners[]" accept="image/*" style="display:none;" data-preview-target="bannerPreviewOffer">
+                    </label>
+                    <div style="margin-top:10px;">
+                       <button type="button" id="addOfferMediaBtn" style="padding:8px 12px; background:#fff; border:1px solid #cbd5e1; border-radius:6px; cursor:pointer; font-size:13px; display:inline-flex; align-items:center; gap:6px;">
+                           <span>📁</span> Select from Library
+                       </button>
+                       <div id="offer_media_container" style="margin-top:10px;"></div>
+                    </div>
+                  </div>
+                  <div class="banner-upload-right">
+                    <label style="font-weight:700;display:block;margin-bottom:6px;">Alt text</label>
+                    <input name="alt_text" class="input-field" value="<?php echo htmlspecialchars($homeOfferLatest['alt_text'] ?? '', ENT_QUOTES); ?>" placeholder="Alt text" style="width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef7;">
+                    <label style="font-weight:700;display:block;margin-top:12px;margin-bottom:6px;">Link</label>
+                    <input name="link" value="<?php echo htmlspecialchars($homeOfferLatest['link'] ?? '', ENT_QUOTES); ?>" placeholder="Link" style="width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef7;">
+                    <div style="margin-top:12px;">
+                        <button type="submit" class="btn primary" style="margin-left:auto;padding:8px 16px;border-radius:8px;background:#2563eb;color:#fff;border:none;font-size:13px;cursor:pointer;">Save Offer</button>
+                    </div>
+                  </div>
+                </div>
+            </form>
+
+            <?php if (!empty($homeOfferBanners)): ?>
+                <div class="banner-existing-grid" style="margin-top:20px;">
+                  <?php foreach ($homeOfferBanners as $b): $src = '/assets/uploads/banners/' . ltrim($b['filename'], '/'); ?>
+                    <div class="banner-existing-item">
+                        <div class="banner-existing-thumb banner-list-thumb"><img src="<?= htmlspecialchars($src) ?>" alt=""></div>
+                        <div class="banner-existing-body">
+                            <form action="delete_banner.php" method="post" onsubmit="return confirm('Delete?');" style="float:right;">
+                                <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+                                <input type="hidden" name="id" value="<?= $b['id'] ?>">
+                                <button type="submit" style="color:red;border:none;background:none;cursor:pointer;">Delete</button>
+                            </form>
+                        </div>
+                    </div>
+                  <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
     </div>
   <?php endif; ?>
 
@@ -1221,4 +1054,47 @@ document.querySelectorAll('input[type=file][name="banners[]"]').forEach(function
 });
 </script>
 
-<?php include __DIR__ . '/footer.php'; ?>
+<script src="/admin/banner-media-init-v2.js"></script>
+
+<?php include __DIR__ . '/layout/footer.php'; ?>
+<script>
+// Tab Switching Logic for Home Page
+function switchHomeTab(tabName) {
+    // Hide all contents
+    document.querySelectorAll('.home-section-content').forEach(el => el.classList.remove('active'));
+    // Deactivate all buttons
+    document.querySelectorAll('.sub-tab-btn').forEach(btn => btn.classList.remove('active'));
+    
+    // Show target content
+    const target = document.getElementById('home-' + tabName);
+    if(target) target.classList.add('active');
+    
+    // Activate button
+    const buttons = document.querySelectorAll('.sub-tab-btn');
+    buttons.forEach(btn => {
+        if(btn.getAttribute('onclick').includes("'" + tabName + "'")) {
+            btn.classList.add('active');
+        }
+    });
+
+    // Save preference to sessionStorage so it persists on reload
+    sessionStorage.setItem('activeHomeBannerTab', tabName);
+}
+
+// Restore active tab on load
+document.addEventListener('DOMContentLoaded', () => {
+    const savedTab = sessionStorage.getItem('activeHomeBannerTab');
+    if(savedTab) {
+        switchHomeTab(savedTab);
+    }
+    
+    // Init media buttons for all sections
+    if(typeof setupBannerMediaButton === 'function') {
+        setupBannerMediaButton('addBannerMediaBtn', 'banner_media_container');
+        setupBannerMediaButton('addCenterMediaBtn', 'center_media_container');
+        setupBannerMediaButton('addBlogsMediaBtn', 'blogs_media_container');
+        setupBannerMediaButton('addSidebarMediaBtn', 'sidebar_media_container');
+        setupBannerMediaButton('addOfferMediaBtn', 'offer_media_container');
+    }
+});
+</script>

@@ -20,6 +20,22 @@ $offset = ($page - 1) * $perPage;
 $whereParts = ['1=1'];
 $params = [];
 
+// Dynamic Filters (Concern, etc.)
+try {
+    $dynamicGroups = $pdo->query("SELECT id FROM filter_groups WHERE is_active = 1")->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($dynamicGroups as $fg) {
+        $param = 'filter_' . $fg['id'];
+        if (!empty($_GET[$param])) {
+            $optId = (int)$_GET[$param];
+            if ($optId > 0) {
+                // Use exists subquery for cleanliness
+                $whereParts[] = "EXISTS (SELECT 1 FROM product_filter_values pfv_{$fg['id']} WHERE pfv_{$fg['id']}.product_id = p.id AND pfv_{$fg['id']}.filter_option_id = ?)";
+                $params[] = $optId;
+            }
+        }
+    }
+} catch (Exception $e) {}
+
 if ($q !== '') {
     $whereParts[] = "(p.name LIKE ? OR p.sku LIKE ? OR p.slug LIKE ?)";
     $like = "%$q%";
@@ -82,8 +98,15 @@ if (empty($rows)) {
     foreach ($rows as $r) {
         $img = htmlspecialchars(get_first_image_small($r['images']));
         $stock = (int)$r['stock'];
-        $statusText = 'Published';
-        $statusClass = 'bg-green-50 text-green-700';
+        
+        $isActive = (int)($r['is_active'] ?? 1);
+        if ($isActive === 1) {
+            $statusText  = 'Published'; 
+            $statusClass = 'bg-green-100 text-green-800 border border-green-200';
+        } else {
+            $statusText  = 'Draft'; 
+            $statusClass = 'bg-gray-100 text-gray-600 border border-gray-200';
+        }
         $id = (int)$r['id'];
         $name = htmlspecialchars($r['name']);
         $sku = htmlspecialchars($r['sku'] ?: substr($r['name'],0,60));
@@ -119,10 +142,9 @@ if (empty($rows)) {
 
           <td class="px-4 py-4 text-right">
             <div class="inline-flex items-center gap-2">
-              <a href="edit_product.php?id=<?php echo $id; ?>" class="btn-mini">Edit</a>
-              <!-- Toggle removed (no is_active) -->
-
-              <button type="button" class="delete-btn btn-danger" data-delete-id="<?php echo $id; ?>">Delete</button>
+              <a href="edit_product.php?id=<?php echo $id; ?>" class="px-3 py-1 rounded border bg-white text-sm font-semibold">Edit</a>
+              <a href="products.php?toggle=<?php echo $id; ?>" onclick="return confirm('Toggle product active state?');" class="px-3 py-1 rounded border bg-white text-sm font-semibold">Toggle</a>
+              <button type="button" class="delete-btn px-3 py-1 rounded bg-red-600 text-white text-sm" data-delete-id="<?php echo $id; ?>">Delete</button>
             </div>
           </td>
         </tr>

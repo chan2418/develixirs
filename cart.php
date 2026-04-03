@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/coupon_helpers.php';
+require_once __DIR__ . '/includes/order_pricing_helper.php';
 session_start();
 
 if (!isset($_SESSION['user_id'])) {
@@ -13,10 +14,14 @@ $cartItems = [];
 $cartTotal = 0;
 $appliedCoupon = getAppliedCoupon();
 $discountAmount = 0;
+$deliveryCharge = 0;
+$finalTotal = 0;
+$discountLabel = 'Discount';
+$couponSavedNotApplied = false;
 
 try {
     $stmt = $pdo->prepare("
-        SELECT c.id, c.product_id, c.quantity, p.name, p.price, p.images
+        SELECT c.id, c.product_id, c.quantity, p.name, p.price, p.images, p.category_id
         FROM cart c
         JOIN products p ON c.product_id = p.id
         WHERE c.user_id = :uid
@@ -29,27 +34,15 @@ try {
         $cartTotal += $item['price'] * $item['quantity'];
     }
     
-    // Re-validate applied coupon
-    if ($appliedCoupon) {
-        $validation = validateCoupon($appliedCoupon['code'], $userId, $cartTotal, $cartItems, $pdo);
-        
-        if (!$validation['valid']) {
-            // Coupon no longer valid
-            removeCouponFromSession();
-            $appliedCoupon = null;
-            $discountAmount = 0;
-            $couponRemovedMessage = "Coupon removed: " . $validation['message'];
-        } else {
-            // Update discount amount (in case total changed)
-            $discountAmount = calculateDiscount($validation['coupon'], $cartTotal);
-            applyCouponToSession($validation['coupon'], $discountAmount);
-            $appliedCoupon = getAppliedCoupon(); // Refresh variable
-        }
-    }
-    
-    // Apply discount if coupon is applied
-    if ($appliedCoupon) {
-        $discountAmount = $appliedCoupon['discount_amount'];
+    $pricing = calculate_order_pricing($pdo, $userId, $cartItems, $appliedCoupon);
+    $appliedCoupon = $pricing['coupon']['data'] ?? null;
+    $discountAmount = (float)($pricing['applied_discount_amount'] ?? 0);
+    $deliveryCharge = (float)($pricing['delivery_charge'] ?? 0);
+    $finalTotal = (float)($pricing['final_total'] ?? $cartTotal);
+    $discountLabel = (string)($pricing['discount_label'] ?? 'Discount');
+    $couponSavedNotApplied = !empty($pricing['coupon']['saved_not_applied']);
+    if (!empty($pricing['coupon']['removed_message'])) {
+        $couponRemovedMessage = $pricing['coupon']['removed_message'];
     }
 } catch (PDOException $e) {
     $cartItems = [];
@@ -95,7 +88,11 @@ function get_first_image($images) {
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
   <link rel="stylesheet" href="assets/css/navbar.css">
-  <?php include __DIR__ . '/navbar.php'; ?>
+  <?php
+  $cartPageSubtotal = $cartTotal;
+  include __DIR__ . '/navbar.php';
+  $cartTotal = $cartPageSubtotal;
+  ?>
   
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -728,12 +725,12 @@ function get_first_image($images) {
           <span id="cart-subtotal">₹<?php echo number_format($cartTotal, 2); ?></span>
         </div>
         
-        <?php if ($appliedCoupon): ?>
+        <?php if ($discountAmount > 0): ?>
           <div class="summary-row" style="color: #28a745;" id="cart-discount-row">
             <span>
               <i class="fa fa-tag"></i>
-              Coupon Discount (<?php echo htmlspecialchars($appliedCoupon['code']); ?>)
-              <button class="remove-coupon-btn" onclick="removeCoupon()" title="Remove coupon">
+              <span id="cart-discount-label"><?php echo htmlspecialchars($discountLabel); ?></span>
+              <button class="remove-coupon-btn" id="cart-remove-coupon-btn" onclick="removeCoupon()" title="Remove coupon" style="<?php echo $appliedCoupon ? '' : 'display:none;'; ?>">
                 <i class="fa fa-times"></i>
               </button>
             </span>
@@ -743,20 +740,23 @@ function get_first_image($images) {
           <div class="summary-row" style="color: #28a745; display:none;" id="cart-discount-row">
              <span>
               <i class="fa fa-tag"></i>
-              Coupon Discount (<span id="cart-coupon-code"></span>)
-              <button class="remove-coupon-btn" onclick="removeCoupon()" title="Remove coupon">
+              <span id="cart-discount-label">Discount</span>
+              <button class="remove-coupon-btn" id="cart-remove-coupon-btn" onclick="removeCoupon()" title="Remove coupon" style="display:none;">
                 <i class="fa fa-times"></i>
               </button>
             </span>
             <span id="cart-discount"></span>
           </div>
         <?php endif; ?>
+
+        <div id="cart-coupon-note" style="margin-top:8px; font-size:12px; color:#8a6d3b; <?php echo $couponSavedNotApplied ? '' : 'display:none;'; ?>">
+          <?php if ($couponSavedNotApplied && $appliedCoupon): ?>
+            Coupon <strong><?php echo htmlspecialchars($appliedCoupon['code']); ?></strong> is saved, but your subscription gives better savings for this cart.
+          <?php endif; ?>
+        </div>
         
         <div class="summary-row">
           <span>Shipping</span>
-          <?php 
-            $deliveryCharge = ($cartTotal < 1000) ? 80 : 0;
-          ?>
           <span id="cart-shipping"><?php echo ($deliveryCharge > 0) ? '₹' . number_format($deliveryCharge, 2) : 'Free'; ?></span>
         </div>
         
@@ -769,7 +769,7 @@ function get_first_image($images) {
         
         <div class="summary-total">
           <span>Total</span>
-          <span id="cart-total">₹<?php echo number_format($cartTotal - $discountAmount + $deliveryCharge, 2); ?></span>
+          <span id="cart-total">₹<?php echo number_format($finalTotal, 2); ?></span>
         </div>
         
         <div id="cart-savings-msg" style="background: #d4edda; color: #155724; padding: 10px; border-radius: 6px; font-size: 13px; text-align: center; margin-top: 10px; <?php echo ($discountAmount > 0) ? '' : 'display:none;'; ?>">
@@ -940,36 +940,46 @@ function removeFromCart(productId) {
 }
 
 function updateCartSummary(data) {
+    const pricing = data.pricing || {};
+
     // Update Counts and Totals
     document.getElementById('cart-count').textContent = data.count;
-    document.getElementById('cart-subtotal').textContent = formatCurrency(data.total);
+    document.getElementById('cart-subtotal').textContent = formatCurrency(
+        pricing.base_subtotal !== undefined ? pricing.base_subtotal : data.total
+    );
     
     // Update Shipping
     const shippingEl = document.getElementById('cart-shipping');
-    if (data.delivery_charge > 0) {
-        shippingEl.textContent = formatCurrency(data.delivery_charge);
+    const deliveryCharge = pricing.delivery_charge !== undefined ? pricing.delivery_charge : data.delivery_charge;
+    if (deliveryCharge > 0) {
+        shippingEl.textContent = formatCurrency(deliveryCharge);
     } else {
         shippingEl.textContent = 'Free';
     }
     
     // Update Grand Total
-    document.getElementById('cart-total').textContent = formatCurrency(data.grand_total);
+    document.getElementById('cart-total').textContent = formatCurrency(
+        pricing.final_total !== undefined ? pricing.final_total : data.grand_total
+    );
     
     // Update Discount if exists
     const discountRow = document.getElementById('cart-discount-row');
     const discountEl = document.getElementById('cart-discount');
+    const discountLabelEl = document.getElementById('cart-discount-label');
+    const removeCouponBtn = document.getElementById('cart-remove-coupon-btn');
+    const couponNote = document.getElementById('cart-coupon-note');
     const savingsMsg = document.getElementById('cart-savings-msg');
     const savingsAmount = document.getElementById('cart-savings-amount');
     
-    let discount = 0;
-    if (data.coupon_status && data.coupon_status.status === 'updated') {
-        discount = data.coupon_status.discount;
-    }
+    const discount = parseFloat(pricing.applied_discount_amount || 0);
     
     if (discount > 0) {
         if (discountRow) {
             discountRow.style.display = 'flex';
             discountEl.textContent = '-' + formatCurrency(discount);
+            if (discountLabelEl) {
+                discountLabelEl.textContent = pricing.discount_label || 'Discount';
+            }
         }
         if (savingsMsg) {
             savingsMsg.style.display = 'block';
@@ -978,6 +988,20 @@ function updateCartSummary(data) {
     } else {
         if (discountRow) discountRow.style.display = 'none';
         if (savingsMsg) savingsMsg.style.display = 'none';
+    }
+
+    if (removeCouponBtn) {
+        removeCouponBtn.style.display = pricing.coupon_code ? 'inline-flex' : 'none';
+    }
+
+    if (couponNote) {
+        if (pricing.coupon_saved_not_applied && pricing.coupon_code) {
+            couponNote.style.display = 'block';
+            couponNote.textContent = 'Coupon ' + pricing.coupon_code + ' is saved, but your subscription gives better savings for this cart.';
+        } else {
+            couponNote.style.display = 'none';
+            couponNote.textContent = '';
+        }
     }
 }
 

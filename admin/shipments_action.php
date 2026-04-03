@@ -18,6 +18,7 @@ try {
         $cost = (float)($_POST['shipping_cost'] ?? 0);
         $weight = $_POST['weight'] ?? null;
         $notes = $_POST['notes'] ?? null;
+        $shipment_date = !empty($_POST['shipment_date']) ? $_POST['shipment_date'] : null;
         $mark_shipped = !empty($_POST['mark_order_shipped']);
 
         if (!$order_id) {
@@ -42,8 +43,8 @@ try {
         }
 
         // Insert shipment
-        $stmt = $pdo->prepare("INSERT INTO shipments (order_id, shipment_number, carrier, tracking_number, shipping_method, shipping_cost, weight, notes, label_file, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'label_created', NOW())");
-        $stmt->execute([$order_id, $shipment_number, $carrier, $tracking, $method, $cost, $weight, $notes, $fileName]);
+        $stmt = $pdo->prepare("INSERT INTO shipments (order_id, shipment_number, carrier, tracking_number, shipping_method, shipping_cost, weight, notes, label_file, status, created_at, shipment_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'label_created', NOW(), ?)");
+        $stmt->execute([$order_id, $shipment_number, $carrier, $tracking, $method, $cost, $weight, $notes, $fileName, $shipment_date]);
         $shipment_id = $pdo->lastInsertId();
 
         // Update order status if requested
@@ -65,6 +66,7 @@ try {
         $tracking = $_POST['tracking_number'] ?? null;
         $method = $_POST['shipping_method'] ?? null;
         $cost = (float)($_POST['shipping_cost'] ?? 0);
+        $shipment_date = !empty($_POST['shipment_date']) ? $_POST['shipment_date'] : null;
 
         // handle file upload for label_pdf
         if (!empty($_FILES['label_pdf']['tmp_name'])) {
@@ -76,13 +78,13 @@ try {
                 $dest = $targetDir . $fileName;
                 if (move_uploaded_file($up['tmp_name'], $dest)) {
                     // save filename in DB
-                    $stmt = $pdo->prepare("UPDATE shipments SET carrier=?, tracking_number=?, shipping_method=?, shipping_cost=?, label_file=? WHERE id=?");
-                    $stmt->execute([$carrier, $tracking, $method, $cost, $fileName, $id]);
+                    $stmt = $pdo->prepare("UPDATE shipments SET carrier=?, tracking_number=?, shipping_method=?, shipping_cost=?, label_file=?, shipment_date=? WHERE id=?");
+                    $stmt->execute([$carrier, $tracking, $method, $cost, $fileName, $shipment_date, $id]);
                 }
             }
         } else {
-            $stmt = $pdo->prepare("UPDATE shipments SET carrier=?, tracking_number=?, shipping_method=?, shipping_cost=? WHERE id=?");
-            $stmt->execute([$carrier, $tracking, $method, $cost, $id]);
+            $stmt = $pdo->prepare("UPDATE shipments SET carrier=?, tracking_number=?, shipping_method=?, shipping_cost=?, shipment_date=? WHERE id=?");
+            $stmt->execute([$carrier, $tracking, $method, $cost, $shipment_date, $id]);
         }
         header("Location: shipment_view.php?id={$id}");
         exit;

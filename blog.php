@@ -1,24 +1,74 @@
 <?php
 // blog.php - Display published blogs from database
 session_start();
+date_default_timezone_set('Asia/Kolkata');
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/blog_scope.php';
+
+$scope = defined('BLOG_SCOPE_FORCE')
+    ? site_blog_scope_normalize((string)BLOG_SCOPE_FORCE)
+    : site_blog_scope_from_request();
+$isAyurvedhScope = site_blog_scope_is_ayurvedh($scope);
+$blogListPath = site_blog_scope_list_path($scope);
+$blogTypeColumnAvailable = site_blog_scope_type_column_exists($pdo);
+$heroTitle = $isAyurvedhScope ? 'Ayurvedh Blog' : 'Beauty & Wellness Blog';
+$heroSubtitle = $isAyurvedhScope
+    ? 'Authentic Ayurvedh insights, herbal routines, and traditional wellness guidance.'
+    : 'Discover skincare guides, wellness stories, and natural beauty routines from DevElixir.';
+$seoTitle = $isAyurvedhScope
+    ? 'Ayurvedh Blog - DevElixir Natural Cosmetics'
+    : 'Beauty & Wellness Blog - DevElixir Natural Cosmetics';
+$seoDescription = $isAyurvedhScope
+    ? 'Explore Ayurvedh-focused articles on herbal remedies, dosha-based beauty rituals, and holistic wellness from DevElixir.'
+    : 'Discover ayurvedic beauty tips, natural skincare routines, herbal wellness guides, and more. Expert advice on natural cosmetics and holistic beauty from DevElixir.';
+$seoKeywords = $isAyurvedhScope
+    ? 'ayurvedha blog, ayurvedic lifestyle tips, herbal remedies blog, dosha skincare guide, develixir ayurvedha'
+    : 'ayurvedic beauty blog, natural skincare tips, herbal wellness, beauty tips india, organic cosmetics guide, DevElixir blog';
+$seoUrl = 'https://develixirs.com/' . $blogListPath;
 
 // Fetch published blog posts
 $blogs = [];
 $recentBlogs = [];
+$categories = []; // Define categories array
 $categoryId = isset($_GET['cat']) ? (int)$_GET['cat'] : null;
+$tagSlug = isset($_GET['tag']) ? $_GET['tag'] : null; // Get tag slug from URL
 
 try {
     // Build query
-    $sql = "SELECT b.id, b.title, b.slug, b.content, b.featured_image, b.created_at, c.title as category_name 
+    $sql = "SELECT DISTINCT b.id, b.title, b.slug, b.content, b.featured_image, b.created_at, 
+                   c.title as category_name,
+                   a.name as author_name, a.profile_pic as author_pic
             FROM blogs b
-            LEFT JOIN categories c ON b.category_id = c.id
-            WHERE b.is_published = 1";
-    $params = [];
+            LEFT JOIN blog_categories c ON b.blog_category_id = c.id
+            LEFT JOIN authors a ON b.author_id = a.id";
+
+    // Add joins for tag filtering if tag is present
+    if ($tagSlug) {
+        $sql .= " INNER JOIN blog_post_tags bpt ON b.id = bpt.blog_id
+                  INNER JOIN blog_tags bt ON bpt.tag_id = bt.id";
+    }
+
+    $sql .= " WHERE b.is_published = 1 AND (b.published_at IS NULL OR b.published_at <= :current_time)";
+    
+    $params = [':current_time' => date('Y-m-d H:i:s')];
+
+    if ($blogTypeColumnAvailable) {
+        [$scopeClause, $scopeParams] = site_blog_scope_filter_clause($scope, 'b.blog_type');
+        $sql .= " AND {$scopeClause}";
+        $params = array_merge($params, $scopeParams);
+    } elseif ($isAyurvedhScope) {
+        // If DB doesn't have scope column yet, keep Ayurvedha page isolated.
+        $sql .= " AND 1=0";
+    }
 
     if ($categoryId) {
-        $sql .= " AND b.category_id = :cat_id";
+        $sql .= " AND b.blog_category_id = :cat_id";
         $params[':cat_id'] = $categoryId;
+    }
+    
+    if ($tagSlug) {
+        $sql .= " AND bt.slug = :tag_slug";
+        $params[':tag_slug'] = $tagSlug;
     }
 
     $sql .= " ORDER BY b.created_at DESC LIMIT 9";
@@ -29,17 +79,49 @@ try {
     $blogs = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
     // Fetch 3 recent blogs for sidebar
-    $stmtRecent = $pdo->query("
+    $recentSql = "
         SELECT id, title, slug, featured_image, created_at 
         FROM blogs 
-        WHERE is_published = 1 
-        ORDER BY created_at DESC 
-        LIMIT 3
-    ");
+        WHERE is_published = 1 AND (published_at IS NULL OR published_at <= :current_time)
+    ";
+    $recentParams = [':current_time' => date('Y-m-d H:i:s')];
+    if ($blogTypeColumnAvailable) {
+        [$recentScopeClause, $recentScopeParams] = site_blog_scope_filter_clause($scope, 'blog_type');
+        $recentSql .= " AND {$recentScopeClause}";
+        $recentParams = array_merge($recentParams, $recentScopeParams);
+    } elseif ($isAyurvedhScope) {
+        $recentSql .= " AND 1=0";
+    }
+    $recentSql .= " ORDER BY created_at DESC LIMIT 3";
+    $stmtRecent = $pdo->prepare($recentSql);
+    $stmtRecent->execute($recentParams);
     $recentBlogs = $stmtRecent->fetchAll(PDO::FETCH_ASSOC);
+
+    // Fetch Categories for Sidebar (scope-aware)
+    if ($blogTypeColumnAvailable) {
+        [$catScopeClause, $catScopeParams] = site_blog_scope_filter_clause($scope, 'b.blog_type');
+        $catSql = "
+            SELECT DISTINCT c.id, c.title
+            FROM blog_categories c
+            INNER JOIN blogs b ON b.blog_category_id = c.id
+            WHERE b.is_published = 1
+              AND (b.published_at IS NULL OR b.published_at <= :current_time)
+              AND {$catScopeClause}
+            ORDER BY c.title ASC
+        ";
+        $stmtCats = $pdo->prepare($catSql);
+        $stmtCats->execute(array_merge([':current_time' => date('Y-m-d H:i:s')], $catScopeParams));
+        $categories = $stmtCats->fetchAll(PDO::FETCH_ASSOC);
+    } elseif ($isAyurvedhScope) {
+        $categories = [];
+    } else {
+        $stmtCats = $pdo->query("SELECT id, title FROM blog_categories ORDER BY title ASC");
+        $categories = $stmtCats->fetchAll(PDO::FETCH_ASSOC);
+    }
     
 } catch (PDOException $e) {
-    error_log('Blog fetch error: ' . $e->getMessage());
+    $dbError = $e->getMessage(); // Capture error
+    error_log('Blog fetch error: ' . $dbError);
     $blogs = [];
     $recentBlogs = [];
 }
@@ -82,10 +164,10 @@ require_once __DIR__ . '/includes/seo_meta.php';
 
 // Generate SEO meta tags
 echo generate_seo_meta([
-    'title' => 'Beauty & Wellness Blog - DevElixir Natural Cosmetics',
-    'description' => 'Discover ayurvedic beauty tips, natural skincare routines, herbal wellness guides, and more. Expert advice on natural cosmetics and holistic beauty from DevElixir.',
-    'keywords' => 'ayurvedic beauty blog, natural skincare tips, herbal wellness, beauty tips india, organic cosmetics guide, DevElixir blog',
-    'url' => 'https://develixirs.com/blog.php',
+    'title' => $seoTitle,
+    'description' => $seoDescription,
+    'keywords' => $seoKeywords,
+    'url' => $seoUrl,
     'type' => 'website'
 ]);
 
@@ -492,6 +574,15 @@ echo generate_website_schema();
         <?php endforeach; ?>
       </div>
     <?php endif; ?>
+    <div class="hero-inner">
+      <h1 class="hero-title"><?php echo htmlspecialchars($heroTitle); ?></h1>
+      <p class="hero-subtitle"><?php echo htmlspecialchars($heroSubtitle); ?></p>
+      <div class="breadcrumb">
+        <a href="index.php">Home</a>
+        <i class="fa-solid fa-angle-right"></i>
+        <span><?php echo htmlspecialchars($heroTitle); ?></span>
+      </div>
+    </div>
   </section>
 
   <!-- MAIN LAYOUT -->
@@ -505,11 +596,22 @@ echo generate_website_schema();
             <i class="fa-regular fa-newspaper"></i>
             <h3>No stories found</h3>
             <p>We haven't published any articles in this category yet.</p>
+            <?php if (!empty($dbError)): ?>
+                <div style="margin-top:20px; padding:10px; border:1px solid red; color:red; font-family:monospace; font-size:12px; text-align:left; display:inline-block;">
+                    <strong>Debug Error:</strong> <?= htmlspecialchars($dbError) ?>
+                </div>
+            <?php endif; ?>
           </div>
         <?php else: ?>
           <?php foreach ($blogs as $p): ?>
+            <?php
+              $postUrl = site_blog_scope_append_query('blog_single.php', [
+                'slug' => $p['slug'] ?? '',
+                'scope' => $isAyurvedhScope ? 'ayurvedh' : ''
+              ]);
+            ?>
             <article class="post-card">
-              <a href="blog_single.php?slug=<?= e($p['slug']) ?>" class="post-thumb">
+              <a href="<?= e($postUrl) ?>" class="post-thumb">
                 <img src="<?= e($p['featured_image'] ?: '/assets/images/blog-default.jpg') ?>" alt="<?= e($p['title']) ?>">
                 <?php if (!empty($p['category_name'])): ?>
                   <span class="post-category-badge"><?= e($p['category_name']) ?></span>
@@ -518,17 +620,30 @@ echo generate_website_schema();
               
               <div class="post-body">
                 <div class="post-meta">
-                  <i class="fa-regular fa-calendar"></i>
-                  <?= e(date('F j, Y', strtotime($p['created_at']))) ?>
+                  <?php if (!empty($p['author_name'])): ?>
+                      <div class="author-info" style="display:flex; align-items:center; gap:8px; margin-right:15px;">
+                          <?php if(!empty($p['author_pic'])): ?>
+                              <img src="<?= e($p['author_pic']) ?>" alt="<?= e($p['author_name']) ?>" style="width:24px; height:24px; border-radius:50%; object-fit:cover;">
+                          <?php else: ?>
+                              <i class="fa-solid fa-circle-user" style="font-size:24px; color:#ccc;"></i>
+                          <?php endif; ?>
+                          <span><?= e($p['author_name']) ?></span>
+                      </div>
+                  <?php endif; ?>
+                  
+                  <span style="display:flex; align-items:center; gap:6px;">
+                    <i class="fa-regular fa-calendar"></i>
+                    <?= e(date('F j, Y', strtotime($p['created_at']))) ?>
+                  </span>
                 </div>
                 
                 <h2 class="post-title">
-                  <a href="blog_single.php?slug=<?= e($p['slug']) ?>"><?= e($p['title']) ?></a>
+                  <a href="<?= e($postUrl) ?>"><?= e($p['title']) ?></a>
                 </h2>
                 
                 <p class="post-excerpt"><?= e(truncate($p['content'], 140)) ?></p>
                 
-                <a href="blog_single.php?slug=<?= e($p['slug']) ?>" class="post-readmore">
+                <a href="<?= e($postUrl) ?>" class="post-readmore">
                   Read Story <i class="fa-solid fa-arrow-right-long"></i>
                 </a>
               </div>
@@ -546,14 +661,14 @@ echo generate_website_schema();
         <h3 class="widget-title">Categories</h3>
         <ul class="category-list">
           <li>
-            <a href="blog.php" class="<?= !$categoryId ? 'active' : '' ?>">
+            <a href="<?= e($blogListPath) ?>" class="<?= !$categoryId ? 'active' : '' ?>">
               All Stories <span><i class="fa-solid fa-angle-right"></i></span>
             </a>
           </li>
           <?php if (!empty($categories)): ?>
             <?php foreach ($categories as $cat): ?>
               <li>
-                <a href="blog.php?cat=<?= (int)$cat['id'] ?>" class="<?= ($categoryId == $cat['id']) ? 'active' : '' ?>">
+                <a href="<?= e(site_blog_scope_append_query($blogListPath, ['cat' => (int)$cat['id']])) ?>" class="<?= ($categoryId == $cat['id']) ? 'active' : '' ?>">
                   <?= htmlspecialchars($cat['title'] ?? $cat['name'] ?? '') ?>
                   <span><i class="fa-solid fa-angle-right"></i></span>
                 </a>
@@ -568,12 +683,18 @@ echo generate_website_schema();
         <h3 class="widget-title">Recent Stories</h3>
         <?php if (!empty($recentBlogs)): ?>
           <?php foreach ($recentBlogs as $r): ?>
+            <?php
+              $recentUrl = site_blog_scope_append_query('blog_single.php', [
+                'slug' => $r['slug'] ?? '',
+                'scope' => $isAyurvedhScope ? 'ayurvedh' : ''
+              ]);
+            ?>
             <div class="recent-post-item">
-              <a href="blog_single.php?slug=<?= e($r['slug']) ?>">
+              <a href="<?= e($recentUrl) ?>">
                 <img src="<?= e($r['featured_image'] ?: '/assets/images/blog-default.jpg') ?>" alt="">
               </a>
               <div class="recent-post-info">
-                <h4><a href="blog_single.php?slug=<?= e($r['slug']) ?>"><?= e($r['title']) ?></a></h4>
+                <h4><a href="<?= e($recentUrl) ?>"><?= e($r['title']) ?></a></h4>
                 <div class="recent-post-date">
                   <i class="fa-regular fa-calendar"></i>
                   <?= e(date('M j, Y', strtotime($r['created_at']))) ?>

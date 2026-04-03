@@ -518,6 +518,17 @@ include __DIR__ . '/layout/header.php';
             <span>Allow combining with other coupons</span>
           </div>
         </div>
+        
+        <div class="form-group">
+          <label>Show on Top Scrolling Marquee?</label>
+          <div class="toggle-group">
+            <label class="toggle-switch">
+              <input type="checkbox" name="show_on_marquee" value="1" <?php echo !empty($coupon['show_on_marquee']) ? 'checked' : ''; ?>>
+              <span class="slider"></span>
+            </label>
+            <span>Display this coupon in the website header marquee</span>
+          </div>
+        </div>
       </div>
       
       <!-- Validity -->

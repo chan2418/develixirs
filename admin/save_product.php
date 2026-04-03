@@ -4,6 +4,8 @@ session_start();
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/image_compressor.php';
 
+
+
 // Simple flash helpers (used by add_product.php)
 function flash_set($key, $val) { $_SESSION[$key] = $val; }
 function flash_get($key) { $v = $_SESSION[$key] ?? null; if (isset($_SESSION[$key])) unset($_SESSION[$key]); return $v; }
@@ -51,6 +53,17 @@ $meta_description = trim($_POST['meta_description'] ?? '');
 $sku              = trim($_POST['sku'] ?? '');
 $hsn              = trim($_POST['hsn'] ?? ''); // NEW
 $price            = $_POST['price'] ?? '';
+
+// Smart Price Fallback: If main price is empty, try to use the first custom variant's price
+if (($price === '' || $price === null) && !empty($_POST['variants']) && is_array($_POST['variants'])) {
+    foreach ($_POST['variants'] as $v) {
+        // Only use price from Custom variants (where price is set)
+        if (isset($v['price']) && is_numeric($v['price']) && (!isset($v['type']) || $v['type'] !== 'linked')) {
+            $price = $v['price'];
+            break; 
+        }
+    }
+}
 $compare_price    = $_POST['compare_price'] ?? null; // may not exist in table, we handle later
 $currency         = 'INR';
 
@@ -61,12 +74,65 @@ $category_id        = $_POST['category_id'] ?? null;
 $stock        = isset($_POST['stock']) ? (int)$_POST['stock'] : 0;
 $is_published = (isset($_POST['is_published']) && ($_POST['is_published'] === '1' || $_POST['is_published'] === 1)) ? 1 : 0;
 
-/** New: collect tags (multi-select) **/
+// SEO Keywords (hidden tags)
+$seo_keywords = trim($_POST['seo_keywords'] ?? '');
+
+/** Collect tags (comma-separated text input) **/
+$tagIds = [];
+$tagsInput = trim($_POST['tags_input'] ?? '');
+
+// DEBUG: Log what we received
+
+
+if ($tagsInput !== '') {
+    // Process comma-separated tags
+    $tagNames = array_filter(array_map('trim', explode(',', $tagsInput)));
+
+    
+    if (!empty($tagNames)) {
+        // Pre-statements to check/create tags
+        $stmtCheckTag = $pdo->prepare("SELECT id FROM tags WHERE name = ? LIMIT 1");
+        $stmtCreateTag = $pdo->prepare("INSERT INTO tags (name, slug) VALUES (?, ?)");
+        
+        foreach ($tagNames as $tagName) {
+            $stmtCheckTag->execute([$tagName]);
+            $tid = $stmtCheckTag->fetchColumn();
+            
+            if (!$tid) {
+                // Create new tag
+                $tslug = slugify($tagName);
+                try {
+                    $stmtCreateTag->execute([$tagName, $tslug]);
+                    $tid = $pdo->lastInsertId();
+
+                } catch (Exception $e) {
+                    // Fallback for unique constraint on slug
+                    $tslug .= '-' . time();
+                    try {
+                        $stmtCreateTag->execute([$tagName, $tslug]);
+                        $tid = $pdo->lastInsertId(); 
+
+                    } catch (Exception $ex) {
+
+                        continue; // skip if still fails
+                    }
+                }
+            } else {
+
+            }
+            
+            if ($tid > 0) {
+                $tagIds[] = (int)$tid;
+            }
+        }
+    }
+}
+
+// Verify legacy array selection if present
 $tagIdsRaw = $_POST['tags'] ?? [];
 if (!is_array($tagIdsRaw)) {
     $tagIdsRaw = [$tagIdsRaw];
 }
-$tagIds = [];
 foreach ($tagIdsRaw as $tid) {
     $tid = trim((string)$tid);
     if ($tid !== '' && ctype_digit($tid)) {
@@ -103,9 +169,8 @@ if (!empty($category_id)) {
 $parent_category_id_final = !empty($parent_category_id) ? (int)$parent_category_id : null;
 
 if (!empty($err)) {
-    flash_set('form_errors', $err);
-    flash_set('old', $_POST); // includes tags[], parent_category_id, category_id
-    header('Location: add_product.php');
+    // Return error as text for AJAX
+    echo "Error:Result: " . implode("\n", $err);
     exit;
 }
 
@@ -117,9 +182,7 @@ try {
     // If this fails, we're in serious trouble anyway
     $productCols = [];
     $err[] = "Unable to read products table structure: " . $e->getMessage();
-    flash_set('form_errors', $err);
-    flash_set('old', $_POST);
-    header('Location: add_product.php');
+    echo "Error: " . implode("\n", $err);
     exit;
 }
 
@@ -137,11 +200,14 @@ $hasIsActive        = in_array('is_active', $productCols, true);
 $hasIsFeatured      = in_array('is_featured', $productCols, true);
 $hasMetaTitle       = in_array('meta_title', $productCols, true);
 $hasMetaDesc        = in_array('meta_description', $productCols, true);
+$hasSeoKeywords     = in_array('seo_keywords', $productCols, true); // Hidden SEO tags
 $hasCreatedAt       = in_array('created_at', $productCols, true);
 $hasSku             = in_array('sku', $productCols, true);
 $hasHsn             = in_array('hsn', $productCols, true); // NEW
 $hasName            = in_array('name', $productCols, true);
 $hasDescription     = in_array('description', $productCols, true);
+$hasConcernId       = in_array('concern_id', $productCols, true); // NEW
+$hasSeasonalId      = in_array('seasonal_id', $productCols, true); // NEW: Seasonal
 
 /** 🔹 Resolve category_name from categories table (parent-level name like "Men Care") **/
 $categoryNameVal = null;
@@ -207,7 +273,11 @@ if (isset($_FILES['images']) && is_array($_FILES['images']['name'])) {
         $finfo = finfo_open(FILEINFO_MIME_TYPE);
         $mime  = finfo_file($finfo, $tmp);
         finfo_close($finfo);
-        if (strpos($mime, 'image/') !== 0) continue;
+        
+        $isImage = strpos($mime, 'image/') === 0;
+        $isVideo = strpos($mime, 'video/') === 0;
+        
+        if (!$isImage && !$isVideo) continue;
 
         $ext = pathinfo($name, PATHINFO_EXTENSION);
         $ext = preg_replace('/[^a-zA-Z0-9]/', '', $ext);
@@ -216,9 +286,16 @@ if (isset($_FILES['images']) && is_array($_FILES['images']['name'])) {
 
         $dest = $uploadDir . $filename;
 
-        // Compress and save image
-        $result = compressImage($tmp, $dest);
-        if (!$result['success']) {
+        if ($isImage) {
+            // Compress and save image
+            $result = compressImage($tmp, $dest);
+            if (!$result['success']) {
+                if (!@copy($tmp, $dest)) {
+                    continue;
+                }
+            }
+        } else {
+            // Move video directly (no compression)
             if (!@copy($tmp, $dest)) {
                 continue;
             }
@@ -226,6 +303,16 @@ if (isset($_FILES['images']) && is_array($_FILES['images']['name'])) {
 
         $savedFiles[]   = $filename;
         $upload_debug[] = 'assets/uploads/products/' . $filename;
+    }
+}
+
+// Handle Images from Media Library (Legacy)
+if (!empty($_POST['images_from_media']) && is_array($_POST['images_from_media'])) {
+    foreach ($_POST['images_from_media'] as $mediaPath) {
+        if (!empty($mediaPath)) {
+            $savedFiles[] = $mediaPath;
+            $upload_debug[] = 'media-library-linked: ' . $mediaPath;
+        }
     }
 }
 
@@ -356,6 +443,16 @@ try {
         $addField('category_name', ':category_name', $categoryNameVal);
     }
 
+    if ($hasConcernId) {
+        $concern_id_val = !empty($_POST['concern_id']) ? (int)$_POST['concern_id'] : null;
+        $addField('concern_id', ':concern_id', $concern_id_val);
+    }
+
+    if ($hasSeasonalId) {
+        $seasonal_id_val = !empty($_POST['seasonal_id']) ? (int)$_POST['seasonal_id'] : null;
+        $addField('seasonal_id', ':seasonal_id', $seasonal_id_val);
+    }
+
     if ($hasImages) {
         $addField('images', ':images', $images_json);
     }
@@ -377,6 +474,14 @@ try {
     if ($hasMetaDesc) {
         $addField('meta_description', ':meta_description', $meta_description ?: null);
     }
+    if ($hasSeoKeywords) {
+        $addField('seo_keywords', ':seo_keywords', $seo_keywords ?: null);
+    }
+    // NEW: Save Product Label
+    if (in_array('label_id', $productCols, true)) {
+        $label_id = !empty($_POST['label_id']) ? (int)$_POST['label_id'] : null;
+        $addField('label_id', ':label_id', $label_id);
+    }
     if ($hasCreatedAt) {
         $addField('created_at', ':created_at', date('Y-m-d H:i:s'));
     }
@@ -396,113 +501,175 @@ try {
 
     /** ================== INSERT PRODUCT TAGS ================== */
     if (!empty($tagIds) && $newId > 0) {
+        error_log('DEBUG save_product.php - Attempting to insert ' . count($tagIds) . ' tags for product ID: ' . $newId);
         try {
-            // Check if product_tags table exists
-            $hasProductTags = false;
-            $checkStmt = $pdo->query("SHOW TABLES LIKE 'product_tags'");
-            if ($checkStmt && $checkStmt->rowCount() > 0) {
-                $hasProductTags = true;
-            }
+            $stmtTag = $pdo->prepare("
+                INSERT IGNORE INTO product_tags (product_id, tag_id)
+                VALUES (:pid, :tid)
+            ");
 
-            if ($hasProductTags) {
-                $stmtTag = $pdo->prepare("
-                    INSERT INTO product_tags (product_id, tag_id)
-                    VALUES (:pid, :tid)
-                ");
-
-                foreach ($tagIds as $tid) {
-                    $stmtTag->execute([
-                        ':pid' => $newId,
-                        ':tid' => $tid,
-                    ]);
-                }
-            } else {
-                $upload_debug[] = 'product_tags table not found, tags not saved.';
+            foreach ($tagIds as $tid) {
+                $stmtTag->execute([
+                    ':pid' => $newId,
+                    ':tid' => $tid,
+                ]);
+                error_log('DEBUG save_product.php - Inserted tag ID ' . $tid . ' for product ' . $newId);
             }
+            error_log('DEBUG save_product.php - Successfully inserted all tags');
         } catch (Exception $e) {
-            // Don't block product creation if tags fail, just log debug
+            // Log error but don't block product creation
+            error_log('ERROR save_product.php - Tag insert error: ' . $e->getMessage());
             $upload_debug[] = 'tag-insert-error: ' . $e->getMessage();
         }
+    } else {
+        error_log('DEBUG save_product.php - No tags to insert. tagIds: ' . print_r($tagIds, true) . ', newId: ' . $newId);
     }
 
     /** ================== INSERT PRODUCT VARIANTS ================== */
     $variantsRaw = $_POST['variants'] ?? [];
     if (!empty($variantsRaw) && is_array($variantsRaw) && $newId > 0) {
         try {
-            $stmtVar = $pdo->prepare("
-                INSERT INTO product_variants (product_id, variant_name, price, compare_price, discount_percent, stock, sku, custom_title, custom_description, short_description, ingredients, how_to_use, meta_title, meta_description, images, image, is_active)
-                VALUES (:pid, :name, :price, :compare_price, :discount_percent, :stock, :sku, :custom_title, :custom_desc, :short_desc, :ingredients, :how_to_use, :meta_title, :meta_desc, :images, :image, 1)
-            ");
+            // Check for 'hsn' column existence to prevent "Invalid parameter number" errors
+            $hsnExists = false;
+            try {
+                $chkHsn = $pdo->query("SHOW COLUMNS FROM product_variants LIKE 'hsn'");
+                if ($chkHsn && $chkHsn->rowCount() > 0) {
+                    $hsnExists = true;
+                }
+            } catch (Exception $e) { $hsnExists = false; }
+
+            // Prepare Dynamic SQL
+            $sqlFields = [
+                'product_id', 'variant_name', 'type', 'linked_product_id', 
+                'price', 'compare_price', 'discount_percent', 'stock', 'sku', 
+                'custom_title', 'custom_description', 'short_description', 
+                'ingredients', 'how_to_use', 'meta_title', 'meta_description', 
+                'images', 'image', 'is_active'
+            ];
+            $sqlValues = [
+                ':pid', ':name', ':type', ':linked_product_id', 
+                ':price', ':compare_price', ':discount_percent', ':stock', ':sku', 
+                ':custom_title', ':custom_desc', ':short_desc', 
+                ':ingredients', ':how_to_use', ':meta_title', ':meta_desc', 
+                ':images', ':image', '1'
+            ];
+
+            if ($hsnExists) {
+                $sqlFields[] = 'hsn';
+                $sqlValues[] = ':hsn';
+            }
+
+            $sqlInsertVar = "INSERT INTO product_variants (" . implode(', ', $sqlFields) . ") VALUES (" . implode(', ', $sqlValues) . ")";
+            $stmtVar = $pdo->prepare($sqlInsertVar);
             
             // Prepare variant FAQ statement
             $stmtVarFaq = $pdo->prepare("
                 INSERT INTO variant_faqs (variant_id, question, answer)
                 VALUES (:vid, :question, :answer)
             ");
-
+            
+            error_log("=== SAVE_PRODUCT.PHP: Processing " . count($variantsRaw) . " variants for product ID: {$newId} ===");
+            error_log("HSN Column Exists: " . ($hsnExists ? 'YES' : 'NO'));
+            
             foreach ($variantsRaw as $idx => $v) {
+                error_log("--- Processing variant index {$idx} ---");
+                
                 $vName  = trim($v['name'] ?? '');
-                $vPrice = (float)($v['price'] ?? 0);
-                $vComparePrice = isset($v['compare_price']) && $v['compare_price'] !== '' ? (float)$v['compare_price'] : null;
-                $vDiscountPercent = isset($v['discount_percent']) && $v['discount_percent'] !== '' ? (float)$v['discount_percent'] : null;
-                $vStock = (int)($v['stock'] ?? 0);
-                $vSku   = trim($v['sku'] ?? '');
-                $vCustomTitle = trim($v['custom_title'] ?? '');
-                $vCustomDesc = trim($v['custom_description'] ?? '');
-                $vShortDesc = trim($v['short_description'] ?? '');
-                $vIngredients = trim($v['ingredients'] ?? '');
-                $vHowToUse = trim($v['how_to_use'] ?? '');
-                $vMetaTitle = trim($v['meta_title'] ?? '');
-                $vMetaDesc = trim($v['meta_description'] ?? '');
-
+                $vType  = trim($v['type'] ?? 'custom');
+                $vLinkedProductId = !empty($v['linked_product_id']) ? (int)$v['linked_product_id'] : null;
+                
                 if ($vName === '') continue;
-
-                // Handle Multiple Variant Images (stored as JSON)
-                $variantImages = [];
-                if (!empty($_FILES['variants']['name'][$idx]['images'])) {
-                    $fileCount = count($_FILES['variants']['name'][$idx]['images']);
-                    for ($i = 0; $i < min($fileCount, 10); $i++) {
-                        $fName = $_FILES['variants']['name'][$idx]['images'][$i] ?? '';
-                        $fTmp  = $_FILES['variants']['tmp_name'][$idx]['images'][$i] ?? '';
-                        $fErr  = $_FILES['variants']['error'][$idx]['images'][$i] ?? UPLOAD_ERR_NO_FILE;
-
-                        if ($fErr === UPLOAD_ERR_OK && is_uploaded_file($fTmp)) {
-                            $ext = pathinfo($fName, PATHINFO_EXTENSION) ?: 'jpg';
-                            $ext = preg_replace('/[^a-zA-Z0-9]/', '', $ext);
-                            $newName = 'var_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
-                            $dest = $uploadDir . $newName;
-                            // Compress and save variant image
-                            $vResult = compressImage($fTmp, $dest);
-                            if ($vResult['success']) {
-                                $variantImages[] = $newName;
+                
+                // Set defaults based on type
+                if ($vType === 'linked') {
+                    $vPrice = 0.00;
+                    $vComparePrice = null;
+                    $vDiscountPercent = null;
+                    $vStock = 0; 
+                    $vSku = '';
+                    $vHsn = trim($v['hsn'] ?? '') ?: null; // Capture HSN even for Linked
+                    $vCustomTitle = null;
+                    $vCustomDesc = null;
+                    $vShortDesc = null;
+                    $vIngredients = null;
+                    $vHowToUse = null;
+                    $vMetaTitle = null;
+                    $vMetaDesc = null;
+                    $variantImages = [];
+                } else {
+                    $vPrice = (float)($v['price'] ?? 0);
+                    $vComparePrice = isset($v['compare_price']) && $v['compare_price'] !== '' ? (float)$v['compare_price'] : null;
+                    $vDiscountPercent = isset($v['discount_percent']) && $v['discount_percent'] !== '' ? (float)$v['discount_percent'] : null;
+                    $vStock = (int)($v['stock'] ?? 0);
+                    $vSku   = trim($v['sku'] ?? '');
+                    $vHsn   = trim($v['hsn'] ?? '') ?: null; 
+                    $vCustomTitle = trim($v['custom_title'] ?? '') ?: null;
+                    $vCustomDesc = trim($v['custom_description'] ?? '') ?: null;
+                    $vShortDesc = trim($v['short_description'] ?? '') ?: null;
+                    $vIngredients = trim($v['ingredients'] ?? '') ?: null;
+                    $vHowToUse = trim($v['how_to_use'] ?? '') ?: null;
+                    $vMetaTitle = trim($v['meta_title'] ?? '') ?: null;
+                    $vMetaDesc = trim($v['meta_description'] ?? '') ?: null;
+                    
+                    // Handle Images
+                    $variantImages = [];
+                    if (!empty($_FILES['variants']['name'][$idx]['images'])) {
+                        $fileCount = count($_FILES['variants']['name'][$idx]['images']);
+                        for ($i = 0; $i < min($fileCount, 10); $i++) {
+                            $fName = $_FILES['variants']['name'][$idx]['images'][$i] ?? '';
+                            $fTmp  = $_FILES['variants']['tmp_name'][$idx]['images'][$i] ?? '';
+                            $fErr  = $_FILES['variants']['error'][$idx]['images'][$i] ?? UPLOAD_ERR_NO_FILE;
+    
+                            if ($fErr === UPLOAD_ERR_OK && is_uploaded_file($fTmp)) {
+                                $ext = pathinfo($fName, PATHINFO_EXTENSION) ?: 'jpg';
+                                $ext = preg_replace('/[^a-zA-Z0-9]/', '', $ext);
+                                $newName = 'var_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+                                $dest = $uploadDir . $newName;
+                                if (compressImage($fTmp, $dest)['success']) {
+                                    $variantImages[] = $newName;
+                                }
                             }
                         }
                     }
                 }
-                $imagesJson = !empty($variantImages) ? json_encode($variantImages) : null;
-                $legacyImage = !empty($variantImages) ? $variantImages[0] : null; // First image for backward compat
 
-                // Insert variant
-                $stmtVar->execute([
+                $imagesJson = !empty($variantImages) ? json_encode($variantImages) : null;
+                $legacyImage = !empty($variantImages) ? $variantImages[0] : null;
+
+                // Bind Parameters
+                $params = [
                     ':pid'          => $newId,
                     ':name'         => $vName,
+                    ':type'         => $vType,
+                    ':linked_product_id' => $vLinkedProductId,
                     ':price'        => $vPrice,
                     ':compare_price' => $vComparePrice,
                     ':discount_percent' => $vDiscountPercent,
                     ':stock'        => $vStock,
                     ':sku'          => $vSku,
-                    ':custom_title' => $vCustomTitle ?: null,
-                    ':custom_desc'  => $vCustomDesc ?: null,
-                    ':short_desc'   => $vShortDesc ?: null,
-                    ':ingredients'  => $vIngredients ?: null,
-                    ':how_to_use'   => $vHowToUse ?: null,
-                    ':meta_title'   => $vMetaTitle ?: null,
-                    ':meta_desc'    => $vMetaDesc ?: null,
+                    ':custom_title' => $vCustomTitle,
+                    ':custom_desc'  => $vCustomDesc,
+                    ':short_desc'   => $vShortDesc,
+                    ':ingredients'  => $vIngredients,
+                    ':how_to_use'   => $vHowToUse,
+                    ':meta_title'   => $vMetaTitle,
+                    ':meta_desc'    => $vMetaDesc,
                     ':images'       => $imagesJson,
                     ':image'        => $legacyImage
-                ]);
-                
-                $variantId = (int)$pdo->lastInsertId();
+                ];
+
+                if ($hsnExists) {
+                    $params[':hsn'] = $vHsn;
+                }
+
+                try {
+                    $stmtVar->execute($params);
+                    $variantId = (int)$pdo->lastInsertId();
+
+                } catch (PDOException $e) {
+
+                    throw $e;
+                }
                 
                 // Insert variant FAQs
                 if (!empty($v['faqs']) && is_array($v['faqs'])) {
@@ -567,6 +734,56 @@ try {
             }
         } catch (Exception $e) {
             $upload_debug[] = 'related-products-error: ' . $e->getMessage();
+        }
+    }
+
+    // ==== Product Groups (Collections) ====
+    if (isset($_POST['group_ids'])) {
+        try {
+            $group_ids = $_POST['group_ids'];
+            if (!is_array($group_ids)) $group_ids = [];
+            
+            $stmtGroupMap = $pdo->prepare("INSERT IGNORE INTO product_group_map (product_id, group_id) VALUES (?, ?)");
+            
+            foreach ($group_ids as $gid) {
+                $gid = (int)$gid;
+                if ($gid > 0) {
+                    $stmtGroupMap->execute([$newId, $gid]);
+                }
+            }
+        } catch (Exception $e) {
+            $upload_debug[] = 'groups-insert-error: ' . $e->getMessage();
+        }
+    }
+
+    // ==== Handle Product Filters (Dynamic Attributes) ====
+    // ==== Handle Product Filters (Dynamic Attributes) ====
+    $filterData = [];
+    if (!empty($_POST['filter_options_json'])) {
+        $decoded = json_decode($_POST['filter_options_json'], true);
+        if (is_array($decoded)) $filterData = $decoded;
+    } elseif (isset($_POST['filter_options']) && is_array($_POST['filter_options'])) {
+        $filterData = $_POST['filter_options'];
+    }
+
+    if (!empty($filterData)) {
+        try {
+            $stmtFilterVal = $pdo->prepare("INSERT IGNORE INTO product_filter_values (product_id, filter_group_id, filter_option_id) VALUES (?, ?, ?)");
+            
+            foreach ($filterData as $groupId => $optionIds) {
+                $groupId = (int)$groupId;
+                // If checkbox array is empty or not array, skip
+                if (!is_array($optionIds)) continue;
+
+                foreach ($optionIds as $optId) {
+                    $optId = (int)$optId;
+                    if ($groupId > 0 && $optId > 0) {
+                        $stmtFilterVal->execute([$newId, $groupId, $optId]);
+                    }
+                }
+            }
+        } catch (Exception $e) {
+             $upload_debug[] = 'filters-insert-error: ' . $e->getMessage();
         }
     }
 
@@ -636,6 +853,34 @@ try {
         }
     }
     
+    // Handle Product Media from Media Library (Gallery)
+    if (!empty($_POST['product_media_from_media']) && is_array($_POST['product_media_from_media'])) {
+        $mediaUploadDir = __DIR__ . '/../assets/uploads/product_media/';
+        if (!is_dir($mediaUploadDir)) {
+            mkdir($mediaUploadDir, 0755, true);
+        }
+        
+        foreach ($_POST['product_media_from_media'] as $mediaPath) {
+            $sourcePath = $_SERVER['DOCUMENT_ROOT'] . $mediaPath;
+            if (file_exists($sourcePath)) {
+                $ext = pathinfo($sourcePath, PATHINFO_EXTENSION);
+                $newFilename = time() . '_' . uniqid() . '_lib.' . $ext;
+                $destPath = $mediaUploadDir . $newFilename;
+                
+                if (copy($sourcePath, $destPath)) {
+                    // Check if video
+                    $isVideo = in_array(strtolower($ext), ['mp4', 'webm', 'mov']);
+                    
+                    $productMediaArray[] = [
+                        'type' => $isVideo ? 'video' : 'image',
+                        'path' => $newFilename
+                    ];
+                    $upload_debug[] = "media-library-copied: $newFilename";
+                }
+            }
+        }
+    }
+    
     // Update product with media if any uploaded
     if (!empty($productMediaArray)) {
         try {
@@ -649,7 +894,9 @@ try {
     flash_set('success_msg', 'Product created successfully.');
     flash_set('upload_debug', $upload_debug);
 
-    header('Location: products.php');
+    flash_set('success_msg', 'Product created successfully.');
+    // Return Success for AJAX
+    echo "Success";
     exit;
 
 } catch (PDOException $e) {
@@ -657,13 +904,11 @@ try {
     flash_set('form_errors', $err);
     flash_set('old', $_POST);
     flash_set('upload_debug', $upload_debug);
-    header('Location: add_product.php');
+    $err[] = "Database error: " . $e->getMessage();
+    echo "Error:Result: " . implode("\n", $err);
     exit;
 } catch (Exception $e) {
     $err[] = "Error: " . $e->getMessage();
-    flash_set('form_errors', $err);
-    flash_set('old', $_POST);
-    flash_set('upload_debug', $upload_debug);
-    header('Location: add_product.php');
+    echo "Error:Result: " . implode("\n", $err);
     exit;
 }

@@ -20,6 +20,24 @@ echo generate_seo_meta([
 
 // Add LocalBusiness Schema
 echo generate_local_business_schema();
+
+// --- FETCH SITE SETTINGS ---
+$settings = [];
+try {
+    $stmt = $pdo->query("SELECT setting_key, setting_value FROM site_settings");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $settings[$row['setting_key']] = $row['setting_value'];
+    }
+} catch (PDOException $e) { /* ignore */ }
+
+$phone   = $settings['company_phone']   ?? '+91 9500650454';
+$email   = $settings['company_email']   ?? 'sales@develixirs.com';
+$address = $settings['company_address'] ?? "DevElixir Natural Cosmetics ™<br>No:6, 3rd Cross Street,<br>Kamatchiamman Garden, Sethukkarai,<br>Gudiyatham-632602, Vellore, Tamilnadu<br>INDIA";
+
+// Auto-generate Map URL from Address
+$cleanAddr = trim(preg_replace('/\s+/', ' ', strip_tags($address)));
+$mapUrl = "https://maps.google.com/maps?q=" . urlencode($cleanAddr) . "&t=&z=15&ie=UTF8&iwloc=&output=embed";
+$mapHtml = '<iframe src="' . $mapUrl . '" width="100%" height="250" style="border:0;" allowfullscreen="" loading="lazy"></iframe>';
 ?>
 
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -128,19 +146,15 @@ echo generate_local_business_schema();
 
     <!-- CONTACT DETAILS -->
     <div class="info-box">
-      <div><i class="fa-solid fa-phone"></i> +91 9500650454</div>
-      <div><i class="fa-solid fa-envelope"></i> sales@develixirs.com</div>
+      <div><i class="fa-solid fa-phone"></i> <?php echo htmlspecialchars($phone); ?></div>
+      <div><i class="fa-solid fa-envelope"></i> <?php echo htmlspecialchars($email); ?></div>
       <div><i class="fa-solid fa-location-dot"></i> 
-        DevElixir Natural Cosmetics ™<br>
-        No:6, 3rd Cross Street,<br>
-        Kamatchiamman Garden, Sethukkarai,<br>
-        Gudiyatham-632602, Vellore, Tamilnadu<br>
-        INDIA
+        <?php echo nl2br(htmlspecialchars($address)); ?>
       </div>
       
       <!-- Google Map -->
       <div style="margin-top: 20px; border-radius: 8px; overflow: hidden;">
-        <iframe src="https://maps.google.com/maps?q=No%3A6%2C+3rd+Cross+Street%2C+Kamatchiamman+Garden%2C+Sethukkarai%2C+Gudiyatham-632602%2C+Vellore%2C+Tamilnadu&t=&z=15&ie=UTF8&iwloc=&output=embed" width="100%" height="250" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+        <?php echo $mapHtml; ?>
       </div>
     </div>
 

@@ -144,9 +144,11 @@ if (isset($_GET['code'])) {
             $_SESSION['user_role'] = 'customer';
         }
 
-        // Redirect to profile or home
-        header("Location: my-profile.php");
-        exit;
+            // Redirect to home with welcome message
+            $welcomeName = $user ? $user['name'] : $name;
+            $_SESSION['login_success_msg'] = "Hey, Welcome back " . htmlspecialchars($welcomeName) . "! 👋";
+            header("Location: index.php");
+            exit;
 
     } else {
         die('Could not retrieve user information from Google.');

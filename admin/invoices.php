@@ -2,12 +2,17 @@
 // admin/invoices.php
 require_once __DIR__ . '/_auth.php';
 require_once __DIR__ . '/../includes/db.php';
-// include __DIR__ . '/header.php';
+require_once __DIR__ . '/../includes/invoice_number_helper.php';
 include __DIR__ . '/layout/header.php';
-
 
 // basic session ensure (header.php usually starts session, but be safe)
 if (session_status() === PHP_SESSION_NONE) session_start();
+
+try {
+    sync_all_invoice_numbers($pdo);
+} catch (Exception $e) {
+    error_log('Invoice sync error: ' . $e->getMessage());
+}
 
 // handle POST actions: mark cleared
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action'])) {
@@ -107,145 +112,154 @@ $flash_ok  = $_SESSION['flash_success'] ?? null; unset($_SESSION['flash_success'
 
 $page_title = 'Invoices';
 ?>
-<link rel="stylesheet" href="/assets/css/admin.css">
-<style>
-.page-wrap{max-width:1200px;margin:28px auto;padding:0 18px 60px;font-family:Inter,system-ui,Arial}
-.card{background:#fff;padding:16px;border-radius:12px;border:1px solid #eef2f7;box-shadow:0 8px 30px rgba(2,6,23,0.04)}
-.table{width:100%;border-collapse:collapse;font-size:14px}
-.table th,.table td{padding:12px 14px;border-bottom:1px solid #f1f5f9;text-align:left;vertical-align:middle}
-.table th{background:#fbfcfe;color:#475569;font-weight:700;font-size:13px}
-.badge {display:inline-block;padding:6px 10px;border-radius:999px;font-weight:700;font-size:13px}
-.badge.issued{background:#fffbeb;color:#92400e}
-.badge.cleared{background:#ecfdf5;color:#065f46}
-.small{font-size:13px;color:#64748b}
-.actions a, .actions button { margin-right:8px; text-decoration:none; font-weight:700; color:#0b76ff; background:transparent; border:0; cursor:pointer; }
-</style>
 
-<div class="page-wrap">
-  <div class="card" style="margin-bottom:12px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-      <div>
-        <h2 style="margin:0;font-size:20px;font-weight:800">Invoices</h2>
-        <div class="small">View, clear or print invoices.</div>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <a href="orders.php" class="btn ghost">Back to Orders</a>
-        <a href="invoice_create.php" class="btn primary">Create Invoice</a>
-      </div>
-    </div>
-  </div>
-
-  <?php if ($flash_err): ?>
-    <div class="card" style="margin-bottom:12px;border-left:4px solid #ef4444;color:#b91c1c;"><?= htmlspecialchars($flash_err) ?></div>
-  <?php endif; ?>
-  <?php if ($flash_ok): ?>
-    <div class="card" style="margin-bottom:12px;border-left:4px solid #10b981;color:#065f46;"><?= htmlspecialchars($flash_ok) ?></div>
-  <?php endif; ?>
-
-  <div class="card" style="margin-bottom:12px;">
-    <form class="filter-row" method="get" style="display:flex;gap:8px;align-items:center;">
-      <input type="search" name="q" value="<?= htmlspecialchars($q) ?>" placeholder="Search invoice, order or customer" class="input" style="padding:8px 10px;border-radius:8px;border:1px solid #e6eef7;background:#fbfdff">
-      <select name="status" class="input" style="padding:8px 10px;border-radius:8px;border:1px solid #e6eef7;background:#fbfdff">
-        <option value="">All statuses</option>
-        <option value="issued" <?= $status==='issued' ? 'selected' : '' ?>>Issued</option>
-        <option value="cleared" <?= $status==='cleared' ? 'selected' : '' ?>>Cleared</option>
-      </select>
-      <button class="btn primary" type="submit" style="padding:8px 12px;border-radius:8px;background:#0b76ff;color:#fff;font-weight:700;border:0">Filter</button>
-      <a href="invoices.php" class="btn ghost" style="padding:8px 12px;border-radius:8px;border:1px solid #e6eef7;">Reset</a>
-
-      <div style="margin-left:auto;" class="small">
-        Showing <?= $total === 0 ? 0 : ($offset + 1) ?> - <?= min($total, $offset + count($invoices)) ?> of <?= $total ?>
-      </div>
-    </form>
-  </div>
-
-  <div class="card">
-    <div style="overflow:auto;">
-      <table class="table">
-        <thead>
-          <tr>
-            <th style="width:56px">#</th>
-            <th>Invoice</th>
-            <th>Order</th>
-            <th>Customer</th>
-            <th>Amount</th>
-            <th>Status</th>
-            <th>Created</th>
-            <th style="text-align:right">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <?php if (empty($invoices)): ?>
-            <tr><td colspan="8" class="small" style="padding:40px 14px;text-align:center;color:#64748b">No invoices found.</td></tr>
-          <?php else: foreach ($invoices as $inv): ?>
-            <tr>
-              <td><?= (int)$inv['id'] ?></td>
-              <td>
-                <div style="font-weight:700;"><?= htmlspecialchars($inv['invoice_number']) ?></div>
-                <div class="small">#<?= (int)$inv['id'] ?></div>
-              </td>
-              <td>
-                <div style="font-weight:700;"><a href="order_view.php?id=<?= (int)$inv['order_id'] ?>"><?= htmlspecialchars($inv['order_number']) ?></a></div>
-                <div class="small">Order ID: <?= (int)$inv['order_id'] ?></div>
-              </td>
-              <td><?= htmlspecialchars($inv['customer_name']) ?></td>
-              <td style="font-weight:700;">₹ <?= number_format($inv['amount'], 2) ?></td>
-              <td>
-                <?php if ($inv['status'] === 'cleared'): ?>
-                  <span class="badge cleared">Cleared</span>
-                <?php else: ?>
-                  <span class="badge issued">Issued</span>
-                <?php endif; ?>
-              </td>
-              <td class="small"><?= htmlspecialchars(date('d M Y H:i', strtotime($inv['created_at']))) ?></td>
-              <td style="text-align:right" class="actions">
-                <a href="invoice_view.php?id=<?= (int)$inv['id'] ?>" class="btn" style="color:#0b76ff">View</a>
-                <a href="generate_invoice_pdf.php?id=<?= (int)$inv['id'] ?>" class="btn" style="color:#4b5563">PDF</a>
-
-                <?php if ($inv['status'] !== 'cleared'): ?>
-                <form method="post" style="display:inline-block" onsubmit="return confirm('Mark invoice as cleared?')">
-                  <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
-                  <input type="hidden" name="action" value="clear">
-                  <input type="hidden" name="id" value="<?= (int)$inv['id'] ?>">
-                  <button type="submit" style="color:#059669;background:none;border:0;font-weight:700;cursor:pointer">Clear</button>
-                </form>
-                <?php endif; ?>
-
-                <form method="post" style="display:inline-block" onsubmit="return confirm('Delete invoice?')">
-                  <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
-                  <input type="hidden" name="action" value="delete">
-                  <input type="hidden" name="id" value="<?= (int)$inv['id'] ?>">
-                  <button type="submit" style="color:#ef4444;background:none;border:0;font-weight:700;cursor:pointer">Delete</button>
-                </form>
-
-              </td>
-            </tr>
-          <?php endforeach; endif; ?>
-        </tbody>
-      </table>
+<div class="max-w-[1200px] mx-auto py-6 px-4">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-extrabold text-slate-800">Invoices</h1>
+            <p class="text-sm text-slate-500 mt-1">View, clear, and manage order invoices.</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="orders.php" class="px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-semibold hover:shadow-sm">Back to Orders</a>
+            <a href="invoice_create.php" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition shadow-sm font-semibold">
+                + Create Invoice
+            </a>
+        </div>
     </div>
 
-    <div class="pagination" style="display:flex;gap:6px;align-items:center;justify-content:flex-end;margin-top:12px">
-      <?php
-        $start = max(1, $page - 3);
-        $end = min($pages, $page + 3);
-        if ($page > 1) echo '<a class="page-link" href="'. preserve_qs(['page'=>$page-1]) .'">Prev</a>';
-        if ($start > 1) {
-          echo '<a class="page-link" href="'. preserve_qs(['page'=>1]) .'">1</a>';
-          if ($start > 2) echo '<span class="small">…</span>';
-        }
-        for ($p = $start; $p <= $end; $p++) {
-          $cls = $p === $page ? 'page-link active' : 'page-link';
-          echo '<a class="'. $cls .'" href="'. preserve_qs(['page'=>$p]) .'">'. $p .'</a>';
-        }
-        if ($end < $pages) {
-          if ($end < $pages - 1) echo '<span class="small">…</span>';
-          echo '<a class="page-link" href="'. preserve_qs(['page'=>$pages]) .'">'. $pages .'</a>';
-        }
-        if ($page < $pages) echo '<a class="page-link" href="'. preserve_qs(['page'=>$page+1]) .'">Next</a>';
-      ?>
+    <?php if ($flash_err): ?>
+        <div class="bg-red-50 text-red-800 p-4 rounded-lg mb-4 border border-red-200"><?= htmlspecialchars($flash_err) ?></div>
+    <?php endif; ?>
+    <?php if ($flash_ok): ?>
+        <div class="bg-green-50 text-green-800 p-4 rounded-lg mb-4 border border-green-200"><?= htmlspecialchars($flash_ok) ?></div>
+    <?php endif; ?>
+
+    <!-- Filters -->
+    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-6">
+        <form method="get" class="flex flex-wrap gap-4 items-end">
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Search</label>
+                <input type="search" name="q" value="<?= htmlspecialchars($q) ?>" class="w-full p-2 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-100 outline-none" placeholder="Invoice #, Order # or Customer...">
+            </div>
+            <div class="w-40">
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Status</label>
+                <select name="status" class="w-full p-2 border rounded-lg text-sm bg-gray-50 focus:bg-white">
+                    <option value="">All Statuses</option>
+                    <option value="issued" <?= $status === 'issued' ? 'selected' : '' ?>>Issued</option>
+                    <option value="cleared" <?= $status === 'cleared' ? 'selected' : '' ?>>Cleared</option>
+                </select>
+            </div>
+            <button type="submit" class="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-semibold hover:bg-slate-900 border border-transparent">
+                Filter
+            </button>
+            <a href="invoices.php" class="px-4 py-2 bg-white border border-gray-300 text-slate-700 rounded-lg text-sm font-semibold hover:bg-gray-50">
+                Reset
+            </a>
+        </form>
     </div>
-  </div>
+
+    <!-- Table -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm divide-y divide-gray-100">
+                <thead class="bg-gray-50 text-gray-500 font-semibold text-xs uppercase tracking-wider">
+                    <tr>
+                        <th class="p-4 w-16">ID</th>
+                        <th class="p-4">Invoice</th>
+                        <th class="p-4">Order</th>
+                        <th class="p-4">Customer</th>
+                        <th class="p-4">Amount</th>
+                        <th class="p-4">Status</th>
+                        <th class="p-4">Created</th>
+                        <th class="p-4 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    <?php if (empty($invoices)): ?>
+                        <tr><td colspan="8" class="p-8 text-center text-gray-500">No invoices found.</td></tr>
+                    <?php else: foreach ($invoices as $inv): ?>
+                        <tr class="hover:bg-gray-50 group">
+                            <td class="p-4 text-gray-400">#<?= (int)$inv['id'] ?></td>
+                            <td class="p-4">
+                                <div class="font-bold text-gray-900"><?= htmlspecialchars($inv['invoice_number']) ?></div>
+                            </td>
+                            <td class="p-4">
+                                <a href="order_view.php?id=<?= (int)$inv['order_id'] ?>" class="font-semibold text-indigo-600 hover:text-indigo-800"><?= htmlspecialchars($inv['order_number']) ?></a>
+                                <div class="text-xs text-gray-400">ID: <?= (int)$inv['order_id'] ?></div>
+                            </td>
+                            <td class="p-4 text-gray-700"><?= htmlspecialchars($inv['customer_name']) ?></td>
+                            <td class="p-4 font-bold text-slate-800">₹ <?= number_format($inv['amount'], 2) ?></td>
+                            <td class="p-4">
+                                <?php if ($inv['status'] === 'cleared'): ?>
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-800">Cleared</span>
+                                <?php else: ?>
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-yellow-100 text-yellow-800">Issued</span>
+                                <?php endif; ?>
+                            </td>
+                            <td class="p-4 text-gray-500 text-xs"><?= htmlspecialchars(date('d M Y, h:i A', strtotime($inv['created_at']))) ?></td>
+                            <td class="p-4 text-right">
+                                <div class="flex items-center justify-end gap-2">
+                                    <a href="invoice_view.php?id=<?= (int)$inv['id'] ?>" class="text-indigo-600 hover:text-indigo-900 font-semibold text-xs bg-indigo-50 px-2 py-1 rounded">View</a>
+                                    <a href="generate_invoice_pdf.php?id=<?= (int)$inv['id'] ?>" class="text-gray-600 hover:text-gray-900 font-semibold text-xs bg-gray-100 px-2 py-1 rounded">PDF</a>
+                                    
+                                    <?php if ($inv['status'] !== 'cleared'): ?>
+                                    <form method="post" class="inline-block" onsubmit="return confirm('Mark invoice as cleared?')">
+                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
+                                        <input type="hidden" name="action" value="clear">
+                                        <input type="hidden" name="id" value="<?= (int)$inv['id'] ?>">
+                                        <button type="submit" class="text-green-600 hover:text-green-800 font-semibold text-xs bg-green-50 px-2 py-1 rounded">Clear</button>
+                                    </form>
+                                    <?php endif; ?>
+
+                                    <form method="post" class="inline-block" onsubmit="return confirm('Delete invoice?')">
+                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
+                                        <input type="hidden" name="action" value="delete">
+                                        <input type="hidden" name="id" value="<?= (int)$inv['id'] ?>">
+                                        <button type="submit" class="text-red-600 hover:text-red-800 font-semibold text-xs bg-red-50 px-2 py-1 rounded">Del</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    <?php endforeach; endif; ?>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <?php if ($pages > 1): ?>
+        <div class="bg-gray-50 px-4 py-3 border-t border-gray-200 flex items-center justify-between sm:px-6">
+            <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                <div>
+                   <p class="text-sm text-gray-700">
+                      Showing <span class="font-medium"><?= $total === 0 ? 0 : ($offset + 1) ?></span> to <span class="font-medium"><?= min($total, $offset + count($invoices)) ?></span> of <span class="font-medium"><?= $total ?></span> results
+                   </p>
+                </div>
+                <div>
+                    <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                    <?php
+                        $start = max(1, $page - 2);
+                        $end = min($pages, $page + 2);
+                        
+                        if ($page > 1) {
+                            echo '<a href="'.preserve_qs(['page'=>$page-1]).'" class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">Prev</a>';
+                        }
+                        
+                        for ($p = $start; $p <= $end; $p++) {
+                            $activeClass = ($p === $page) ? 'z-10 bg-indigo-50 border-indigo-500 text-indigo-600' : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50';
+                            echo '<a href="'.preserve_qs(['page'=>$p]).'" class="relative inline-flex items-center px-4 py-2 border text-sm font-medium '.$activeClass.'">'.$p.'</a>';
+                        }
+                        
+                        if ($page < $pages) {
+                            echo '<a href="'.preserve_qs(['page'=>$page+1]).'" class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">Next</a>';
+                        }
+                    ?>
+                    </nav>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+    </div>
 </div>
 
 <?php include __DIR__ . '/layout/footer.php'; ?>

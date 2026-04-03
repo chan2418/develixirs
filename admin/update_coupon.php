@@ -22,6 +22,7 @@ try {
     $offerType = $_POST['offer_type'];
     $usageLimitPerUser = $_POST['usage_limit_per_user'];
     $canBeClubbed = isset($_POST['can_be_clubbed']) ? 1 : 0;
+    $showOnMarquee = isset($_POST['show_on_marquee']) ? 1 : 0;
     $startDate = $_POST['start_date'];
     $endDate = $_POST['end_date'];
     $status = isset($_POST['status']) ? 'active' : 'inactive';
@@ -57,7 +58,8 @@ try {
             can_be_clubbed = :can_be_clubbed,
             start_date = :start_date,
             end_date = :end_date,
-            status = :status
+            status = :status,
+            show_on_marquee = :show_on_marquee
         WHERE id = :id
     ");
     
@@ -74,7 +76,8 @@ try {
         ':can_be_clubbed' => $canBeClubbed,
         ':start_date' => $startDate,
         ':end_date' => $endDate,
-        ':status' => $status
+        ':status' => $status,
+        ':show_on_marquee' => $showOnMarquee
     ]);
     
     // Delete existing product associations

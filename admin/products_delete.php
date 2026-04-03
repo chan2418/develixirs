@@ -44,13 +44,36 @@ try {
         }
     }
 
-    // delete product row
-    $stmt = $pdo->prepare("DELETE FROM products WHERE id = ?");
-    $stmt->execute([$id]);
+    // NUCLEAR OPTION: Disable keys to force delete
+    $pdo->exec("SET FOREIGN_KEY_CHECKS=0");
+
+    try {
+        // 1. Delete filtering values
+        $stmt = $pdo->prepare("DELETE FROM product_filter_values WHERE product_id = ?");
+        $stmt->execute([$id]);
+
+        // 2. Delete variants
+        $stmt = $pdo->prepare("DELETE FROM product_variants WHERE product_id = ?");
+        $stmt->execute([$id]);
+        
+        // 3. Delete order items (CAUTION) - unlink them to prevent order history loss
+        $stmt = $pdo->prepare("UPDATE order_items SET product_id = NULL WHERE product_id = ?");
+        $stmt->execute([$id]);
+
+        // 4. Finally delete product
+        $stmt = $pdo->prepare("DELETE FROM products WHERE id = ?");
+        $stmt->execute([$id]);
+        
+        $pdo->exec("SET FOREIGN_KEY_CHECKS=1");
+        
+    } catch (Exception $e) {
+        $pdo->exec("SET FOREIGN_KEY_CHECKS=1");
+        throw $e;
+    }
 
     echo json_encode(['ok'=>true]); exit;
 
 } catch (Exception $e) {
     @file_put_contents(__DIR__ . '/../storage/delete_product_error.log', date('c') . " - {$e->getMessage()}\n", FILE_APPEND);
-    echo json_encode(['ok'=>false,'error'=>'Server error (see log)']); exit;
+    echo json_encode(['ok'=>false,'error'=>'Server error: ' . $e->getMessage()]); exit;
 }

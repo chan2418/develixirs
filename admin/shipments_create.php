@@ -26,6 +26,21 @@ try {
 $selected_order_id = isset($_GET['order_id']) ? (int)$_GET['order_id'] : 0;
 ?>
 
+<!-- Select2 CSS -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<style>
+    /* Select2 Tailwind Match */
+    .select2-container .select2-selection--single {
+        height: 42px;
+        border-color: #e5e7eb; /* gray-200 */
+        border-radius: 0.5rem; /* rounded-lg */
+        padding-top: 6px;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__arrow {
+        top: 8px;
+    }
+</style>
+
 <div class="max-w-[800px] mx-auto">
     <div class="flex items-center justify-between mb-6">
         <h1 class="text-2xl font-bold text-slate-800">Create New Shipment</h1>
@@ -39,7 +54,7 @@ $selected_order_id = isset($_GET['order_id']) ? (int)$_GET['order_id'] : 0;
             <!-- Order Selection -->
             <div>
                 <label class="block text-sm font-medium text-slate-700 mb-1">Select Order <span class="text-red-500">*</span></label>
-                <select name="order_id" required class="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                <select name="order_id" id="orderSelect" required class="w-full">
                     <option value="">-- Choose an Order --</option>
                     <?php foreach ($orders as $o): ?>
                         <option value="<?php echo $o['id']; ?>" <?php if ($selected_order_id === $o['id']) echo 'selected'; ?>>
@@ -50,7 +65,7 @@ $selected_order_id = isset($_GET['order_id']) ? (int)$_GET['order_id'] : 0;
                 <p class="text-xs text-slate-500 mt-1">Only active orders (not cancelled/delivered) are shown.</p>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <!-- Carrier -->
                 <div>
                     <label class="block text-sm font-medium text-slate-700 mb-1">Carrier</label>
@@ -61,6 +76,12 @@ $selected_order_id = isset($_GET['order_id']) ? (int)$_GET['order_id'] : 0;
                 <div>
                     <label class="block text-sm font-medium text-slate-700 mb-1">Tracking Number</label>
                     <input type="text" name="tracking_number" placeholder="e.g. 1234567890" class="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+                </div>
+
+                <!-- Shipment Date -->
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Shipment Date</label>
+                    <input type="datetime-local" name="shipment_date" class="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
                 </div>
             </div>
 
@@ -113,5 +134,18 @@ $selected_order_id = isset($_GET['order_id']) ? (int)$_GET['order_id'] : 0;
         </form>
     </div>
 </div>
+
+<!-- Scripts for Select2 -->
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+    $(document).ready(function() {
+        $('#orderSelect').select2({
+            placeholder: "-- Choose an Order --",
+            allowClear: true,
+            width: '100%' // Fix responsive width
+        });
+    });
+</script>
 
 <?php include __DIR__ . '/layout/footer.php'; ?>

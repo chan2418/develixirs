@@ -1,7 +1,7 @@
 <?php
 // admin/categories.php (NEW UI - DEVELIXIR ADMIN)
 
-require_once __DIR__ . '/_auth.php';
+require_once __DIR__ . '/_auth.php'; 
 require_once __DIR__ . '/../includes/db.php';
 
 if (session_status() === PHP_SESSION_NONE) session_start();
@@ -109,13 +109,13 @@ function render_options($nodes,$level=0,$selected=null,$exclude=null){
     <!-- HEADER -->
     <div class="flex items-start justify-between mb-6">
         <div>
-            <h2 class="text-2xl font-extrabold text-slate-800">Categories</h2>
+            <h2 class="text-2xl font-extrabold text-slate-800">All Categories</h2>
             <p class="text-sm text-slate-500">Manage category structure and nesting.</p>
         </div>
 
         <div class="flex gap-3">
-            <a href="products.php" class="px-4 py-2 rounded-lg border border-gray-300 bg-white">← Back to Products</a>
-            <a href="add_product.php" class="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold">Add Product</a>
+            <a href="products.php" class="px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50">← Back to Products</a>
+            <a href="add_category.php" class="px-4 py-2 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700 shadow shadow-green-200">+ Add Category</a>
         </div>
     </div>
 
@@ -137,141 +137,106 @@ function render_options($nodes,$level=0,$selected=null,$exclude=null){
     <?php endif; ?>
 
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <!-- CATEGORY TABLE (Full Width) -->
+    <div class="bg-white border border-gray-200 p-6 rounded-xl shadow-sm">
 
-        <!-- FORM CARD -->
-        <div class="bg-white border border-gray-200 p-6 rounded-xl shadow-sm">
-
-            <h3 class="text-lg font-bold mb-1"><?= $edit ? "Edit Category" : "Add Category" ?></h3>
-            <p class="text-sm text-slate-500 mb-4"><?= $edit ? "Modify this category" : "Create a new category" ?></p>
-
-            <!-- IMPORTANT: enctype for file upload -->
-            <form action="save_category.php" method="post" enctype="multipart/form-data">
-    <input type="hidden" name="csrf_token" value="<?php
-        if (empty($_SESSION['csrf_token'])) {
-            $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
-        }
-        echo $_SESSION['csrf_token'];
-    ?>">
-
-    <?php if($edit): ?>
-        <input type="hidden" name="id" value="<?= (int)$edit['id'] ?>">
-    <?php endif; ?>
-
-    <!-- Title -->
-    <label class="block font-semibold mb-1">Title</label>
-    <input name="title" class="w-full p-2 rounded-lg border border-gray-300 mb-4"
-           value="<?= old_val('title') ?>" required>
-
-    <!-- Parent -->
-    <label class="block font-semibold mb-1">Parent Category</label>
-    <select name="parent_id" class="w-full p-2 rounded-lg border border-gray-300 mb-4">
-        <option value="">-- None --</option>
-        <?= render_options($roots,0, $edit['parent_id'] ?? null, $edit['id'] ?? null) ?>
-    </select>
-
-    <!-- Image -->
-    <label class="block font-semibold mb-1">Category Image</label>
-    <input type="file" name="image" class="w-full mb-4" accept="image/*">
-
-    <!-- Description -->
-    <label class="block font-semibold mb-1">Description</label>
-    <textarea name="description" rows="4"
-              class="w-full p-2 rounded-lg border border-gray-300"><?= old_val('description') ?></textarea>
-
-    <div class="flex justify-end gap-3 mt-4">
-        <?php if($edit): ?>
-            <a href="categories.php" class="px-4 py-2 rounded-lg border">Cancel</a>
-        <?php endif; ?>
-        <button class="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold">
-            <?= $edit ? "Update" : "Add Category" ?>
-        </button>
-    </div>
-</form>
-        </div>
-
-        <!-- CATEGORY TABLE -->
-        <div class="bg-white border border-gray-200 p-6 rounded-xl shadow-sm">
-
-            <div class="flex justify-between mb-4">
-                <div>
-                    <h3 class="text-lg font-bold">All Categories</h3>
-                    <p class="text-sm text-slate-500">Nested (children are indented)</p>
-                </div>
-
-                <input id="catSearch" type="search"
-                       placeholder="Search..."
-                       class="p-2 border border-gray-300 rounded-lg w-48" />
+        <div class="flex justify-between mb-4">
+            <div>
+                <h3 class="text-lg font-bold">Category Hierarchy</h3>
+                <p class="text-sm text-slate-500">Nested view (children are indented)</p>
             </div>
 
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead class="bg-gray-50 border-b">
-                        <tr>
-                            <th class="p-3 text-left">Image</th> <!-- NEW -->
-                            <th class="p-3 text-left">Title</th>
-                            <th class="p-3 text-left">Slug</th>
-                            <th class="p-3 text-left">Parent</th>
-                            <th class="p-3 text-left">Created</th>
-                            <th class="p-3 text-left">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="catBody">
-                        <?php
-                        $map = []; foreach ($list as $c) $map[$c['id']]=$c['title'];
+            <input id="catSearch" type="search"
+                   placeholder="Search..."
+                   class="p-2 border border-gray-300 rounded-lg w-64 focus:ring-2 focus:ring-indigo-200 outline-none" />
+        </div>
 
-                        $renderRow = function($node,$level=0) use (&$renderRow,$map){
-                            $indent = str_repeat("&nbsp;&nbsp;&nbsp;",$level);
-                            $parent = $node['parent_id'] ? ($map[$node['parent_id']] ?? '-') : '-';
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-50 border-b">
+                    <tr>
+                        <th class="p-3 text-left w-16">Image</th>
+                        <th class="p-3 text-left">Title</th>
+                        <th class="p-3 text-left">Slug</th>
+                        <th class="p-3 text-left">Parent</th>
+                        <th class="p-3 text-left">Created</th>
+                        <th class="p-3 text-left w-32">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="catBody">
+                    <?php
+                    $map = []; foreach ($list as $c) $map[$c['id']]=$c['title'];
 
-                            // path for category image
-                            $imgSrc = '';
-                            if (!empty($node['image'])) {
-                                $imgSrc = '/assets/uploads/categories/' . ltrim($node['image'], '/');
+                    $renderRow = function($node,$level=0) use (&$renderRow,$map){
+                        $indent = str_repeat("&nbsp;&nbsp;&nbsp;&nbsp;",$level);
+                        $parent = $node['parent_id'] ? ($map[$node['parent_id']] ?? '-') : '-';
+
+                        // path for category image
+                        $imgSrc = '';
+                        if (!empty($node['image'])) {
+                            $imgVal = trim($node['image']);
+                            // Full URL
+                            if (preg_match('#^https?://#i', $imgVal)) {
+                                $imgSrc = $imgVal;
                             }
-
-                            echo "<tr class='border-b' data-title='".strtolower($node['title'])."'>";
-
-                            // IMAGE CELL
-                            echo "<td class='p-3'>";
-                            if ($imgSrc) {
-                                echo "<img src='".htmlspecialchars($imgSrc, ENT_QUOTES, 'UTF-8')."' alt='' class='w-10 h-10 object-cover rounded border border-gray-200'>";
-                            } else {
-                                echo "<span class='text-xs text-slate-400'>—</span>";
+                            // Absolute path starting with /
+                            elseif (strpos($imgVal, '/') === 0) {
+                                $imgSrc = $imgVal;
                             }
-                            echo "</td>";
+                            // Path starting with "assets/" (from media library)
+                            elseif (strpos($imgVal, 'assets/') === 0) {
+                                $imgSrc = '/' . $imgVal;
+                            }
+                            // Just filename
+                            else {
+                                $imgSrc = '/assets/uploads/categories/' . ltrim($imgVal, '/');
+                            }
+                        }
 
-                            // TITLE CELL
-                            echo "<td class='p-3'>{$indent}<strong>".htmlspecialchars($node['title'])."</strong></td>";
-                            echo "<td class='p-3'>".htmlspecialchars($node['slug'])."</td>";
-                            echo "<td class='p-3'>".htmlspecialchars($parent)."</td>";
-                            echo "<td class='p-3'>".date('d M Y',strtotime($node['created_at']))."</td>";
+                        // tree lines visual (optional, simple indent for now)
+                        $treeIcon = $level > 0 ? '<span class="text-gray-300 mr-1">└──</span>' : '';
 
-                            echo "<td class='p-3'>
-                                    <a href='categories.php?edit={$node['id']}' class='text-indigo-600 font-semibold'>Edit</a>
+                        echo "<tr class='border-b hover:bg-gray-50 transition' data-title='".strtolower($node['title'])."'>";
+
+                        // IMAGE CELL
+                        echo "<td class='p-3'>";
+                        if ($imgSrc) {
+                            echo "<img src='".htmlspecialchars($imgSrc, ENT_QUOTES, 'UTF-8')."' alt='' class='w-10 h-10 object-contain rounded border border-gray-200 bg-white'>";
+                        } else {
+                            echo "<span class='text-xs text-slate-400'>—</span>";
+                        }
+                        echo "</td>";
+
+                        // TITLE CELL
+                        echo "<td class='p-3'>{$indent}{$treeIcon}<strong>".htmlspecialchars($node['title'])."</strong></td>";
+                        echo "<td class='p-3 text-gray-500'>".htmlspecialchars($node['slug'])."</td>";
+                        echo "<td class='p-3 text-gray-500'>".htmlspecialchars($parent)."</td>";
+                        echo "<td class='p-3 text-gray-500'>".date('d M Y',strtotime($node['created_at']))."</td>";
+
+                        echo "<td class='p-3'>
+                                <div class='flex gap-3'>
+                                    <a href='add_category.php?edit={$node['id']}' class='text-indigo-600 font-semibold hover:text-indigo-800 transition'>Edit</a>
                                     <a href='delete_category.php?id={$node['id']}'
-                                       onclick=\"return confirm('Delete category?');\"
-                                       class='ml-3 text-red-600 font-semibold'>Delete</a>
-                                  </td>";
-                            echo "</tr>";
+                                       onclick=\"return confirm('Delete category? This might affect products.');\"
+                                       class='text-red-600 font-semibold hover:text-red-800 transition'>Delete</a>
+                                </div>
+                              </td>";
+                        echo "</tr>";
 
-                            if(!empty($node['children'])){
-                                foreach($node['children'] as $ch){
-                                    $renderRow($ch,$level+1);
-                                }
+                        if(!empty($node['children'])){
+                            foreach($node['children'] as $ch){
+                                $renderRow($ch,$level+1);
                             }
-                        };
+                        }
+                    };
 
-                        foreach($roots as $r) $renderRow($r);
-                        ?>
-                    </tbody>
-                </table>
-            </div>
+                    foreach($roots as $r) $renderRow($r);
+                    ?>
+                </tbody>
+            </table>
         </div>
-
     </div>
 </div>
-
 
 <script>
 // LIVE SEARCH
@@ -280,6 +245,8 @@ input.addEventListener("input", () => {
     const q = input.value.toLowerCase();
     document.querySelectorAll("#catBody tr").forEach(row => {
         const t = row.dataset.title;
+        // Simple search: show if title matches. 
+        // Note: nesting structure visual might look weird if filtering, but acceptable for admin list.
         row.style.display = !q || t.includes(q) ? "" : "none";
     });
 });

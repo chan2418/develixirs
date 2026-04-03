@@ -2,9 +2,9 @@
 // Hostinger Production Database Configuration
 
 define('DB_HOST', 'localhost');
-define('DB_NAME', 'u295126515_develixirs');
-define('DB_USER', 'u295126515_develixirsuser');
-define('DB_PASS', '?Je1fu#9');
+define('DB_NAME', 'u295126515_develixirs_26');
+define('DB_USER', 'u295126515_admin');
+define('DB_PASS', 'n@C7SoV4B|');
 
 try {
     $pdo = new PDO(

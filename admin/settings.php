@@ -10,13 +10,23 @@ include __DIR__ . '/layout/header.php';
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $companyGstin = strtoupper(preg_replace('/\s+/', '', trim((string)($_POST['company_gstin'] ?? ''))));
+    $companyCin = strtoupper(preg_replace('/\s+/', '', trim((string)($_POST['company_cin'] ?? ''))));
+    $companyPan = strtoupper(preg_replace('/\s+/', '', trim((string)($_POST['company_pan'] ?? ''))));
+
     $settings = [
         'company_name' => $_POST['company_name'] ?? '',
         'company_address' => $_POST['company_address'] ?? '',
         'company_email' => $_POST['company_email'] ?? '',
         'company_phone' => $_POST['company_phone'] ?? '',
+        'company_gstin' => $companyGstin,
+        'company_cin' => $companyCin,
+        'company_pan' => $companyPan,
         'tax_rate' => $_POST['tax_rate'] ?? '18',
     ];
+
+
+
 
     try {
         $stmt = $pdo->prepare("INSERT INTO site_settings (setting_key, setting_value, updated_at) VALUES (?, ?, NOW()) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = NOW()");
@@ -50,7 +60,11 @@ $companyName = $currentSettings['company_name'] ?? 'DEVELIXIR';
 $companyAddress = $currentSettings['company_address'] ?? "123 Herbal Street, Green City\nKerala, India - 670001";
 $companyEmail = $currentSettings['company_email'] ?? 'support@develixir.com';
 $companyPhone = $currentSettings['company_phone'] ?? '';
+$companyGstin = $currentSettings['company_gstin'] ?? '';
+$companyCin = $currentSettings['company_cin'] ?? '';
+$companyPan = $currentSettings['company_pan'] ?? '';
 $taxRate = $currentSettings['tax_rate'] ?? '18';
+
 
 ?>
 
@@ -74,7 +88,7 @@ $taxRate = $currentSettings['tax_rate'] ?? '18';
         </div>
     <?php endif; ?>
 
-    <form method="post" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+    <form method="post" enctype="multipart/form-data" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div class="p-6 space-y-6">
             
             <!-- Company Details -->
@@ -102,19 +116,83 @@ $taxRate = $currentSettings['tax_rate'] ?? '18';
                             <input type="text" name="company_phone" value="<?= htmlspecialchars($companyPhone) ?>" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
                         </div>
                     </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Company GSTIN</label>
+                            <input
+                                type="text"
+                                name="company_gstin"
+                                maxlength="15"
+                                value="<?= htmlspecialchars($companyGstin) ?>"
+                                class="w-full px-3 py-2 uppercase border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                placeholder="Ex: 33AAKCD4902D1Z3"
+                            >
+                            <p class="text-xs text-slate-500 mt-1">This GSTIN is shown in the supplier section of invoice PDF.</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Company CIN</label>
+                            <input
+                                type="text"
+                                name="company_cin"
+                                maxlength="21"
+                                value="<?= htmlspecialchars($companyCin) ?>"
+                                class="w-full px-3 py-2 uppercase border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                placeholder="Ex: L12345TN2020PLC123456"
+                            >
+                            <p class="text-xs text-slate-500 mt-1">This CIN is shown in the supplier section of invoice PDF.</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Company PAN</label>
+                            <input
+                                type="text"
+                                name="company_pan"
+                                maxlength="10"
+                                value="<?= htmlspecialchars($companyPan) ?>"
+                                class="w-full px-3 py-2 uppercase border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                placeholder="Ex: AAKCD4902D"
+                            >
+                            <p class="text-xs text-slate-500 mt-1">This PAN is shown in invoice PDF.</p>
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <hr class="border-gray-100">
 
-            <!-- Financial Settings -->
+            <!-- Global Settings -->
             <div>
-                <h3 class="text-lg font-semibold text-slate-800 mb-4">Financial Settings</h3>
+                <h3 class="text-lg font-semibold text-slate-800 mb-4">Global Configuration</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1">Default Tax Rate (%)</label>
                         <input type="number" step="0.01" name="tax_rate" value="<?= htmlspecialchars($taxRate) ?>" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
                     </div>
+                </div>
+            </div>
+
+            <hr class="border-gray-100">
+
+
+            <!-- Map Settings -->
+            <div>
+                <h3 class="text-lg font-semibold text-slate-800 mb-4">Contact Map</h3>
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                     <p class="text-sm text-blue-800 mb-3">
+                        <i class="fa-solid fa-info-circle mr-1"></i> 
+                        The map below is automatically generated based on your <strong>Company Address</strong> above.
+                     </p>
+                     
+                     <?php
+                        // Preview logic
+                        $addrClean = trim(preg_replace('/\s+/', ' ', strip_tags($companyAddress)));
+                        $previewUrl = "https://maps.google.com/maps?q=" . urlencode($addrClean) . "&t=&z=15&ie=UTF8&iwloc=&output=embed";
+                     ?>
+                     <div class="rounded-lg overflow-hidden border border-blue-200">
+                        <iframe src="<?php echo $previewUrl; ?>" width="100%" height="250" style="border:0;" allowfullscreen="" loading="lazy"></iframe>
+                     </div>
                 </div>
             </div>
 

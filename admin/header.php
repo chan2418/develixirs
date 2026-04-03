@@ -69,6 +69,81 @@ $admin_name = $_SESSION['admin_name'] ?? 'Admin';
       color:#0066cc;
     }
 
+    /* Dropdown for Nav */
+    .nav-item-dropdown {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+    .nav-dropdown-menu {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      background: #fff;
+      border: 1px solid #eef2f7;
+      box-shadow: 0 10px 30px rgba(2,6,23,0.08);
+      border-radius: 8px;
+      min-width: 180px;
+      display: none;
+      z-index: 2000;
+      flex-direction: column;
+      padding: 6px 0;
+      margin-top: 4px;
+    }
+    .nav-item-dropdown:hover .nav-dropdown-menu {
+      display: flex;
+    }
+    .nav-dropdown-menu a {
+      color: #333;
+      padding: 8px 16px;
+      font-size: 14px;
+      font-weight: 500;
+      text-decoration: none;
+      display: block;
+      border-radius: 0;
+    }
+    .nav-dropdown-menu a:hover {
+      background: #f6f8fb;
+      color: #0066cc;
+    }
+
+    /* Notification Icon */
+    .notif-btn {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      color: #64748b;
+      transition: background 0.2s;
+    }
+    .notif-btn:hover {
+      background: #f1f5f9;
+      color: #0f172a;
+    }
+    .notif-badge {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      background: #ef4444;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      min-width: 16px;
+      height: 16px;
+      border-radius: 99px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid #fff;
+      display: none; /* hidden if 0 */
+    }
+
     /* Right: profile */
     .nav-right {
       display:flex;
@@ -150,7 +225,18 @@ $admin_name = $_SESSION['admin_name'] ?? 'Admin';
       <nav class="nav-menu" id="navMenu">
         <a href="/admin/dashboard.php" class="<?php echo (basename($_SERVER['PHP_SELF'])=='dashboard.php')?'active':''; ?>">Dashboard</a>
         <a href="/admin/products.php" class="<?php echo (basename($_SERVER['PHP_SELF'])=='products.php')?'active':''; ?>">Products</a>
-        <a href="/admin/orders.php" class="<?php echo (basename($_SERVER['PHP_SELF'])=='orders.php')?'active':''; ?>">Orders</a>
+        
+        <!-- Orders Dropdown -->
+        <div class="nav-item-dropdown">
+          <a href="/admin/orders.php" class="<?php echo (basename($_SERVER['PHP_SELF'])=='orders.php' || basename($_SERVER['PHP_SELF'])=='order_returns.php')?'active':''; ?>" style="cursor: default;">
+            Orders <i class="fa-solid fa-chevron-down" style="font-size:10px; margin-left:4px; opacity:0.5;"></i>
+          </a>
+          <div class="nav-dropdown-menu">
+            <a href="/admin/orders.php">All Orders</a>
+            <a href="/admin/order_returns.php">Order Returns</a>
+          </div>
+        </div>
+
         <a href="/admin/categories.php" class="<?php echo (basename($_SERVER['PHP_SELF'])=='categories.php')?'active':''; ?>">Categories</a>
         <a href="/admin/users.php" class="<?php echo (basename($_SERVER['PHP_SELF'])=='users.php')?'active':''; ?>">Users</a>
         <a href="/admin/coupons.php" class="<?php echo (basename($_SERVER['PHP_SELF'])=='coupons.php')?'active':''; ?>">Offers & Coupons</a>
@@ -159,6 +245,12 @@ $admin_name = $_SESSION['admin_name'] ?? 'Admin';
 
     <!-- RIGHT: Profile + burger -->
     <div class="nav-right">
+      <!-- Notification Icon -->
+      <a href="/admin/notification.php" class="notif-btn" title="Notifications">
+        <i class="fa-regular fa-bell" style="font-size:18px;"></i>
+        <span class="notif-badge" id="notifBadge"></span>
+      </a>
+
       <!-- burger for mobile -->
       <button class="nav-burger" id="navBurger" aria-label="Toggle menu">
         <svg width="20" height="14" viewBox="0 0 20 14"><rect width="20" height="2" rx="1" fill="#374151"/><rect y="6" width="20" height="2" rx="1" fill="#374151"/><rect y="12" width="20" height="2" rx="1" fill="#374151"/></svg>
@@ -184,10 +276,12 @@ $admin_name = $_SESSION['admin_name'] ?? 'Admin';
   <nav class="mobile-menu" id="mobileMenu">
     <a href="/admin/dashboard.php">Dashboard</a>
     <a href="/admin/products.php">Products</a>
-    <a href="/admin/orders.php">Orders</a>
+    <a href="/admin/orders.php">All Orders</a>
+    <a href="/admin/order_returns.php">Order Returns</a>
     <a href="/admin/categories.php">Categories</a>
     <a href="/admin/users.php">Users</a>
     <a href="/admin/coupons.php">Offers & Coupons</a>
+    <a href="/admin/notification.php">Notifications</a>
     <a href="/admin/profile.php">Profile</a>
     <a href="/admin/logout.php">Logout</a>
   </nav>
@@ -226,5 +320,30 @@ $admin_name = $_SESSION['admin_name'] ?? 'Admin';
         mobileMenu.classList.remove('show');
       }
     });
+
+    // Check notifications periodically
+    function checkNotifications() {
+        const badge = document.getElementById('notifBadge');
+        if(!badge) return;
+        
+        fetch('/admin/notifications_api.php')
+            .then(r => r.json())
+            .then(res => {
+                if(res && typeof res.unread !== 'undefined') {
+                    if(res.unread > 0) {
+                        badge.style.display = 'flex';
+                        badge.textContent = res.unread > 9 ? '9+' : res.unread;
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                }
+            })
+            .catch(e => console.error(e));
+    }
+    
+    // Check initially
+    checkNotifications();
+    // Check every 30s
+    setInterval(checkNotifications, 30000);
   })();
 </script>

@@ -1,4 +1,5 @@
 <?php
+ob_start();
 // admin/download_label.php
 // Streams a shipment label PDF for download (no layout/header/footer).
 

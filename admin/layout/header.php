@@ -20,6 +20,8 @@ $avatar_src = 'https://ui-avatars.com/api/?name=' . urlencode($adminName) . '&ba
 
   <!-- Tailwind CDN (development). For production compile Tailwind and serve static CSS. -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 
   <style>
     /* Base */
@@ -77,7 +79,7 @@ $avatar_src = 'https://ui-avatars.com/api/?name=' . urlencode($adminName) . '&ba
   <?php include __DIR__ . '/sidebar.php'; ?>
 
   <!-- Main column -->
-  <div class="flex-1 flex flex-col">
+  <div class="flex-1 flex flex-col min-w-0">
 
     <!-- Top header -->
     <header class="w-full bg-white border-b border-gray-200">

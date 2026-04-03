@@ -22,7 +22,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['user_email'] = $user['email'];
             $_SESSION['user_role'] = $user['role'];
 
-            header("Location: my-profile.php");
+            // Welcome message
+            $_SESSION['login_success_msg'] = "Hey, Welcome back " . htmlspecialchars($user['name']) . "! 👋";
+
+            header("Location: index.php");
             exit;
         } else {
             header("Location: verify-otp.php?email=" . urlencode($email) . "&error=Invalid OTP");

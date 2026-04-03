@@ -10,101 +10,360 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/subscription_plan_helper.php';
 
-// ---- 1. Get product ID from URL ----
-$productId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+// ---- 1. PREVIEW MODE CHECK ----
+$isPreview = false;
+$productId = 0; // Initialize for both modes
+$previewToken = isset($_GET['preview_token']) ? htmlspecialchars(trim($_GET['preview_token']), ENT_QUOTES, 'UTF-8') : null;
 
-if ($productId <= 0) {
-    // invalid id → redirect to shop
-    header('Location: product.php');
-    exit;
+if ($previewToken && !empty($_SESSION['previews'][$previewToken])) {
+    // PREVIEW MODE ACTIVE
+    $isPreview = true;
+    $previewData = $_SESSION['previews'][$previewToken];
+    
+    // Mock $product array matching DB structure
+    $product = [
+        'id' => 0, // Placeholder ID
+        'name' => $previewData['title'] ?? 'Preview Product',
+        'price' => $previewData['price'] ?? 0,
+        'compare_price' => $previewData['compare_price'] ?? 0,
+        'discount_percent' => $previewData['discount_percent'] ?? 0,
+        'stock' => $previewData['stock'] ?? 10,
+        'sku' => $previewData['sku'] ?? '',
+        'short_description' => $previewData['short_desc'] ?? '',
+        'description' => $previewData['description'] ?? '',
+        'ingredients' => $previewData['ingredients'] ?? '',
+        'how_to_use' => $previewData['how_to_use'] ?? '',
+        'seo_keywords' => $previewData['seo_keywords'] ?? '',
+        'cat_name' => 'Preview Category', // Could be fetched if needed
+        'category_id' => $previewData['category_id'] ?? 0,
+        'label_id' => $previewData['label_id'] ?? 0,
+        // Images handled specially
+        'images' => json_encode($previewData['preview_images'] ?? [])
+    ];
+
+    // Handle Label mocking if label_id is present
+    if (!empty($previewData['label_id'])) {
+         try {
+            $stmtL = $pdo->prepare("SELECT name, color, text_color FROM product_labels WHERE id = ?");
+            $stmtL->execute([$previewData['label_id']]);
+            $lbl = $stmtL->fetch(PDO::FETCH_ASSOC);
+            if ($lbl) {
+                $product['label_name'] = $lbl['name'];
+                $product['label_color'] = $lbl['color'];
+                $product['label_text_color'] = $lbl['text_color'];
+            }
+         } catch(Exception $e){}
+    }
+
+} else {
+    // ---- STANDARD PRODUCTION MODE ----
+    
+    // Get product ID from URL
+    $productId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+
+    if ($productId <= 0) {
+        // invalid id → redirect to shop
+        header('Location: product.php');
+        exit;
+    }
+
+    // ---- 2. Fetch product + category from DB ----
+    try {
+        // Check if product_labels table exists
+        $hasLabelsTable = false;
+        try {
+            $pdo->query("SELECT 1 FROM product_labels LIMIT 0");
+            $hasLabelsTable = true;
+        } catch (PDOException $e) {
+            $hasLabelsTable = false;
+        }
+        
+        // Build SQL with or without labels
+        if ($hasLabelsTable) {
+            $stmt = $pdo->prepare("
+                SELECT 
+                    p.*,
+                    c.id   AS category_id,
+                    c.name AS cat_name,
+                    pl.name AS label_name,
+                    pl.color AS label_color,
+                    pl.text_color AS label_text_color
+                FROM products p
+                LEFT JOIN categories c ON c.id = p.category_id
+                LEFT JOIN product_labels pl ON pl.id = p.label_id AND pl.is_active = 1
+                WHERE p.id = :id
+                  AND p.is_active = 1
+                LIMIT 1
+            ");
+        } else {
+            $stmt = $pdo->prepare("
+                SELECT 
+                    p.*,
+                    c.id   AS category_id,
+                    c.name AS cat_name
+                FROM products p
+                LEFT JOIN categories c ON c.id = p.category_id
+                WHERE p.id = :id
+                  AND p.is_active = 1
+                LIMIT 1
+            ");
+        }
+        $stmt->execute([':id' => $productId]);
+        $product = $stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        die('Database error: ' . htmlspecialchars($e->getMessage()));
+    }
+
+    if (!$product) {
+        // product not found
+        http_response_code(404);
+        echo "<h1 style='font-family:sans-serif;text-align:center;margin-top:60px;'>Product not found.</h1>";
+        exit;
+    }
 }
-
-// ---- 2. Fetch product + category from DB ----
-try {
-    $stmt = $pdo->prepare("
-        SELECT 
-            p.*,
-            c.id   AS category_id,
-            c.name AS cat_name
-        FROM products p
-        LEFT JOIN categories c ON c.id = p.category_id
-        WHERE p.id = :id
-          AND (p.is_active = 1 OR p.is_active IS NULL)
-        LIMIT 1
-    ");
-    $stmt->execute([':id' => $productId]);
-    $product = $stmt->fetch(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    die('Database error: ' . htmlspecialchars($e->getMessage()));
-}
-
-if (!$product) {
-    // product not found
-    http_response_code(404);
-    echo "<h1 style='font-family:sans-serif;text-align:center;margin-top:60px;'>Product not found.</h1>";
-    exit;
-}
-
+// ---- 3. Fetch Product Reviews (Dynamic Count) ----
+    $reviews = [];
+    try {
+        $stmtReviews = $pdo->prepare("
+            SELECT *
+            FROM product_reviews
+            WHERE product_id = ? AND status = 'approved'
+            ORDER BY created_at DESC
+        ");
+        $stmtReviews->execute([$productId]);
+        $reviews = $stmtReviews->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        $reviews = [];
+    }
 // ---- Fetch Variants with Override Data ----
 $variants = [];
 $variantFaqs = []; // Indexed by variant_id
-try {
-    $stmtVar = $pdo->prepare("SELECT * FROM product_variants WHERE product_id = ? AND is_active = 1 ORDER BY price ASC");
-    $stmtVar->execute([$productId]);
-    $variants = $stmtVar->fetchAll(PDO::FETCH_ASSOC);
 
-    // Inject Main Product as First Variant
-    $mainVariantName = $product['main_variant_name'] ?? '';
-    // Only show if there are other variants OR if a specific main name is set
-    if (!empty($variants) || !empty($mainVariantName)) {
-        $mainVariant = [
-            'id' => 0, // 0 indicates main product (empty check passes)
-            'variant_name' => $mainVariantName ?: 'Default',
-            'price' => $product['price'],
-            'compare_price' => $product['compare_price'],
-            'discount_percent' => $product['discount_percent'],
-            'stock' => $product['stock'],
-            'sku' => $product['sku'],
-            'image' => null, 
-            'images' => null,
-            'custom_title' => null,
-            'custom_description' => null,
-            'short_description' => $product['short_description'] ?? ''
-        ];
-        array_unshift($variants, $mainVariant);
-    }
+if ($isPreview) {
+    // ---- MOCK VARIANTS FROM SESSION ----
+    $variantsRaw = json_decode($previewData['variants_json'] ?? '[]', true);
     
-    // Fetch FAQs for all variants
-    if (!empty($variants)) {
-        // Auto-calculate variant prices if needed
-        foreach ($variants as &$v) {
-            $cp = isset($v['compare_price']) ? (float)$v['compare_price'] : 0;
-            $dp = isset($v['discount_percent']) ? (float)$v['discount_percent'] : 0;
-            if ($cp > 0 && $dp > 0) {
-                $v['price'] = $cp - ($cp * ($dp / 100));
-            }
-        }
-        unset($v); // break reference
+    foreach ($variantsRaw as $idx => $v) {
+        // Build mock variant matching DB structure
+        $mockV = [
+            'id' => $idx + 999, // Fake ID
+            'product_id' => 0,
+            'is_active' => 1,
+            'variant_name' => $v['name'] ?? 'Variant ' . ($idx+1),
+            'price' => $v['price'] ?? 0,
+            'compare_price' => $v['compare_price'] ?? 0,
+            'discount_percent' => $v['discount_percent'] ?? 0,
+            'stock' => $v['stock'] ?? 10,
+            'sku' => $v['sku'] ?? '',
+            'type' => $v['type'] ?? 'custom',
+            'linked_product_id' => $v['linked_product_id'] ?? null,
+            // Custom Overrides (mapped to standard columns mostly, but we use 'custom_' keys for JS)
+            'custom_title' => $v['custom_title'] ?? ($v['customTitle'] ?? null),
+            'custom_description' => $v['custom_description'] ?? ($v['customDesc'] ?? null),
+            'short_description' => $v['short_description'] ?? ($v['shortDesc'] ?? null),
+            'ingredients' => $v['ingredients'] ?? null,
+            'how_to_use' => $v['how_to_use'] ?? ($v['howToUse'] ?? null),
+            'meta_title' => $v['meta_title'] ?? ($v['metaTitle'] ?? null),
+            'meta_description' => $v['meta_description'] ?? ($v['metaDesc'] ?? null),
+            'images' => '[]' // TODO: handle variant images
+        ];
 
-        $variantIds = array_column($variants, 'id');
-        $placeholders = implode(',', array_fill(0, count($variantIds), '?'));
-        $stmtVarFaq = $pdo->prepare("SELECT * FROM variant_faqs WHERE variant_id IN ($placeholders) ORDER BY variant_id, display_order");
-        $stmtVarFaq->execute($variantIds);
-        $allVarFaqs = $stmtVarFaq->fetchAll(PDO::FETCH_ASSOC);
-        
-        // Group by variant_id
-        foreach ($allVarFaqs as $vfaq) {
-            $vid = $vfaq['variant_id'];
-            if (!isset($variantFaqs[$vid])) {
-                $variantFaqs[$vid] = [];
-            }
-            $variantFaqs[$vid][] = $vfaq;
+        // Handle Linked Type Logic (Mock fetch if possible, or just skip specialized linking for speed)
+        // Ideally we should fetch minimal data for linked products even in preview
+        if ($mockV['type'] === 'linked' && !empty($mockV['linked_product_id'])) {
+             try {
+                 $stmtL = $pdo->prepare("SELECT name, price, compare_price, discount_percent, stock, sku, images, description, short_description, ingredients, how_to_use FROM products WHERE id = ?");
+                 $stmtL->execute([$mockV['linked_product_id']]);
+                 $lp = $stmtL->fetch(PDO::FETCH_ASSOC);
+                 if ($lp) {
+                    $mockV['price'] = $lp['price'];
+                    $mockV['compare_price'] = $lp['compare_price'];
+                    $mockV['discount_percent'] = $lp['discount_percent'];
+                    $mockV['stock'] = $lp['stock'];
+                    $mockV['sku'] = $lp['sku'];
+                    $mockV['images'] = $lp['images'];
+
+                    // Map overrides
+                    $mockV['variant_name'] = $lp['name'];
+                    $mockV['custom_title'] = $lp['name'];
+                    $mockV['custom_description'] = $lp['description'];
+                    $mockV['short_description'] = $lp['short_description'];
+                    $mockV['ingredients'] = $lp['ingredients'];
+                    $mockV['how_to_use'] = $lp['how_to_use'];
+                 }
+             } catch(Exception $e){}
+        }
+
+        $variants[] = $mockV;
+
+        // Mock Variant FAQs
+        if (!empty($v['faqs']) && is_array($v['faqs'])) {
+             // Structure for $variantFaqs[$vid] = [ ['question'=>..., 'answer'=>...] ]
+             $variantFaqs[$mockV['id']] = $v['faqs'];
         }
     }
+
+    // Inject Main Product as First Variant (Same logic as DB mode)
+    // ... logic duplicated below, so we'll fall through to shared logic
+
+} else {
+    // ---- STANDARD DB FETCH ----
+    try {
+        $stmtVar = $pdo->prepare("SELECT * FROM product_variants WHERE product_id = ? AND is_active = 1 ORDER BY price ASC");
+        
+        // ... (existing DB fetch logic) ...
+        $stmtVar->execute([$productId]);
+        $variants = $stmtVar->fetchAll(PDO::FETCH_ASSOC);
+    
+        // Filter out variants that are linked but missing linked_product_id
+        $variants = array_filter($variants, function($v) {
+            if (isset($v['type']) && $v['type'] === 'linked' && empty($v['linked_product_id'])) {
+                return false;
+            }
+            return true;
+        });
+    
+        // Hydrate Linked Variants
+        $linkedProductIds = [];
+        foreach ($variants as $v) {
+            if (isset($v['type']) && $v['type'] === 'linked' && !empty($v['linked_product_id'])) {
+                $linkedProductIds[] = $v['linked_product_id'];
+            }
+        }
+    
+        $linkedProductsData = [];
+        if (!empty($linkedProductIds)) {
+            $linkedProductIds = array_unique($linkedProductIds);
+            $placeholders = implode(',', array_fill(0, count($linkedProductIds), '?'));
+            // FETCH ALL CONTENT FIELDS
+            $stmtLinked = $pdo->prepare("SELECT id, name, price, compare_price, discount_percent, stock, sku, images, description, short_description, ingredients, how_to_use FROM products WHERE id IN ($placeholders)");
+            $stmtLinked->execute($linkedProductIds);
+            $rows = $stmtLinked->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $r) {
+                $linkedProductsData[$r['id']] = $r;
+            }
+        }
+    
+        // Merge linked data into variants
+        foreach ($variants as &$v) {
+            if (isset($v['type']) && $v['type'] === 'linked' && !empty($v['linked_product_id'])) {
+                $lid = $v['linked_product_id'];
+                if (isset($linkedProductsData[$lid])) {
+                    $lp = $linkedProductsData[$lid];
+                    $v['price'] = $lp['price'];
+                    $v['compare_price'] = $lp['compare_price'];
+                    $v['discount_percent'] = $lp['discount_percent'];
+                    $v['stock'] = $lp['stock'];
+                    $v['sku'] = $lp['sku'];
+                    $v['images'] = $lp['images']; 
+                    
+                    // Content Overrides
+                    // FIXED: Do not overwrite variant_name if it was retrieved from DB (which is the custom name)
+                    // If DB variant_name is somehow empty, then fallback (but save_product ensures it's not empty).
+                    if (empty($v['variant_name'])) {
+                        $v['variant_name'] = $lp['name'];
+                    }
+                    // For custom_title, we might want the Linked Product title IF the user didn't specify a custom title override.
+                    // But typically custom_title maps to 'title' in products. 
+                    // Let's assume if the user provided specific custom_title in variants table, use it.
+                    if (empty($v['custom_title'])) {
+                        $v['custom_title'] = $lp['name'];
+                    }
+                    $v['custom_description'] = $lp['description'];
+                    $v['short_description'] = $lp['short_description'];
+                    $v['ingredients'] = $lp['ingredients'];
+                    $v['how_to_use'] = $lp['how_to_use'];
+                }
+            }
+        }
+        unset($v);
+        
+        // Fetch FAQs for all variants (DB Mode)
+        // Done below in shared block or separate? 
+        // Existing code had it after Main Variant injection. 
+        // We will preserve flow.
+        
+    } catch (Exception $e) {
+        $variants = [];
+        $variantFaqs = [];
+    }
+} // End if($isPreview)
+
+// ---- Shared Logic: Inject Main Product as First Variant ----
+// ... (The rest of the file stays same)
+$mainVariantName = $product['main_variant_name'] ?? '';
+// Only show if there are other variants OR if a specific main name is set
+if (!empty($variants) || !empty($mainVariantName)) {
+    $mainVariant = [
+        'id' => 0, // 0 indicates main product
+        'variant_name' => $mainVariantName ?: 'Default',
+        'price' => $product['price'],
+        'compare_price' => $product['compare_price'],
+        'discount_percent' => $product['discount_percent'],
+        'stock' => $product['stock'],
+        'sku' => $product['sku'],
+        'image' => null, 
+        'images' => null,
+        // Ensure these keys exist for JS compat
+        'custom_title' => null,
+        'custom_description' => null,
+        'short_description' => $product['short_description'] ?? '',
+        'ingredients' => null,
+        'how_to_use' => null
+    ];
+    array_unshift($variants, $mainVariant);
+}
+
+// ---- Variant FAQs Query (Only for DB mode, Session mode already built it) ----
+if (!$isPreview && !empty($variants)) {
+    // ... DB FAQ Logic ...
+    try {
+        $variantIds = array_column($variants, 'id');
+        $dbVariantIds = array_filter($variantIds, function($id) { return $id > 0; });
+        
+        if (!empty($dbVariantIds)) {
+            $placeholders = implode(',', array_fill(0, count($dbVariantIds), '?'));
+            $stmtVarFaq = $pdo->prepare("SELECT * FROM variant_faqs WHERE variant_id IN ($placeholders) ORDER BY variant_id, display_order");
+            $stmtVarFaq->execute(array_values($dbVariantIds));
+            $allVarFaqs = $stmtVarFaq->fetchAll(PDO::FETCH_ASSOC);
+            
+            foreach ($allVarFaqs as $vfaq) {
+                $vid = $vfaq['variant_id'];
+                if (!isset($variantFaqs[$vid])) {
+                    $variantFaqs[$vid] = [];
+                }
+                $variantFaqs[$vid][] = $vfaq;
+            }
+        }
+    } catch(Exception $e) {}
+}
+
+// Auto-calculate prices (Shared)
+if (!empty($variants)) {
+    foreach ($variants as &$v) {
+        $cp = isset($v['compare_price']) ? (float)$v['compare_price'] : 0;
+        $dp = isset($v['discount_percent']) ? (float)$v['discount_percent'] : 0;
+        if ($cp > 0 && $dp > 0 && (!isset($v['price']) || $v['price'] == 0)) {
+             // Only auto-calc if price isn't explicitly set (or logic dictated by business rule)
+             // However, normally price IS set. The view logic seemed to prefer calculated?
+             // Existing code:
+             // if ($cp > 0 && $dp > 0) { $v['price'] = ... }
+             // We keep it to ensure parity.
+             $v['price'] = $cp - ($cp * ($dp / 100));
+        }
+    }
+    unset($v);
+}
+
+// ---- Fetch Active Subscription Plan ----
+$subscriptionPlan = null;
+try {
+    ensure_subscription_schema($pdo);
+    $subscriptionPlan = subscription_fetch_primary_plan($pdo, null, true);
 } catch (Exception $e) {
-    $variants = [];
-    $variantFaqs = [];
+    $subscriptionPlan = null;
 }
 
 // ---- 3. Helper: parse images field into array ----
@@ -189,9 +448,15 @@ if ($comparePrice && $comparePrice <= $price) {
 // Calculate savings if compare price exists
 $savings = $comparePrice ? ($comparePrice - $price) : 0;
 
-$rating        = isset($product['rating']) ? (float)$product['rating'] : 0;
-$ratingCount   = isset($product['rating_count']) ? (int)$product['rating_count'] : 0;
-$ratingStars   = $rating > 0 ? str_repeat('★', round($rating)) : '★★★★★';
+// Calculate dynamic ratings from reviews array
+$ratingCount = count($reviews);
+$ratingSum   = 0;
+foreach ($reviews as $rev) {
+    $ratingSum += (float)$rev['rating'];
+}
+$rating      = $ratingCount > 0 ? ($ratingSum / $ratingCount) : 0;
+$ratingStars = $rating > 0 ? str_repeat('★', round($rating)) : '★★★★★';
+
 
 $inStock       = isset($product['stock']) ? ((int)$product['stock'] > 0) : true;
 
@@ -265,20 +530,7 @@ $mainImage   = $imageList[0];
 $thumbImages = array_slice($imageList, 1, 3); // max 3 thumbs
 
 // Fetch Product Reviews
-$reviews = [];
-try {
-    $stmtReviews = $pdo->prepare("
-        SELECT *
-        FROM product_reviews
-        WHERE product_id = ? AND status = 'approved'
-        ORDER BY created_at DESC
-    ");
-    $stmtReviews->execute([$productId]);
-    $reviews = $stmtReviews->fetchAll(PDO::FETCH_ASSOC);
-} catch (Exception $e) {
-    $reviews = [];
-    echo "<!-- Review Fetch Error: " . $e->getMessage() . " -->";
-}
+// [Moved logic to top of file]
 
 ?>
 <!DOCTYPE html>
@@ -293,14 +545,36 @@ $productUrl = 'https://develixirs.com/product_view.php?id=' . $productId;
 $firstImage = !empty($imageList) ? 'https://develixirs.com/' . ltrim($imageList[0], '/') : 'https://develixirs.com/assets/images/product-default.jpg';
 
 // Generate SEO meta tags
+$seoKeywords = $productName . ', ayurvedic ' . strtolower($categoryName) . ', natural beauty products, herbal cosmetics';
+
+// Add visible tags (from product_tags table)
+if (!empty($productTags)) {
+    $tagNames = array_column($productTags, 'name');
+    $seoKeywords .= ', ' . implode(', ', $tagNames);
+}
+
+// Add hidden SEO keywords (from products.seo_keywords field)
+if (!empty($product['seo_keywords'])) {
+    $hiddenKeywords = array_filter(array_map('trim', explode(',', $product['seo_keywords'])));
+    if (!empty($hiddenKeywords)) {
+        $seoKeywords .= ', ' . implode(', ', $hiddenKeywords);
+    }
+}
+
 echo generate_seo_meta([
     'title' => $productName . ' - DevElixir Natural Cosmetics',
     'description' => strip_tags($shortDesc) ?: ('Buy ' . $productName . ' online at DevElixir. Authentic ayurvedic beauty products with natural ingredients. Free shipping on orders ₹1000+'),
-    'keywords' => $productName . ', ayurvedic ' . strtolower($categoryName) . ', natural beauty products, herbal cosmetics',
+    'keywords' => $seoKeywords,
     'url' => $productUrl,
     'image' => $firstImage,
     'type' => 'product'
 ]);
+
+// PREVIEW MODE SEO PROTECTION
+if ($isPreview) {
+    echo '<meta name="robots" content="noindex, nofollow">';
+}
+
 
 // Generate Product Schema
 $productSchemaData = [
@@ -334,6 +608,25 @@ echo generate_breadcrumb_schema($breadcrumbs);
 
   <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+
+  <?php if ($isPreview): ?>
+  <style>
+    .preview-banner {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        background: #ff9800;
+        color: #fff;
+        text-align: center;
+        padding: 8px;
+        font-weight: bold;
+        z-index: 9999;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    }
+    body { margin-top: 40px; } /* Push body down */
+  </style>
+  <?php endif; ?>
 
   <style>
  :root{
@@ -480,6 +773,7 @@ ul{ list-style:none; }
   grid-template-columns:1.2fr 1fr;
   gap:50px;
   animation:fadeInUp .6s ease;
+  align-items: start; /* Prevent equal height stretching */
 }
 
 @keyframes fadeInUp {
@@ -513,6 +807,103 @@ ul{ list-style:none; }
   border-radius:8px;
   overflow:hidden;
   position:relative;
+}
+
+/* Product Label Badge on Main Image */
+.product-label-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+  padding: 6px 14px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  pointer-events: none;
+}
+
+/* Subscribe & Save Card */
+.subscribe-save-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 24px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+.subscribe-save-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%);
+  pointer-events: none;
+}
+.subscribe-save-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+}
+.subscribe-save-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.subscribe-save-title {
+  color: white;
+  font-size: 20px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.subscribe-save-icon {
+  width: 32px;
+  height: 32px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+.subscribe-save-price {
+  color: white;
+  font-size: 24px;
+  font-weight: 800;
+  background: rgba(255,255,255,0.2);
+  padding: 6px 16px;
+  border-radius: 8px;
+}
+.subscribe-save-tagline {
+  color: rgba(255,255,255,0.95);
+  font-size: 14px;
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+.subscribe-save-benefits {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.subscribe-save-benefit {
+  color: rgba(255,255,255,0.9);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.subscribe-save-benefit i {
+  color: #ffd700;
+  font-size: 12px;
 }
 
 /* Variant Cards CSS */
@@ -613,16 +1004,42 @@ ul{ list-style:none; }
   background:linear-gradient(180deg, transparent 60%, rgba(0,0,0,.05) 100%);
   pointer-events:none;
 }
+/* Main Product Video Constraint */
+.product-main-image video{
+  width: auto;
+  max-width: 100%;
+  height: auto; 
+  max-height: 600px;
+  object-fit: contain;
+  display: none;
+  background: #000;
+  margin: 0 auto;
+}
 .product-main-image img{
-  width:100%;
-  height:auto; 
-  object-fit:cover;
-  transition:all .5s ease;
+  width: auto !important;
+  max-width: 100% !important;
+  height: auto;
+  max-height: 600px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+  cursor: zoom-in;
+  transition: transform .5s ease;
 }
 .product-main-image:hover img{
-  /* transform:scale(1.05); Removed for JS Zoom */
   transition: none;
   cursor: crosshair;
+}
+
+/* Force override for main image ID to fix persistent sizing issues */
+#mainProductImage {
+  width: auto !important;
+  max-width: 100% !important;
+  height: auto !important;
+  max-height: 600px !important;
+  display: block !important;
+  margin: 0 auto !important;
+  object-fit: contain !important;
 }
 
 /* Navigation Arrows */
@@ -1185,11 +1602,11 @@ ul{ list-style:none; }
 }
 
 .tab-pane{
-  display:none;
+  display:none !important;
   animation: fadeInSlide .4s ease;
 }
 .tab-pane.active{
-  display:block;
+  display:block !important;
 }
 
 .tab-pane h3 {
@@ -1219,6 +1636,43 @@ ul{ list-style:none; }
   line-height: 1.8;
   color: #555;
   margin-bottom: 12px;
+}
+/* Rich Text / CKEditor Helpers */
+.tab-pane ul {
+  list-style-type: disc;
+  margin-left: 20px;
+  margin-bottom: 12px;
+}
+.tab-pane ol {
+  list-style-type: decimal;
+  margin-left: 20px;
+  margin-bottom: 12px;
+}
+.tab-pane li {
+  margin-bottom: 6px;
+  line-height: 1.6;
+}
+.tab-pane strong, .tab-pane b {
+  font-weight: 700;
+  color: #333;
+}
+.tab-pane p:last-child {
+  margin-bottom: 0;
+}
+/* Fix for CKEditor nested paragraphs in lists */
+.tab-pane li p {
+  margin: 0 !important;
+  padding: 0 !important;
+  display: inline-block; /* Keeps text with bullet */
+}
+/* Fix for empty bullets */
+.tab-pane li {
+  min-height: 1.2em;
+  margin-bottom: 4px; /* Slight spacing between list items */
+}
+/* Ensure list indentation */
+.tab-pane ul, .tab-pane ol {
+  padding-left: 24px;
 }
 
 .tabs-list{
@@ -1589,7 +2043,9 @@ input:focus{
   
   .product-main-image img {
     max-height: 400px;
-    width: 100%;
+    width: auto;
+    max-width: 100%;
+    margin: 0 auto;
     object-fit: contain;
     background: #fff;
   }
@@ -1952,18 +2408,64 @@ input:focus{
   }
 }
 
-
-@media(max-width:576px){
-  .hero-cats{
-    gap:14px;
-  }
-  .footer-inner{
-    grid-template-columns:1fr;
-  }
+/* Rich Content Styles (Tables, Lists, etc.) */
+.rich-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-size: 14px;
 }
-  </style>
+.rich-content table th, 
+.rich-content table td {
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  text-align: left;
+}
+.rich-content table th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+  color: var(--text);
+}
+.rich-content ul, .rich-content ol {
+  margin-left: 20px;
+  margin-bottom: 1em;
+}
+.rich-content ul { list-style: disc; }
+.rich-content ol { list-style: decimal; }
+.rich-content li { margin-bottom: 0.5em; }
+
+.rich-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  display: block;
+  margin: 10px 0;
+}
+.rich-content blockquote {
+  border-left: 4px solid var(--primary);
+  padding-left: 16px;
+  margin: 1em 0;
+  color: var(--muted);
+  font-style: italic;
+}
+.rich-content p {
+  margin-bottom: 1em;
+  line-height: 1.6;
+}
+.rich-content br {
+  display: block; /* Ensure line breaks are respected */
+  content: " "; /* Fix for some browsers ignoring empty br */
+  margin-bottom: 0.5em;
+}
+</style>
 </head>
 <body>
+<?php if ($isPreview): ?>
+    <div class="preview-banner">
+        ⚠️ PREVIEW MODE - Changes are not saved
+    </div>
+<?php endif; ?>
+
 
   <!-- 🔹 Shared navbar from your project -->
   <?php include __DIR__ . '/navbar.php'; ?>
@@ -1984,11 +2486,29 @@ input:focus{
           <i class="fa-solid fa-chevron-right"></i>
         </button>
         
-        <!-- Main Image -->
+        <!-- Main Image        
+        <!-- Main Image/Video Area -->
         <div class="product-main-image">
+          <?php if (!empty($product['label_name'])): ?>
+            <span class="product-label-badge" style="background-color: <?php echo htmlspecialchars($product['label_color'] ?? '#000000', ENT_QUOTES); ?>; color: <?php echo htmlspecialchars($product['label_text_color'] ?? '#FFFFFF', ENT_QUOTES); ?>;">
+              <?php echo htmlspecialchars($product['label_name'], ENT_QUOTES); ?>
+            </span>
+          <?php endif; ?>
+          <?php 
+            $ext = pathinfo($mainImage, PATHINFO_EXTENSION);
+            $isMainVideo = in_array(strtolower($ext), ['mp4', 'webm', 'ogg', 'mov']);
+          ?>
           <img id="mainProductImage"
                src="<?php echo htmlspecialchars($mainImage, ENT_QUOTES); ?>"
-               alt="<?php echo htmlspecialchars($productName, ENT_QUOTES); ?>">
+               alt="<?php echo htmlspecialchars($productName, ENT_QUOTES); ?>"
+               style="display: <?php echo $isMainVideo ? 'none' : 'block'; ?>;">
+          
+          <video id="mainProductVideo"
+                 src="<?php echo $isMainVideo ? htmlspecialchars($mainImage, ENT_QUOTES) : ''; ?>"
+                 controls autoplay muted loop playsinline webkit-playsinline disablepictureinpicture
+                 controlsList="nodownload"
+                 style="/* CSS handles size: .product-main-image video */ display: <?php echo $isMainVideo ? 'block' : 'none'; ?>;">
+          </video>
         </div>
         
         <!-- Fullscreen Button -->
@@ -1999,14 +2519,63 @@ input:focus{
       
       <!-- Thumbnail Gallery -->
       <div class="thumb-gallery">
-        <?php foreach ($imageList as $index => $img): ?>
+        <?php foreach ($imageList as $index => $img): 
+             $tExt = pathinfo($img, PATHINFO_EXTENSION);
+             $isTVideo = in_array(strtolower($tExt), ['mp4', 'webm', 'ogg', 'mov']);
+        ?>
           <div class="thumb-item <?php echo $index === 0 ? 'active' : ''; ?>" 
                data-index="<?php echo $index; ?>"
                data-image="<?php echo htmlspecialchars($img, ENT_QUOTES); ?>">
-            <img src="<?php echo htmlspecialchars($img, ENT_QUOTES); ?>" alt="Product image <?php echo $index + 1; ?>">
+             <?php if ($isTVideo): ?>
+                <video src="<?php echo htmlspecialchars($img, ENT_QUOTES); ?>" class="pointer-events-none" muted playsinline style="width:100%; height:100%; object-fit:cover;"></video>
+                <div class="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.2);">
+                    <i class="fa-solid fa-play" style="color:white; font-size:20px; text-shadow:0 2px 4px rgba(0,0,0,0.5);"></i>
+                </div>
+             <?php else: ?>
+                <img src="<?php echo htmlspecialchars($img, ENT_QUOTES); ?>" alt="Product media <?php echo $index + 1; ?>">
+             <?php endif; ?>
           </div>
         <?php endforeach; ?>
       </div>
+
+      <!-- ONLY Buttons on Left (Moved to Left Column) -->
+      <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #f0f0f0; display:flex; flex-wrap:wrap; gap:12px;">
+        <!-- Add to Cart Button -->
+        <button class="btn-add-cart" type="button" data-product-id="<?php echo $productId; ?>" style="background:linear-gradient(135deg, var(--berry) 0%, var(--berry-dark) 100%); color:#fff; border:none; padding:10px 24px; border-radius:30px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:8px; box-shadow:0 4px 10px rgba(164,27,66,0.2);">
+          <i class="fa-solid fa-bag-shopping"></i> Add To Cart
+        </button>
+        
+        <!-- Buy Now Button -->
+        <button class="btn-buy-now" type="button" data-product-id="<?php echo $productId; ?>" style="background:var(--primary); color:#fff; border:none; padding:10px 24px; border-radius:30px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:8px; box-shadow:0 4px 10px rgba(212,175,55,0.3);">
+          <i class="fa-solid fa-bolt"></i> Buy Now
+        </button>
+      </div>
+
+        <script>
+        // Quantity Logic
+        document.querySelectorAll('.qty-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const input = this.parentElement.querySelector('.qty-input');
+                let val = parseInt(input.value);
+                if(this.dataset.action === 'inc') val++;
+                else if(this.dataset.action === 'dec' && val > 1) val--;
+                input.value = val;
+            });
+        });
+
+        // Buy Now Logic (Direct Redirect)
+        document.querySelector('.btn-buy-now').addEventListener('click', function() {
+            const btn = this;
+            const pid = btn.dataset.productId;
+            const qty = document.querySelector('.qty-input').value;
+
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
+            btn.disabled = true;
+
+            // Direct redirect to checkout with params
+            window.location.href = `checkout.php?source=direct_buy&product_id=${pid}&quantity=${qty}`;
+        });
+        </script>
     </div>
 
     <!-- RIGHT: SUMMARY -->
@@ -2036,7 +2605,10 @@ input:focus{
         <?php echo $inStock ? 'In Stock' : 'Out of Stock'; ?>
       </div>
 
-      <div class="price-section">
+      <div class="price-section"
+           data-unit-price="<?php echo number_format($price, 2, '.', ''); ?>"
+           data-unit-compare-price="<?php echo number_format((float)$comparePrice, 2, '.', ''); ?>"
+           data-discount-percent="<?php echo number_format((float)$discountPercent, 2, '.', ''); ?>">
         <?php if ($discountPercent && $discountPercent > 0): ?>
           <div class="discount-badge">
             <?php echo number_format($discountPercent, 0); ?>% OFF
@@ -2063,26 +2635,79 @@ input:focus{
         </div>
       <?php endif; ?>
 
+      <!-- Subscribe & Save Card -->
+      <?php if ($subscriptionPlan): ?>
+        <a href="subscription.php" class="subscribe-save-card" style="text-decoration:none; display:block;">
+          <div class="subscribe-save-header">
+            <div class="subscribe-save-title">
+              <div class="subscribe-save-icon">
+                <i class="fa-solid fa-crown"></i>
+              </div>
+              Subscribe & Save
+            </div>
+            <div class="subscribe-save-price">
+              ₹<?php echo number_format($subscriptionPlan['price'], 0); ?>
+            </div>
+          </div>
+          <div class="subscribe-save-tagline">
+            Get <?php echo number_format($subscriptionPlan['discount_percentage'], 0); ?>% OFF on all future purchases!
+          </div>
+          <div class="subscribe-save-benefits">
+            <div class="subscribe-save-benefit">
+              <i class="fa-solid fa-check-circle"></i>
+              Exclusive subscriber-only discounts
+            </div>
+            <div class="subscribe-save-benefit">
+              <i class="fa-solid fa-check-circle"></i>
+              Early access to new products
+            </div>
+            <div class="subscribe-save-benefit">
+              <i class="fa-solid fa-check-circle"></i>
+              Save more on every order
+            </div>
+          </div>
+        </a>
+      <?php endif; ?>
+
 
       <!-- Variants / Size -->
+
+      <!-- Quantity Selector (Right Side) -->
+      <div class="quantity-row" style="margin: 20px 0; display:flex; gap:12px; align-items:center;">
+        <span class="qty-label" style="font-weight:600; color:var(--text-light);">Quantity</span>
+        <div class="qty-box" style="display:flex; align-items:center; border:1px solid #ddd; border-radius:6px; overflow:hidden;">
+          <button type="button" class="qty-btn" data-action="dec" style="width:32px; height:32px; border:none; background:#f9f9f9; cursor:pointer;">−</button>
+          <input class="qty-input" type="text" value="1" name="quantity" style="width:40px; text-align:center; border:none; outline:none; font-weight:600;">
+          <button type="button" class="qty-btn" data-action="inc" style="width:32px; height:32px; border:none; background:#f9f9f9; cursor:pointer;">+</button>
+        </div>
+      </div>
+
       <?php if (!empty($variants)): ?>
         <div class="mb-4">
           <div class="option-label">Select <?php echo htmlspecialchars($product['variant_label'] ?? 'Size'); ?></div>
           <div class="variant-options-grid">
             <?php foreach ($variants as $idx => $v): 
-              // Prepare variant data
-              $vImages = !empty($v['images']) ? json_decode($v['images'], true) : [];
-              if (!is_array($vImages)) $vImages = [];
+              // Prepare variant data using helper (handles JSON/legacy/linked paths correctly)
+              $vImages = parse_product_images($v['images'] ?? '');
+              
               if (empty($vImages) && !empty($v['image'])) {
-                $vImages = [$v['image']]; // Fallback to legacy single image
+                 // Fallback to legacy single image column if valid
+                 $vImages = parse_product_images($v['image']);
               }
+              
+              // Ensure we have root-relative paths for the frontend
               $vImagesUrls = array_map(function($img) {
-                return '/assets/uploads/products/' . ltrim($img, '/');
+                if (preg_match('#^https?://#i', $img)) return $img;
+                return '/' . ltrim($img, '/');
               }, $vImages);
               
               $vFaqs = $variantFaqs[$v['id']] ?? [];
+              
+              // Hide variants beyond index 2 (show first 3: 0, 1, 2)
+              $isHidden = $idx >= 3 ? 'style="display:none;"' : '';
+              $hiddenClass = $idx >= 3 ? 'hidden-variant' : '';
             ?>
-              <div class="variant-card <?php echo $idx === 0 ? 'active' : ''; ?>"
+              <div class="variant-card <?php echo $idx === 0 ? 'active' : ''; ?> <?php echo $hiddenClass; ?>" <?php echo $isHidden; ?>
                       data-id="<?php echo $v['id']; ?>"
                       data-price="<?php echo $v['price']; ?>"
                       data-compare-price="<?php echo $v['compare_price'] ?? ''; ?>"
@@ -2098,7 +2723,13 @@ input:focus{
                       data-meta-title="<?php echo htmlspecialchars($v['meta_title'] ?? '', ENT_QUOTES); ?>"
                       data-meta-description="<?php echo htmlspecialchars($v['meta_description'] ?? '', ENT_QUOTES); ?>"
                       data-images="<?php echo htmlspecialchars(json_encode($vImagesUrls), ENT_QUOTES); ?>"
+                      data-short-description="<?php echo htmlspecialchars($v['short_description'] ?? '', ENT_QUOTES); ?>"
+                      data-ingredients="<?php echo htmlspecialchars($v['ingredients'] ?? '', ENT_QUOTES); ?>"
+                      data-how-to-use="<?php echo htmlspecialchars($v['how_to_use'] ?? '', ENT_QUOTES); ?>"
+                      data-meta-title="<?php echo htmlspecialchars($v['meta_title'] ?? '', ENT_QUOTES); ?>"
+                      data-meta-description="<?php echo htmlspecialchars($v['meta_description'] ?? '', ENT_QUOTES); ?>"
                       data-faqs="<?php echo htmlspecialchars(json_encode($vFaqs), ENT_QUOTES); ?>">
+
                 
                 <div class="variant-name"><?php echo htmlspecialchars($v['variant_name']); ?></div>
                 
@@ -2112,7 +2743,51 @@ input:focus{
 
               </div>
             <?php endforeach; ?>
+            
+            <?php if (count($variants) > 3): ?>
+              <button type="button" id="toggleVariantsBtn" class="variant-toggle-btn" style="
+                  display: inline-flex; 
+                  align-items: center; 
+                  justify-content: center; 
+                  padding: 4px 12px; 
+                  border: 1px dashed #ccc; 
+                  border-radius: 6px; 
+                  background: #f9f9f9; 
+                  cursor: pointer; 
+                  font-size: 12px; 
+                  color: #555; 
+                  font-weight: 500;
+                  height: 36px;
+                  min-height: 0;
+                  align-self: center; /* Prevent flex stretching */
+                  transition: all 0.2s ease;
+              ">
+                See More +
+              </button>
+            <?php endif; ?>
           </div>
+          
+          <?php if (count($variants) > 3): ?>
+            <script>
+            document.getElementById('toggleVariantsBtn').addEventListener('click', function() {
+              const hiddenVariants = document.querySelectorAll('.hidden-variant');
+              const isExpanded = this.getAttribute('data-expanded') === 'true';
+              
+              if (!isExpanded) {
+                // Expand
+                hiddenVariants.forEach(el => el.style.display = 'block'); // or flex/grid item behavior
+                this.innerHTML = 'See Less -';
+                this.setAttribute('data-expanded', 'true');
+                // Move button to end (flex/grid flow handles this if it's the last child)
+              } else {
+                // Collapse
+                hiddenVariants.forEach(el => el.style.display = 'none');
+                this.innerHTML = 'See More +';
+                this.setAttribute('data-expanded', 'false');
+              }
+            });
+            </script>
+          <?php endif; ?>
           <input type="hidden" id="selectedVariantId" name="variant_id" value="<?php echo $variants[0]['id']; ?>">
         </div>
       <?php endif; ?>
@@ -2136,6 +2811,62 @@ input:focus{
             images: <?php echo json_encode($imageList); ?>.map(img => img.startsWith('/') ? img : '/' + img),
             faqs: <?php echo json_encode($faqs); ?>
           };
+
+          function normalizeQuantity(rawValue) {
+            const parsedQty = parseInt(rawValue, 10);
+            return Number.isFinite(parsedQty) && parsedQty > 0 ? parsedQty : 1;
+          }
+
+          function setUnitPriceData(unitPrice, unitComparePrice, discountPercent) {
+            if (!priceDisplay) return;
+
+            const normalizedUnitPrice = Number.isFinite(unitPrice) ? unitPrice : 0;
+            const normalizedUnitComparePrice = Number.isFinite(unitComparePrice) && unitComparePrice > 0 ? unitComparePrice : 0;
+            const normalizedDiscountPercent = Number.isFinite(discountPercent) && discountPercent > 0 ? discountPercent : 0;
+
+            priceDisplay.dataset.unitPrice = normalizedUnitPrice.toFixed(2);
+            priceDisplay.dataset.unitComparePrice = normalizedUnitComparePrice.toFixed(2);
+            priceDisplay.dataset.discountPercent = normalizedDiscountPercent.toString();
+          }
+
+          function refreshPriceDisplayByQuantity() {
+            if (!priceDisplay) return;
+
+            const qtyInput = document.querySelector('.qty-input');
+            const quantity = normalizeQuantity(qtyInput ? qtyInput.value : 1);
+
+            if (qtyInput) {
+              qtyInput.value = quantity;
+            }
+
+            const unitPrice = parseFloat(priceDisplay.dataset.unitPrice) || 0;
+            const unitComparePrice = parseFloat(priceDisplay.dataset.unitComparePrice) || 0;
+            const discountPercent = parseFloat(priceDisplay.dataset.discountPercent) || 0;
+
+            const totalPrice = unitPrice * quantity;
+            const totalComparePrice = unitComparePrice > 0 ? unitComparePrice * quantity : 0;
+            const savings = totalComparePrice > 0 ? Math.max(totalComparePrice - totalPrice, 0) : 0;
+
+            let html = '';
+            if (discountPercent > 0) {
+              html += `<div class="discount-badge">${Math.round(discountPercent)}% OFF</div>`;
+            }
+
+            html += `<div class="price-row">`;
+            if (totalComparePrice > 0) {
+              html += `<span class="old-price">₹${totalComparePrice.toFixed(2)}</span>`;
+            }
+            html += `<span class="current-price">₹${totalPrice.toFixed(2)}</span>`;
+            html += `</div>`;
+
+            if (savings > 0) {
+              html += `<div class="savings-text">You Save: <strong>₹${savings.toFixed(2)}</strong></div>`;
+            }
+
+            priceDisplay.innerHTML = html;
+          }
+
+          window.refreshProductPriceSection = refreshPriceDisplayByQuantity;
 
           if (variantBtns.length > 0) {
             // Safe JSON parse helper (MUST be defined first)
@@ -2195,24 +2926,24 @@ input:focus{
 
               // Update Description (in tab content)
               if (descTab && customDesc) {
-                descTab.innerHTML = '<h3>Description</h3><p>' + customDesc.replace(/\n/g, '<br>') + '</p>';
+                descTab.innerHTML = customDesc;
               }
 
               // Update Ingredients (already declared above)
               if (ingTab) {
                 if (ingredients) {
-                  ingTab.innerHTML = '<h3>Ingredients</h3><p>' + ingredients.replace(/\n/g, '<br>') + '</p>';
+                  ingTab.innerHTML = ingredients;
                 } else {
-                  ingTab.innerHTML = '<h3>Ingredients</h3><p>Ingredients information will be updated soon.</p>';
+                  ingTab.innerHTML = '<p>Ingredients information will be updated soon.</p>';
                 }
               }
 
               // Update How to Use (already declared above)
               if (useTab) {
                 if (howToUse) {
-                  useTab.innerHTML = '<h3>How to use</h3><p>' + howToUse.replace(/\n/g, '<br>') + '</p>';
+                  useTab.innerHTML = howToUse;
                 } else {
-                  useTab.innerHTML = '<h3>How to use</h3><p>Usage instructions will be updated soon.</p>';
+                  useTab.innerHTML = '<p>Usage instructions will be updated soon.</p>';
                 }
               }
 
@@ -2246,34 +2977,9 @@ input:focus{
               if (comparePrice > 0 && discountPercent > 0) {
                   price = comparePrice - (comparePrice * (discountPercent / 100));
               }
-              
-              if (priceDisplay) {
-                // Calculate savings
-                const savings = comparePrice > 0 ? (comparePrice - price) : 0;
-                
-                // Rebuild the entire price display HTML to ensure consistency
-                let html = '';
-                
-                // 1. Discount Badge (Top)
-                if (discountPercent > 0) {
-                  html += `<div class="discount-badge">${Math.round(discountPercent)}% OFF</div>`;
-                }
-                
-                // 2. Price Row (Old + Current)
-                html += `<div class="price-row">`;
-                if (comparePrice > 0) {
-                  html += `<span class="old-price">₹${comparePrice.toFixed(2)}</span>`;
-                }
-                html += `<span class="current-price">₹${price.toFixed(2)}</span>`;
-                html += `</div>`;
-                
-                // 3. Savings Text (Bottom)
-                if (savings > 0) {
-                  html += `<div class="savings-text">You Save: <strong>₹${savings.toFixed(2)}</strong></div>`;
-                }
-                
-                priceDisplay.innerHTML = html;
-              }
+
+              setUnitPriceData(price, comparePrice, discountPercent);
+              refreshPriceDisplayByQuantity();
 
               
               const stock = parseInt(btn.dataset.stock);
@@ -2295,30 +3001,78 @@ input:focus{
 
             // Update image gallery
             function updateImageGallery(images) {
-              console.log('=== updateImageGallery called ===');
-              console.log('Images to display:', images);
-              
               const mainImage = document.getElementById('mainProductImage');
+              const mainVideo = document.getElementById('mainProductVideo');
               const thumbGallery = document.querySelector('.thumb-gallery');
               
-              console.log('Main Image Element:', mainImage);
-              console.log('Thumb Gallery Element:', thumbGallery);
-              
-              if (mainImage && images.length > 0) {
-                console.log('Updating main image to:', images[0]);
-                mainImage.src = images[0];
+              // Helper to check video extension
+              const isVideoUrl = (url) => {
+                  const ext = url.split('.').pop().toLowerCase();
+                  return ['mp4', 'webm', 'ogg', 'mov'].includes(ext);
+              };
+
+              // Update initial main view
+              if (images.length > 0) {
+                  const firstUrl = images[0];
+                  if (isVideoUrl(firstUrl)) {
+                      if (mainImage) mainImage.style.display = 'none';
+                      if (mainVideo) {
+                          mainVideo.src = firstUrl;
+                          mainVideo.style.display = 'block';
+                          mainVideo.play().catch(e => console.log('Autoplay prevented'));
+                      }
+                  } else {
+                      if (mainVideo) {
+                          mainVideo.style.display = 'none';
+                          mainVideo.pause();
+                      }
+                      if (mainImage) {
+                          mainImage.src = firstUrl;
+                          mainImage.style.display = 'block';
+                      }
+                  }
               }
               
               if (thumbGallery) {
                 thumbGallery.innerHTML = '';
                 images.forEach((img, index) => {
+                  const isVideo = isVideoUrl(img);
                   const thumbItem = document.createElement('div');
                   thumbItem.className = 'thumb-item' + (index === 0 ? ' active' : '');
                   thumbItem.setAttribute('data-index', index);
                   thumbItem.setAttribute('data-image', img);
-                  thumbItem.innerHTML = `<img src="${img}" alt="Thumbnail ${index + 1}">`;
+                  
+                  if (isVideo) {
+                      thumbItem.innerHTML = `
+                        <video src="${img}" muted playsinline style="width:100%; height:100%; object-fit:cover; pointer-events:none;"></video>
+                        <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.2);">
+                            <i class="fa-solid fa-play" style="color:white; font-size:20px; text-shadow:0 2px 4px rgba(0,0,0,0.5);"></i>
+                        </div>
+                      `;
+                  } else {
+                      thumbItem.innerHTML = `<img src="${img}" alt="Thumbnail ${index + 1}">`;
+                  }
+
                   thumbItem.addEventListener('click', function() {
-                    mainImage.src = img;
+                    // Switch main media
+                    if (isVideoUrl(img)) {
+                        if (mainImage) mainImage.style.display = 'none';
+                        if (mainVideo) {
+                            mainVideo.src = img;
+                            mainVideo.style.display = 'block';
+                            mainVideo.play().catch(e=>{});
+                        }
+                    } else {
+                        if (mainVideo) {
+                            mainVideo.style.display = 'none';
+                            mainVideo.pause();
+                        }
+                        if (mainImage) {
+                            mainImage.src = img;
+                            mainImage.style.display = 'block';
+                        }
+                    }
+
                     document.querySelectorAll('.thumb-item').forEach(t => t.classList.remove('active'));
                     thumbItem.classList.add('active');
                   });
@@ -2380,12 +3134,115 @@ input:focus{
               });
             });
           }
+
+          refreshPriceDisplayByQuantity();
         });
 
 
         // Image Zoom Logic
         const mainImageContainer = document.querySelector('.product-main-image');
         const mainImage = document.getElementById('mainProductImage');
+        const mainVideo = document.getElementById('mainProductVideo');
+
+        // Add click handler for main video fullscreen
+        if (mainVideo) {
+          mainVideo.addEventListener('click', function(e) {
+            const videoSrc = this.getAttribute('src');
+            if (videoSrc) {
+              openLightbox('video', videoSrc);
+            }
+          });
+          mainVideo.style.cursor = 'pointer';
+        }
+
+        // Make ALL videos on the page clickable for fullscreen (including rich text content)
+        // Use capturing phase to intercept clicks before video controls handle them
+        document.addEventListener('click', function(e) {
+          // Check if clicked element is a video or inside a video
+          let targetVideo = null;
+          if (e.target.tagName === 'VIDEO') {
+            targetVideo = e.target;
+          } else if (e.target.closest('video')) {
+            targetVideo = e.target.closest('video');
+          }
+          
+          if (targetVideo) {
+            const videoSrc = targetVideo.getAttribute('src');
+            if (videoSrc) {
+              // Open fullscreen lightbox
+              openLightbox('video', videoSrc);
+              e.stopPropagation();
+            }
+          }
+        }, true); // Use capture phase
+
+        // Function to wrap video with overlay
+        function setupVideoOverlay(video) {
+          // Skip if already wrapped or if it's the main product video (handled separately)
+          if (video.parentElement.classList.contains('video-fullscreen-wrapper') || video.id === 'mainProductVideo') {
+             // For main video, just ensure pointer cursor
+             if (video.id === 'mainProductVideo') video.style.cursor = 'pointer';
+             return;
+          }
+
+          video.style.cursor = 'pointer';
+          video.title = 'Click to view fullscreen';
+          
+          const wrapper = document.createElement('div');
+          wrapper.className = 'video-fullscreen-wrapper';
+          wrapper.style.position = 'relative';
+          wrapper.style.display = 'inline-block';
+          wrapper.style.width = '100%';
+          // Ensure wrapper respects video dimensions if set, or defaults to 100%
+          
+          video.parentNode.insertBefore(wrapper, video);
+          wrapper.appendChild(video);
+          
+          // Add click overlay
+          const overlay = document.createElement('div');
+          overlay.className = 'video-fullscreen-overlay';
+          overlay.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: pointer; z-index: 10; background: transparent;';
+          overlay.title = 'Click to view fullscreen';
+          
+          overlay.addEventListener('click', function(e) {
+            e.stopPropagation(); // Stop propagation
+            e.preventDefault();  // Prevent default
+            const videoSrc = video.getAttribute('src');
+            if (videoSrc) {
+              openLightbox('video', videoSrc);
+            }
+          });
+          
+          wrapper.appendChild(overlay);
+        }
+
+        // 1. Setup existing videos
+        document.querySelectorAll('video').forEach(setupVideoOverlay);
+
+        // 2. Observer for new videos (tabs, dynamic content)
+        const videoObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            mutation.addedNodes.forEach(function(node) {
+              if (node.nodeType === 1) { // Element node
+                if (node.tagName === 'VIDEO') {
+                  setupVideoOverlay(node);
+                } else if (node.querySelectorAll) {
+                  node.querySelectorAll('video').forEach(setupVideoOverlay);
+                }
+              }
+            });
+          });
+        });
+
+        videoObserver.observe(document.body, {
+          childList: true,
+          subtree: true
+        });
+
+        // Add capturing listener as fallback for any unwrapped videos
+        document.addEventListener('click', function(e) {
+           // ... existing fallback ...
+        }, true);
 
         if (mainImageContainer && mainImage) {
           mainImageContainer.addEventListener('mousemove', function(e) {
@@ -2409,19 +3266,7 @@ input:focus{
         }
       </script>
 
-      <!-- Quantity + Add to cart -->
-      <div class="quantity-row">
-        <span class="qty-label">Quantity</span>
-        <div class="qty-box">
-          <button type="button" class="qty-btn" data-action="dec">−</button>
-          <input class="qty-input" type="text" value="1" name="quantity">
-          <button type="button" class="qty-btn" data-action="inc">+</button>
-        </div>
-        <!-- Add to Cart Button -->
-        <button class="btn-add-cart" type="button" data-product-id="<?php echo $productId; ?>">
-          <i class="fa-solid fa-bag-shopping"></i> &nbsp;Add To Cart
-        </button>
-      </div>
+
 
       <!-- Share -->
       <div class="share-row">
@@ -2448,34 +3293,30 @@ input:focus{
 
       <div class="tab-contents">
         <!-- DESCRIPTION -->
-        <div class="tab-pane active" id="tab-desc">
-          <h3>Description</h3>
+        <div class="tab-pane active rich-content" id="tab-desc">
+          <!-- <h3>Description</h3> REMOVED -->
           <?php if (!empty($longDescription)): ?>
-            <p>
-              <?php echo $longDescription; ?>
-            </p>
+            <?php echo $longDescription; ?>
           <?php else: ?>
-            <p>
-              Description coming soon for this product.
-            </p>
+            <p>Description coming soon for this product.</p>
           <?php endif; ?>
         </div>
 
         <!-- INGREDIENTS -->
-        <div class="tab-pane" id="tab-ing">
-          <h3>Ingredients</h3>
+        <div class="tab-pane rich-content" id="tab-ing">
+          <!-- <h3>Ingredients</h3> REMOVED -->
           <?php if (!empty($ingredientsText)): ?>
-            <div><?php echo $ingredientsText; ?></div>
+            <?php echo $ingredientsText; ?>
           <?php else: ?>
             <p>Ingredients information will be updated soon.</p>
           <?php endif; ?>
         </div>
 
         <!-- HOW TO USE -->
-        <div class="tab-pane" id="tab-use">
-          <h3>How to use</h3>
+        <div class="tab-pane rich-content" id="tab-use">
+          <!-- <h3>How to use</h3> REMOVED -->
           <?php if (!empty($howToUseText)): ?>
-            <div><?php echo $howToUseText; ?></div>
+            <?php echo $howToUseText; ?>
           <?php else: ?>
             <p>Usage instructions will be updated soon.</p>
           <?php endif; ?>
@@ -2483,7 +3324,7 @@ input:focus{
 
         <!-- WHY DEVILIXIRS -->
         <div class="tab-pane" id="tab-why">
-          <h3>Why Devilixirs</h3>
+          <!-- <h3>Why Devilixirs</h3> REMOVED -->
           <?php if (!empty($whyDevilixirsText)): ?>
             <p><?php echo nl2br(htmlspecialchars($whyDevilixirsText, ENT_QUOTES)); ?></p>
           <?php else: ?>
@@ -2622,9 +3463,22 @@ input:focus{
                 <?= date('M j, Y', strtotime($review['created_at'])) ?>
               </div>
             </div>
-            <div class="review-comment" style="color:#333;line-height:1.7;font-size:14px;">
+            <div class="review-comment" style="color:#333;line-height:1.7;font-size:14px;margin-bottom:12px;">
               <?= nl2br(htmlspecialchars($review['comment'])) ?>
             </div>
+            <?php 
+            // Display review images if they exist
+            $reviewImages = !empty($review['images']) ? json_decode($review['images'], true) : [];
+            if (is_array($reviewImages) && !empty($reviewImages)): 
+            ?>
+            <div class="review-images" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+              <?php foreach ($reviewImages as $img): ?>
+                <img src="/assets/uploads/reviews/<?= htmlspecialchars($img) ?>" alt="Review image" 
+                     style="width:100px;height:100px;object-fit:cover;border-radius:8px;cursor:pointer;border:1px solid #e0e0e0;"
+                     onclick="window.open(this.src, '_blank')">
+              <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
           </div>
         <?php endforeach; ?>
       </div>
@@ -2656,6 +3510,13 @@ input:focus{
         <div class="form-row">
           <label for="review">Your review *</label>
           <textarea id="review" name="review" rows="4" required></textarea>
+        </div>
+        
+        <div class="form-row">
+          <label for="review_images">Add Photos (Optional - Max 3)</label>
+          <input type="file" id="review_images" name="review_images[]" accept="image/*" multiple style="margin-top:8px;">
+          <div id="imagePreview" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;"></div>
+          <small style="color:#666;font-size:12px;margin-top:4px;display:block;">Max 3 images, 5MB each. JPG, PNG, WEBP accepted.</small>
         </div>
 
         <button type="submit" class="btn-submit-review">Submit Review</button>
@@ -2708,6 +3569,31 @@ function showToast(message, type = 'success') {
     }, 4000);
 }
 
+// Image preview for review form
+document.getElementById('review_images').addEventListener('change', function(e) {
+    const previewContainer = document.getElementById('imagePreview');
+    previewContainer.innerHTML = '';
+    
+    const files = Array.from(e.target.files).slice(0, 3); // Max 3 images
+    
+    files.forEach((file, index) => {
+        if (file.size > 5 * 1024 * 1024) { // 5MB limit
+            showToast(`Image ${index + 1} is too large (max 5MB)`, 'error');
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = document.createElement('img');
+            img.src = e.target.result;
+            img.style.cssText = 'width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid #ddd;';
+            previewContainer.appendChild(img);
+        };
+        reader.readAsDataURL(file);
+    });
+});
+
+
 document.getElementById('reviewForm').addEventListener('submit', function(e) {
     e.preventDefault();
     
@@ -2729,7 +3615,19 @@ document.getElementById('reviewForm').addEventListener('submit', function(e) {
         method: 'POST',
         body: formData
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.text().then(text => {
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                console.error('JSON parse error:', e);
+                throw new Error('Invalid JSON response from server');
+            }
+        });
+    })
     .then(data => {
         if (data.success) {
             // Create new review element
@@ -2748,42 +3646,90 @@ document.getElementById('reviewForm').addEventListener('submit', function(e) {
                             ${data.review.created_at}
                         </div>
                     </div>
-                    <div class="review-comment" style="color:#333;line-height:1.7;font-size:14px;">
+                    <div class="review-comment" style="color:#333;line-height:1.7;font-size:14px;margin-bottom:12px;">
                         ${data.review.comment}
                     </div>
+                    ${data.review.images && data.review.images.length > 0 ? `
+                        <div class="review-images" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+                            ${data.review.images.map(img => `
+                                <img src="/assets/uploads/reviews/${img}" alt="Review image" 
+                                     style="width:100px;height:100px;object-fit:cover;border-radius:8px;cursor:pointer;border:1px solid #e0e0e0;"
+                                     onclick="window.open(this.src, '_blank')">
+                            `).join('')}
+                        </div>
+                    ` : ''}
                 </div>
             `;
             
-            // Prepend to reviews list
-            const reviewsList = document.querySelector('.reviews-list');
-            if (reviewsList) {
-                reviewsList.insertAdjacentHTML('afterbegin', reviewHtml);
-            } else {
-                // If no reviews list exists yet (first review)
-                const sectionTitle = document.querySelector('.section-title');
-                const newList = document.createElement('div');
-                newList.className = 'reviews-list';
-                newList.style.marginBottom = '40px';
-                newList.innerHTML = reviewHtml;
-                sectionTitle.insertAdjacentElement('afterend', newList);
+            // Prepend to reviews list or create it if it doesn't exist
+            let reviewsList = document.querySelector('.reviews-list');
+            
+            if (!reviewsList) {
+                const sectionTitle = document.querySelector('.reviews-section .section-title');
+                reviewsList = document.createElement('div');
+                reviewsList.className = 'reviews-list';
+                reviewsList.style.marginBottom = '40px';
+                sectionTitle.insertAdjacentElement('afterend', reviewsList);
             }
             
-            // Update count
-            const countHeader = document.querySelector('.section-title h2');
-            const currentCount = parseInt(countHeader.textContent.match(/\d+/)[0]);
-            countHeader.textContent = `Customer Reviews (${currentCount + 1})`;
+            reviewsList.insertAdjacentHTML('afterbegin', reviewHtml);
             
+            // Update count in reviews section
+            const countHeader = document.querySelector('.section-title h2');
+            let currentCount = 0;
+            
+            if (countHeader) {
+                const match = countHeader.textContent.match(/\d+/);
+                currentCount = match ? parseInt(match[0]) : 0;
+                countHeader.textContent = `Customer Reviews (${currentCount + 1})`;
+            }
+            
+            // Update product summary section at the top
+            // Try multiple selectors to find the element
+            let productMeta = document.querySelector('.product-summary .product-meta span');
+            if (!productMeta) {
+                productMeta = document.querySelector('.product-meta span');
+            }
+            
+            if (productMeta) {
+                const newCount = currentCount + 1;
+                const newHTML = `<i class="fa-regular fa-pen-to-square"></i> ${newCount} Review${newCount > 1 ? 's' : ''}`;
+                productMeta.innerHTML = newHTML;
+            }
+            
+            // Update rating stars in product summary
+            const ratingRow = document.querySelector('.product-summary .rating-row');
+            
+            if (ratingRow && data.review.rating) {
+                const starsDiv = ratingRow.querySelector('.rating-stars');
+                
+                if (starsDiv) {
+                    const newRating = data.review.rating;
+                    const starHTML = '★'.repeat(newRating) + '☆'.repeat(5 - newRating);
+                    starsDiv.innerHTML = starHTML;
+                }
+                
+                let ratingText = ratingRow.querySelector('span');
+                if (!ratingText) {
+                    ratingText = document.createElement('span');
+                    ratingRow.appendChild(ratingText);
+                }
+                ratingText.textContent = `(Rated ${data.review.rating}.0)`;
+            }
+
             // Reset form
-            this.reset();
-            showToast(data.message, 'success');
+            document.getElementById('reviewForm').reset();
+            document.getElementById('imagePreview').innerHTML = '';
+            
+            showToast(data.message || 'Review submitted successfully!', 'success');
             
         } else {
-            showToast(data.message, 'error');
+            showToast(data.message || 'Failed to submit review', 'error');
         }
     })
     .catch(error => {
-        console.error('Error:', error);
-        showToast('An error occurred. Please try again.', 'error');
+        console.error('Fetch error:', error);
+        showToast(error.message || 'An error occurred. Please try again.', 'error');
     })
     .finally(() => {
         submitBtn.textContent = originalText;
@@ -3351,12 +4297,43 @@ document.getElementById('reviewForm').addEventListener('submit', function(e) {
         });
       });
 
-      // Image thumbs → change main image
+      // Image/Video thumbs → change media
+      const mainImgContainer = document.querySelector('.product-main-image');
       const mainImg = document.getElementById('mainProductImage');
-      document.querySelectorAll('.thumb-item img').forEach(img => {
-        img.addEventListener('click', () => {
-          if (!mainImg) return;
-          mainImg.src = img.src;
+      const mainVideo = document.getElementById('mainProductVideo');
+
+      document.querySelectorAll('.thumb-item').forEach(thumb => {
+        thumb.addEventListener('click', () => {
+             // 1. Remove active from all thumbs
+             document.querySelectorAll('.thumb-item').forEach(t => t.classList.remove('active'));
+             // 2. Add active to clicked
+             thumb.classList.add('active');
+
+             // 3. Get media source
+             const mediaSrc = thumb.getAttribute('data-image');
+             if(!mediaSrc) return;
+
+             // 4. Check extension
+             const ext = mediaSrc.split('.').pop().toLowerCase();
+             const isVideo = ['mp4', 'webm', 'ogg', 'mov'].includes(ext);
+
+             if (isVideo) {
+                 if(mainImg) mainImg.style.display = 'none';
+                 if(mainVideo) {
+                     mainVideo.style.display = 'block';
+                     mainVideo.src = mediaSrc;
+                     mainVideo.play();
+                 }
+             } else {
+                 if(mainVideo) {
+                     mainVideo.style.display = 'none';
+                     mainVideo.pause();
+                 }
+                 if(mainImg) {
+                     mainImg.style.display = 'block';
+                     mainImg.src = mediaSrc;
+                 }
+             }
         });
       });
 
@@ -3373,8 +4350,19 @@ document.getElementById('reviewForm').addEventListener('submit', function(e) {
             val--;
           }
           qtyInput.value = val;
+          if (typeof window.refreshProductPriceSection === 'function') {
+            window.refreshProductPriceSection();
+          }
         });
       });
+
+      if (qtyInput) {
+        qtyInput.addEventListener('input', () => {
+          if (typeof window.refreshProductPriceSection === 'function') {
+            window.refreshProductPriceSection();
+          }
+        });
+      }
 
       // Add to Cart Logic
       const addToCartBtn = document.querySelector('.btn-add-cart');
@@ -3412,7 +4400,11 @@ document.getElementById('reviewForm').addEventListener('submit', function(e) {
                 // updateCartCount(data.count); 
               }, 2000);
             } else {
-              alert(data.message || 'Failed to add to cart');
+              if (data.message && data.message.toLowerCase().includes('login')) {
+                  window.location.href = 'login.php?redirect=' + encodeURIComponent(window.location.href);
+              } else {
+                  showToast(data.message || 'Failed to add to cart', 'error');
+              }
               this.innerHTML = originalText;
               this.disabled = false;
             }
@@ -3425,6 +4417,45 @@ document.getElementById('reviewForm').addEventListener('submit', function(e) {
           });
         });
       }
+
+      // Social Share Logic
+      const shareUrl = encodeURIComponent(window.location.href);
+      const shareTitle = encodeURIComponent(document.title);
+
+      const waBtn = document.querySelector('.share-btn.whatsapp');
+      if(waBtn) {
+          waBtn.addEventListener('click', () => {
+              window.open(`https://wa.me/?text=${shareTitle}%20${shareUrl}`, '_blank');
+          });
+      }
+
+      const fbBtn = document.querySelector('.share-btn.facebook');
+      if(fbBtn) {
+          fbBtn.addEventListener('click', () => {
+              window.open(`https://www.facebook.com/sharer/sharer.php?u=${shareUrl}`, '_blank');
+          });
+      }
+
+      const twBtn = document.querySelector('.share-btn.twitter');
+      if(twBtn) {
+          twBtn.addEventListener('click', () => {
+              window.open(`https://twitter.com/intent/tweet?text=${shareTitle}&url=${shareUrl}`, '_blank');
+          });
+      }
+
+      const instaBtn = document.querySelector('.share-btn.instagram');
+      if(instaBtn) {
+          instaBtn.addEventListener('click', () => {
+              // Instagram doesn't support direct web sharing links.
+              // We'll copy the link to clipboard and notify the user.
+              navigator.clipboard.writeText(window.location.href).then(() => {
+                  alert('Link copied to clipboard! You can paste it on Instagram.');
+              }).catch(err => {
+                  console.error('Failed to copy: ', err);
+              });
+          });
+      }
+
     });
   </script>
 

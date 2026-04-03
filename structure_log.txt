@@ -1,0 +1,108 @@
+Line 455: Font Awesome for icons
+Line 2570: MAIN
+Line 2574: TWO COLUMN LAYOUT
+Line 2576: LEFT SIDEBAR
+Line 2606: DEVILIXIRS PICKS – latest products from DB
+Line 2678: Fallback static image if no DB sidebar banners
+Line 2715: WEEKLY SPECIALS CARD
+Line 2757: TOP RATED PRODUCTS CARD
+Line 2791: QUICK LINKS CARD
+Line 2842: NEWSLETTER CARD
+Line 2888: NEW ARRIVALS CARD
+Line 2924: TRUST BADGES CARD
+Line 2967: LATEST BLOG POSTS CARD
+Line 3021: fallback: your old design
+Line 3035: RIGHT COLUMN
+Line 3037: HERO
+Line 3058: optional overlay text
+Line 3069: Dots (indicators)
+Line 3080: Fallback if no banners in DB
+Line 3095: ALL OTHER CONTENT
+Line 3097: Top banners
+Line 3098: Top banners
+Line 3144: TOP LEVEL CATEGORIES GRID (VISUAL)
+Line 3148: Shop by Category
+Line 3151: AUTO SCROLL CONTAINER (3 Items Visible)
+Line 3207: Full Width Image Container (Square)
+Line 3218: AUTO SCROLL SCRIPT
+Line 3256: New Herbal Products (latest products from DB)
+Line 3258: New Herbal Products
+Line 3293: SHOP BY CONCERN
+Line 3297: Shop by Concern
+Line 3300: GRID CONTAINER (Using same visual style as categories)
+Line 3331: Wide banner (NOW CAROUSEL)
+Line 3364: Dots
+Line 3371: Arrows (optional but good for UX)
+Line 3454: Best Sellers (from homepage_products -> best_seller)
+Line 3457: Best Sellers
+Line 3494: SHOP BY SEASONAL
+Line 3498: Shop by Seasonal
+Line 3501: GRID CONTAINER (Using same visual style as categories)
+Line 3531: HOMEPAGE VIDEO/MEDIA SECTION
+Line 3540: Left: Media
+Line 3560: Image
+Line 3564: HTML5 Video / Default
+Line 3569: Right: Text
+Line 3572: <?= htmlspecialchars($hvTitle) ?>
+Line 3593: WIDE BANNER (BEFORE BLOGS) - CAROUSEL
+Line 3623: Dots
+Line 3635: Re-use the slider script logic or attach new one
+Line 3684: MULTI COLUMN TABBED PRODUCTS
+Line 3695: Latest
+Line 3745: Sale
+Line 3770: Top rated
+Line 3798: LATEST BLOG SECTION (static)
+Line 3801: Latest Blog
+Line 3838: ALL OTHER CONTENT
+Line 3840: Top banners
+Line 3841: Top banners
+Line 3887: TOP LEVEL CATEGORIES GRID (VISUAL)
+Line 3891: Shop by Category
+Line 3894: AUTO SCROLL CONTAINER (3 Items Visible)
+Line 3950: Full Width Image Container (Square)
+Line 3961: AUTO SCROLL SCRIPT
+Line 3999: SHOP BY CONCERN
+Line 4003: Shop by Concern
+Line 4006: GRID CONTAINER (Using same visual style as categories)
+Line 4037: New Herbal Products (latest products from DB)
+Line 4039: New Herbal Products
+Line 4074: Wide banner (NOW CAROUSEL)
+Line 4107: Dots
+Line 4114: Arrows (optional but good for UX)
+Line 4197: SHOP BY SEASONAL
+Line 4201: Shop by Seasonal
+Line 4204: GRID CONTAINER (Using same visual style as categories)
+Line 4234: Best Sellers (from homepage_products -> best_seller)
+Line 4237: Best Sellers
+Line 4274: HOMEPAGE VIDEO/MEDIA SECTION
+Line 4283: Left: Media
+Line 4303: Image
+Line 4307: HTML5 Video / Default
+Line 4312: Right: Text
+Line 4315: <?= htmlspecialchars($hvTitle) ?>
+Line 4336: WIDE BANNER (BEFORE BLOGS) - CAROUSEL
+Line 4366: Dots
+Line 4378: Re-use the slider script logic or attach new one
+Line 4427: LATEST BLOG SECTION (static)
+Line 4430: Latest Blog
+Line 4465: MULTI COLUMN TABBED PRODUCTS
+Line 4476: Latest
+Line 4526: Sale
+Line 4551: Top rated
+Line 4589: CERTIFICATION BADGES SECTION
+Line 4591: Decorative background elements
+Line 4632: FOOTER
+Line 4633: FOOTER
+Line 4634: SUBSCRIBE SECTION
+Line 4635: Features Row
+Line 4637: FEATURES ROW
+Line 4656: OUR STORIES SECTION (Multi-Card Grid)
+Line 4664: Single Story Content (New)
+Line 4680: <?= htmlspecialchars($osTitle) ?>
+Line 4724: FOOTER
+Line 4727: JS
+Line 4784: Auto scroll banner
+Line 4827: Hero slider auto
+Line 4873: Sidebar slider auto
+Line 5026: CUSTOMER REVIEWS SECTION
+Line 5030: Enhanced Section Header
