@@ -521,6 +521,35 @@ $hvDesc = $homeSettings['home_video_desc'] ?? '';
 $hvBtnText = $homeSettings['home_video_btn_text'] ?? '';
 $hvBtnLink = $homeSettings['home_video_btn_link'] ?? '';
 $hvBtnColor = $homeSettings['home_video_btn_color'] ?? '#4F46E5';
+$homeSideVideoEnabled = ($homeSettings['home_side_video_enabled'] ?? (!empty($homeSettings['home_side_video_url']) ? '1' : '0')) === '1';
+$homeSideVideoCloseable = ($homeSettings['home_side_video_closeable'] ?? '1') === '1';
+$homeSideVideoUrlRaw = trim($homeSettings['home_side_video_url'] ?? '');
+$homeSideVideoUrl = '';
+if ($homeSideVideoUrlRaw !== '') {
+    if (preg_match('#^https?://#i', $homeSideVideoUrlRaw) || strpos($homeSideVideoUrlRaw, '/') === 0) {
+        $homeSideVideoUrl = $homeSideVideoUrlRaw;
+    } else {
+        $homeSideVideoUrl = '/' . ltrim($homeSideVideoUrlRaw, '/');
+    }
+}
+$showHomeSideVideo = $homeSideVideoEnabled && $homeSideVideoUrl !== '';
+$homeSideVideoPath = parse_url($homeSideVideoUrl, PHP_URL_PATH) ?: '';
+$homeSideVideoExt = strtolower(pathinfo($homeSideVideoPath, PATHINFO_EXTENSION));
+$homeSideVideoMimeType = '';
+if ($homeSideVideoExt === 'mp4' || $homeSideVideoExt === 'm4v') {
+    $homeSideVideoMimeType = 'video/mp4';
+} elseif ($homeSideVideoExt === 'webm') {
+    $homeSideVideoMimeType = 'video/webm';
+} elseif ($homeSideVideoExt === 'ogg' || $homeSideVideoExt === 'ogv') {
+    $homeSideVideoMimeType = 'video/ogg';
+} elseif ($homeSideVideoExt === 'mov') {
+    $homeSideVideoMimeType = 'video/quicktime';
+}
+$homeSideIsInstagramLink = (bool)preg_match('#instagram\.com/(reel|p)/#i', $homeSideVideoUrlRaw);
+$homeSideInstagramEmbedUrl = '';
+if ($homeSideIsInstagramLink && preg_match('#instagram\.com/(reel|p)/([A-Za-z0-9_-]+)#i', $homeSideVideoUrlRaw, $igMatch)) {
+    $homeSideInstagramEmbedUrl = 'https://www.instagram.com/' . $igMatch[1] . '/' . $igMatch[2] . '/embed';
+}
 
 // Product Section Visibility (0 or 1)
 $showLatest = $homeSettings['show_latest_products'] ?? '1';
@@ -1432,6 +1461,85 @@ echo generate_website_schema();
       .home-video-section img {
         min-height: 250px !important;
         max-height: 250px !important;
+      }
+    }
+
+    /* RIGHT SIDE FLOATING VIDEO WIDGET */
+    .home-side-video-widget{
+      position: fixed;
+      right: 18px;
+      top: calc(50% + 18px);
+      transform: translateY(-50%);
+      width: 210px;
+      max-width: calc(100vw - 28px);
+      z-index: 1200;
+      border-radius: 20px;
+      overflow: hidden;
+      background: #111;
+      box-shadow: 0 14px 38px rgba(0,0,0,.28);
+      border: 1px solid rgba(255,255,255,.2);
+    }
+    .home-side-video-widget video{
+      width: 100%;
+      aspect-ratio: 9 / 16;
+      display: block;
+      background: #000;
+      object-fit: cover;
+    }
+    .home-side-video-widget iframe{
+      width: 100%;
+      aspect-ratio: 9 / 16;
+      display: block;
+      border: 0;
+      background: #000;
+    }
+    .home-side-video-fallback{
+      padding: 12px;
+      background: #fff;
+      font-size: 12px;
+      color: #444;
+      text-align: center;
+    }
+    .home-side-video-fallback a{
+      color: #0b63ce;
+      text-decoration: underline;
+      font-weight: 600;
+    }
+    .home-side-video-close{
+      position: absolute;
+      right: 10px;
+      top: 10px;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255,255,255,.92);
+      color: #111;
+      font-size: 20px;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2;
+      box-shadow: 0 3px 10px rgba(0,0,0,.2);
+    }
+    .home-side-video-close:hover{
+      background: #fff;
+    }
+
+    @media (max-width: 992px) {
+      .home-side-video-widget{
+        right: 10px;
+        bottom: 90px;
+        top: auto;
+        transform: none;
+        width: 165px;
+      }
+      .home-side-video-close{
+        width: 30px;
+        height: 30px;
+        font-size: 18px;
       }
     }
 
@@ -4354,10 +4462,80 @@ echo generate_website_schema();
 
 
 
+  <?php if ($showHomeSideVideo): ?>
+  <div
+    id="homeSideVideoWidget"
+    class="home-side-video-widget"
+  >
+    <?php if ($homeSideVideoCloseable): ?>
+      <button
+        type="button"
+        id="homeSideVideoCloseBtn"
+        class="home-side-video-close"
+        aria-label="Close video"
+      >&times;</button>
+    <?php endif; ?>
+    <?php if (!empty($homeSideInstagramEmbedUrl)): ?>
+      <iframe src="<?= htmlspecialchars($homeSideInstagramEmbedUrl, ENT_QUOTES, 'UTF-8'); ?>" allowfullscreen loading="lazy"></iframe>
+    <?php else: ?>
+      <video id="homeSideVideoPlayer" autoplay muted loop playsinline controls preload="metadata">
+        <source src="<?= htmlspecialchars($homeSideVideoUrl, ENT_QUOTES, 'UTF-8'); ?>"<?= $homeSideVideoMimeType ? ' type="' . htmlspecialchars($homeSideVideoMimeType, ENT_QUOTES, 'UTF-8') . '"' : '' ?>>
+      </video>
+      <div id="homeSideVideoFallback" class="home-side-video-fallback" style="display:none;">
+        Video format not supported in this browser.
+        <a href="<?= htmlspecialchars($homeSideVideoUrl, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener">Open video</a>
+      </div>
+    <?php endif; ?>
+  </div>
+  <?php endif; ?>
+
   <!-- FOOTER -->
   <?php include 'footer.php'; ?>
 
   <!-- JS -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const widget = document.getElementById('homeSideVideoWidget');
+      if (!widget) return;
+
+      const closeBtn = document.getElementById('homeSideVideoCloseBtn');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', function () {
+          const iframe = widget.querySelector('iframe');
+          if (iframe) {
+            iframe.src = 'about:blank';
+          }
+
+          const videoEl = document.getElementById('homeSideVideoPlayer');
+          if (videoEl) {
+            try {
+              videoEl.pause();
+              videoEl.removeAttribute('src');
+              const sourceEls = videoEl.querySelectorAll('source');
+              sourceEls.forEach(function (sourceEl) {
+                sourceEl.removeAttribute('src');
+              });
+              videoEl.load();
+            } catch (e) {
+              // no-op
+            }
+          }
+
+          widget.style.display = 'none';
+        });
+      }
+
+      const player = document.getElementById('homeSideVideoPlayer');
+      const fallback = document.getElementById('homeSideVideoFallback');
+      if (player && fallback) {
+        player.addEventListener('error', function () {
+          player.style.display = 'none';
+          fallback.style.display = 'block';
+        });
+      }
+    });
+  </script>
+
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       const catCard = document.querySelector('.categories-card');

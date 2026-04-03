@@ -15,6 +15,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'home_video_btn_text' => $_POST['home_video_btn_text'] ?? '',
         'home_video_btn_link' => $_POST['home_video_btn_link'] ?? '',
         'home_video_btn_color' => $_POST['home_video_btn_color'] ?? '#4F46E5', // Default Indigo
+        'home_side_video_enabled' => isset($_POST['home_side_video_enabled']) ? '1' : '0',
+        'home_side_video_url' => $_POST['home_side_video_url'] ?? '',
+        'home_side_video_closeable' => isset($_POST['home_side_video_closeable']) ? '1' : '0',
         'home_seo_title' => $_POST['home_seo_title'] ?? '',
         'home_seo_description' => $_POST['home_seo_description'] ?? '',
         'our_story_title' => $_POST['our_story_title'] ?? '',
@@ -49,6 +52,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (move_uploaded_file($_FILES['subscribe_image']['tmp_name'], $targetPath)) {
             $settings['subscribe_image'] = 'assets/uploads/banners/' . $filename;
         }
+    }
+
+    // Handle Right Side Video Upload
+    if (isset($_FILES['home_side_video_file']) && $_FILES['home_side_video_file']['error'] === UPLOAD_ERR_OK) {
+        $allowedVideoExt = ['mp4', 'webm'];
+        $originalName = $_FILES['home_side_video_file']['name'] ?? '';
+        $videoExt = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+
+        if (in_array($videoExt, $allowedVideoExt, true)) {
+            $uploadDir = __DIR__ . '/../assets/uploads/home_videos/';
+            if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
+
+            $filename = 'home_side_video_' . time() . '_' . mt_rand(1000, 9999) . '.' . $videoExt;
+            $targetPath = $uploadDir . $filename;
+
+            if (move_uploaded_file($_FILES['home_side_video_file']['tmp_name'], $targetPath)) {
+                $settings['home_side_video_url'] = 'assets/uploads/home_videos/' . $filename;
+            }
+        } else {
+            $error = 'Right-side video upload failed. Allowed formats: MP4 and WEBM only.';
+        }
+    } elseif (isset($_FILES['home_side_video_file']) && ($_FILES['home_side_video_file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+        $uploadErrorCode = (int)($_FILES['home_side_video_file']['error'] ?? UPLOAD_ERR_NO_FILE);
+        $uploadErrorMap = [
+            UPLOAD_ERR_INI_SIZE => 'Video is too large for server upload limit.',
+            UPLOAD_ERR_FORM_SIZE => 'Video is too large for form upload limit.',
+            UPLOAD_ERR_PARTIAL => 'Video upload was interrupted. Please try again.',
+            UPLOAD_ERR_NO_TMP_DIR => 'Server missing temporary folder for upload.',
+            UPLOAD_ERR_CANT_WRITE => 'Server failed to save uploaded video.',
+            UPLOAD_ERR_EXTENSION => 'A server extension blocked video upload.'
+        ];
+        $error = $uploadErrorMap[$uploadErrorCode] ?? 'Right-side video upload failed. Please try again.';
     }
 
     // Handle Our Story Image Upload OR Media Library Selection
@@ -160,7 +195,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([':key' => $key, ':val' => $val]);
         }
         $pdo->commit();
-        $success = "Homepage settings updated successfully.";
+        if (!isset($error)) {
+            $success = "Homepage settings updated successfully.";
+        }
     } catch (PDOException $e) {
         $pdo->rollBack();
         $error = "Error updating settings: " . $e->getMessage();
@@ -183,6 +220,13 @@ $vidDesc = $currentSettings['home_video_desc'] ?? '';
 $vidBtnText = $currentSettings['home_video_btn_text'] ?? '';
 $vidBtnLink = $currentSettings['home_video_btn_link'] ?? '';
 $vidBtnColor = $currentSettings['home_video_btn_color'] ?? '#4F46E5';
+$sideVideoEnabled = $currentSettings['home_side_video_enabled'] ?? '0';
+$sideVideoUrl = $currentSettings['home_side_video_url'] ?? '';
+$sideVideoCloseable = $currentSettings['home_side_video_closeable'] ?? '1';
+$sideVideoPreviewUrl = $sideVideoUrl;
+if (!empty($sideVideoPreviewUrl) && !preg_match('#^https?://#i', $sideVideoPreviewUrl) && strpos($sideVideoPreviewUrl, '/') !== 0) {
+    $sideVideoPreviewUrl = '../' . ltrim($sideVideoPreviewUrl, '/');
+}
 $seoTitle = $currentSettings['home_seo_title'] ?? '';
 $seoDesc = $currentSettings['home_seo_description'] ?? '';
 
@@ -531,6 +575,60 @@ $chatWhatsapp = $currentSettings['chatbot_whatsapp_number'] ?? '';
             </div>
         </div>
 
+        <!-- Right Side Home Video Widget -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 class="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                <span class="bg-fuchsia-100 text-fuchsia-600 p-1.5 rounded text-sm"><i class="fa-solid fa-clapperboard"></i></span>
+                Right Side Video Widget (Homepage)
+            </h3>
+
+            <div class="space-y-5">
+                <div class="flex flex-wrap gap-6 items-center">
+                    <label class="switch relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" name="home_side_video_enabled" value="1" class="sr-only peer" <?= ($sideVideoEnabled === '1') ? 'checked' : '' ?>>
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-fuchsia-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fuchsia-600"></div>
+                        <span class="ml-3 text-sm font-medium text-gray-900">Show floating video on homepage</span>
+                    </label>
+
+                    <label class="switch relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" name="home_side_video_closeable" value="1" class="sr-only peer" <?= ($sideVideoCloseable === '1') ? 'checked' : '' ?>>
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-fuchsia-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fuchsia-600"></div>
+                        <span class="ml-3 text-sm font-medium text-gray-900">Allow users to close widget</span>
+                    </label>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Video URL (Instagram/Reel size recommended 9:16)</label>
+                    <div class="flex gap-2">
+                        <input type="text" name="home_side_video_url" id="home_side_video_url" value="<?= htmlspecialchars($sideVideoUrl) ?>" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-fuchsia-500" placeholder="https://... or assets/uploads/home_videos/...">
+                        <button type="button" id="selectSideVideoBtn" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-200 transition">
+                            📁 Select Media
+                        </button>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-1">Best output: vertical video (1080x1920). Use MP4 (H.264) or WEBM for reliable playback.</p>
+                </div>
+
+                <div class="flex flex-wrap gap-3 items-center">
+                    <input type="file" name="home_side_video_file" id="home_side_video_file" accept="video/mp4,video/webm" class="hidden">
+                    <button type="button" id="uploadSideVideoBtn" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-200 transition">
+                        📤 Upload New Video
+                    </button>
+                    <span id="home_side_video_file_name" class="text-xs text-slate-500"></span>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-2">Preview</label>
+                    <div id="side_video_preview_box" class="w-[180px] h-[320px] rounded-2xl border border-gray-200 overflow-hidden bg-gray-100 flex items-center justify-center">
+                        <?php if (!empty($sideVideoPreviewUrl)): ?>
+                            <video id="side_video_preview" src="<?= htmlspecialchars($sideVideoPreviewUrl) ?>" class="w-full h-full object-cover" controls muted playsinline></video>
+                        <?php else: ?>
+                            <div id="side_video_preview" class="text-xs text-gray-400 px-3 text-center">No video selected</div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Subscribe & Features Section -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h3 class="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
@@ -731,14 +829,68 @@ $chatWhatsapp = $currentSettings['chatbot_whatsapp_number'] ?? '';
     if (modal) modal.remove();
   };
 
+  function resolveMediaPreviewUrl(url) {
+      if (!url) return '';
+      if (/^https?:\/\//i.test(url) || url.startsWith('/') || url.startsWith('../')) {
+          return url;
+      }
+      return '../' + url.replace(/^\/+/, '');
+  }
+
+  function renderSideVideoPreview(url) {
+      const previewBox = document.getElementById('side_video_preview_box');
+      if (!previewBox) return;
+      const safeUrl = resolveMediaPreviewUrl(url);
+      if (!safeUrl) {
+          previewBox.innerHTML = '<div id="side_video_preview" class="text-xs text-gray-400 px-3 text-center">No video selected</div>';
+          return;
+      }
+      previewBox.innerHTML = '<video id="side_video_preview" src="' + safeUrl + '" class="w-full h-full object-cover" controls muted playsinline></video>';
+  }
+
   document.getElementById('selectMediaBtn').addEventListener('click', function() {
       openMediaModal('home_video_url');
   });
+
+  const selectSideVideoBtn = document.getElementById('selectSideVideoBtn');
+  if (selectSideVideoBtn) {
+      selectSideVideoBtn.addEventListener('click', function() {
+          openMediaModal('home_side_video_url');
+      });
+  }
 
   // Subscribe Image Media Button
   document.getElementById('selectSubscribeImgBtn').addEventListener('click', function() {
       openMediaModal('subscribe_image_url');
   });
+
+  const sideVideoUploadBtn = document.getElementById('uploadSideVideoBtn');
+  const sideVideoFileInput = document.getElementById('home_side_video_file');
+  const sideVideoUrlInput = document.getElementById('home_side_video_url');
+  const sideVideoFileName = document.getElementById('home_side_video_file_name');
+
+  if (sideVideoUploadBtn && sideVideoFileInput) {
+      sideVideoUploadBtn.addEventListener('click', function() {
+          sideVideoFileInput.click();
+      });
+  }
+
+  if (sideVideoFileInput) {
+      sideVideoFileInput.addEventListener('change', function(e) {
+          const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+          if (!file) return;
+          if (sideVideoFileName) sideVideoFileName.textContent = file.name;
+          renderSideVideoPreview(URL.createObjectURL(file));
+      });
+  }
+
+  if (sideVideoUrlInput) {
+      sideVideoUrlInput.addEventListener('input', function() {
+          if (!sideVideoFileInput || !sideVideoFileInput.files || sideVideoFileInput.files.length === 0) {
+              renderSideVideoPreview(sideVideoUrlInput.value.trim());
+          }
+      });
+  }
 
   // File input preview for subscribe image
   document.getElementById('subscribe_image_file').addEventListener('change', function(e) {
@@ -830,6 +982,14 @@ $chatWhatsapp = $currentSettings['chatbot_whatsapp_number'] ?? '';
           // Set URL
           const url = imagePaths[0];
           document.getElementById('home_video_url').value = url;
+          closeMediaModal();
+      } else if (window.mediaTargetInput === 'home_side_video_url') {
+          const url = imagePaths[0];
+          const sideVideoInput = document.getElementById('home_side_video_url');
+          if (sideVideoInput) {
+              sideVideoInput.value = url;
+              renderSideVideoPreview(url);
+          }
           closeMediaModal();
       } else if (window.mediaTargetInput === 'subscribe_image_url') {
           // Set Subscribe Image URL
