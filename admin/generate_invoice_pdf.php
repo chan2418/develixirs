@@ -249,8 +249,9 @@ $shipping       = !empty($inv['order_shipping']) ? (float)$inv['order_shipping']
 $couponDiscount = !empty($inv['order_coupon_discount']) ? (float)$inv['order_coupon_discount'] : 0.00;
 $subscriptionDiscount = !empty($inv['order_subscription_discount']) ? (float)$inv['order_subscription_discount'] : 0.00;
 $appliedDiscountType = (string)($inv['applied_discount_type'] ?? '');
-// Order total is final payable
-$grand_total    = !empty($inv['amount']) ? (float)$inv['amount'] : (float)$inv['order_total_amount'];
+$storedInvoiceTotal = !empty($inv['amount']) ? (float)$inv['amount'] : 0.00;
+$storedOrderTotal = !empty($inv['order_total_amount']) ? (float)$inv['order_total_amount'] : 0.00;
+$grand_total    = 0.00;
 $discount       = 0.00;
 $discountLabel  = 'Discount';
 
@@ -271,29 +272,33 @@ if ($appliedDiscountType === 'subscription' && $subscriptionDiscount > 0) {
     $discountLabel = 'Subscription Discount';
 }
 
-// Determine IGST vs CGST/SGST based on address (Simple check: Tamil Nadu = Intra, else Inter)
-// Assuming Supplier is in Tamil Nadu based on "Chennai" default
+// Determine tax mode (auto by address, but override supported by query)
 $supplierState = 'Tamil Nadu';
-$recipientState = 'Tamil Nadu'; // Default
+$recipientState = 'Tamil Nadu';
 if (stripos($addressString, 'Tamil Nadu') === false && stripos($addressString, 'Chennai') === false) {
-    // If address does NOT contain TN or Chennai, assume Inter-state
-    $recipientState = 'Other'; 
+    $recipientState = 'Other';
 }
 
-$isIGST = ($supplierState !== $recipientState);
+$taxModeOverride = strtolower(trim((string)($_GET['tax_mode'] ?? ($_GET['sale_type'] ?? ''))));
+if (in_array($taxModeOverride, ['intrastate', 'intra', 'local'], true)) {
+    $isInterState = false;
+} elseif (in_array($taxModeOverride, ['interstate', 'inter'], true)) {
+    $isInterState = true;
+} else {
+    $isInterState = ($supplierState !== $recipientState);
+}
 
 // --- HTML GENERATION ---
 $companyPan = strtoupper(preg_replace('/\s+/', '', (string)$company_pan));
 
-$customerStateCode = $isIGST ? 'Inter State' : '33';
+$customerStateCode = $isInterState ? 'Inter State' : '33';
 if (!empty($customerGstin) && preg_match('/^([0-9]{2})/', $customerGstin, $mState)) {
     $customerStateCode = $mState[1];
 }
 
 $invoiceDate = date('d-M-y', strtotime($inv['created_at']));
 $orderDate = date('d-M-y', strtotime($inv['order_created_at'] ?? $inv['created_at']));
-$placeOfSupply = $isIGST ? 'Inter State' : 'Tamil Nadu';
-$taxLabel = $isIGST ? 'IGST' : 'CGST + SGST';
+$placeOfSupply = $isInterState ? 'Inter State' : 'Tamil Nadu';
 
 $compactInline = static function ($text) {
     $text = trim((string)$text);
@@ -306,80 +311,148 @@ $compactInline = static function ($text) {
 $addressCompact = $compactInline($addressString);
 $companyAddressCompact = $compactInline($company_address);
 
-$contentScore = strlen((string)$addressString) + strlen((string)$company_address) + (count($items) * 70);
-if ($contentScore > 620) {
-    $baseFont = '7.0px';
-} elseif ($contentScore > 430) {
-    $baseFont = '7.4px';
+$contentScore = strlen((string)$addressString) + strlen((string)$company_address) + (count($items) * 90);
+if ($contentScore > 760) {
+    $baseFont = '6.8px';
+} elseif ($contentScore > 560) {
+    $baseFont = '7.2px';
 } else {
     $baseFont = '7.8px';
 }
 
+$preparedItems = [];
+$totalMrpInclTax = 0.0;
+$maxItemGstRate = 0.0;
+foreach ($items as $item) {
+    $qty = max(0, (float)($item['qty'] ?? 0));
+    if ($qty <= 0) {
+        continue;
+    }
+    $mrpUnit = (float)($item['unit_price'] ?? 0);
+    $mrpLine = round(max(0, $mrpUnit * $qty), 2);
+    $gstPercent = !empty($item['gst_rate']) ? (float)$item['gst_rate'] : 18.0;
+
+    $preparedItems[] = [
+        'description' => (string)($item['description'] ?? ''),
+        'hsn' => (string)($item['hsn'] ?? '-'),
+        'qty' => $qty,
+        'mrp_unit' => $mrpUnit,
+        'mrp_line' => $mrpLine,
+        'gst_percent' => $gstPercent,
+    ];
+    $totalMrpInclTax += $mrpLine;
+    $maxItemGstRate = max($maxItemGstRate, $gstPercent);
+}
+
 $sn = 1;
 $totalQty = 0.0;
-$totalTaxable = 0.0;
-$totalTaxAmt = 0.0;
-$itemsSubtotal = 0.0;
+$totalTaxableRaw = 0.0;
+$totalTaxAmtRaw = 0.0;
+$productLinesTotal = 0.0;
+$totalDiscountApplied = 0.0;
 $itemRowsHtml = '';
+$auditRowsHtml = '';
 
-foreach ($items as $item) {
-    $qty = (float)($item['qty'] ?? 0);
-    $rateInclTax = (float)($item['unit_price'] ?? 0);
-    $lineTotal = $rateInclTax * $qty;
-    $gstPercent = !empty($item['gst_rate']) ? (float)$item['gst_rate'] : 18.0;
-    $lineTaxable = $gstPercent > 0 ? ($lineTotal / (1 + ($gstPercent / 100))) : $lineTotal;
-    $lineTax = $lineTotal - $lineTaxable;
+$remainingDiscount = round(min(max($discount, 0), $totalMrpInclTax), 2);
+$itemCount = count($preparedItems);
 
-    $totalQty += $qty;
-    $totalTaxable += $lineTaxable;
-    $totalTaxAmt += $lineTax;
-    $itemsSubtotal += $lineTotal;
+foreach ($preparedItems as $idx => $item) {
+    $lineDiscount = 0.0;
+    if ($remainingDiscount > 0 && $totalMrpInclTax > 0) {
+        if ($idx === $itemCount - 1) {
+            $lineDiscount = $remainingDiscount;
+        } else {
+            $lineDiscount = round(($item['mrp_line'] / $totalMrpInclTax) * $discount, 2);
+            $lineDiscount = min($lineDiscount, $remainingDiscount);
+        }
+        $lineDiscount = min($lineDiscount, $item['mrp_line']);
+    }
+
+    $remainingDiscount = round(max(0, $remainingDiscount - $lineDiscount), 2);
+    $lineAmount = round(max(0, $item['mrp_line'] - $lineDiscount), 2);
+    $lineTaxableRaw = $item['gst_percent'] > 0 ? ($lineAmount / (1 + ($item['gst_percent'] / 100))) : $lineAmount;
+    $lineTaxRaw = $lineAmount - $lineTaxableRaw;
+
+    $totalQty += $item['qty'];
+    $productLinesTotal += $lineAmount;
+    $totalDiscountApplied += $lineDiscount;
+    $totalTaxableRaw += $lineTaxableRaw;
+    $totalTaxAmtRaw += $lineTaxRaw;
 
     $itemRowsHtml .= '<tr>
         <td class="cell c-center c-mid b-r b-b">' . $sn++ . '</td>
         <td class="cell b-r b-b">
-            <div class="item-title">' . h($item['description'] ?? '') . '</div>
-            <div class="muted">Rate of Duty : ' . rtrim(rtrim(number_format($gstPercent, 2), '0'), '.') . '%</div>
+            <div class="item-title">' . h($item['description']) . '</div>
+            <div class="muted">MRP includes GST</div>
         </td>
-        <td class="cell c-center c-mid b-r b-b">' . h($item['hsn'] ?? '-') . '</td>
-        <td class="cell c-center c-mid b-r b-b">' . rtrim(rtrim(number_format($gstPercent, 2), '0'), '.') . '%</td>
-        <td class="cell c-center c-mid b-r b-b">' . number_format($qty, 3) . '</td>
-        <td class="cell c-right c-mid b-r b-b">' . money($rateInclTax) . '</td>
-        <td class="cell c-right c-mid b-b"><b>' . money($lineTotal) . '</b></td>
+        <td class="cell c-center c-mid b-r b-b">' . h($item['hsn']) . '</td>
+        <td class="cell c-center c-mid b-r b-b">' . rtrim(rtrim(number_format($item['gst_percent'], 2), '0'), '.') . '%</td>
+        <td class="cell c-center c-mid b-r b-b">' . number_format($item['qty'], 3) . '</td>
+        <td class="cell c-right c-mid b-r b-b">' . money($item['mrp_line']) . '</td>
+        <td class="cell c-right c-mid b-r b-b">' . money($lineDiscount) . '</td>
+        <td class="cell c-right c-mid b-b"><b>' . money($lineAmount) . '</b></td>
+    </tr>';
+
+    $auditRowsHtml .= '<tr>
+        <td class="cell b-r b-b">' . h($item['description']) . '</td>
+        <td class="cell c-center c-mid b-r b-b">' . rtrim(rtrim(number_format($item['gst_percent'], 2), '0'), '.') . '%</td>
+        <td class="cell c-right c-mid b-r b-b">' . money($lineTaxableRaw) . '</td>
+        <td class="cell c-right c-mid b-r b-b">' . money($lineTaxRaw) . '</td>
+        <td class="cell c-right c-mid b-b"><b>' . money($lineAmount) . '</b></td>
     </tr>';
 }
 
+if ($itemCount === 0) {
+    $itemRowsHtml .= '<tr><td class="cell b-b c-center" colspan="8">No items found for this invoice.</td></tr>';
+}
+
+$tableTotalAmount = round(max(0, $productLinesTotal), 2);
+$shippingGstRate = $maxItemGstRate > 0 ? $maxItemGstRate : 0.0;
+$shippingTaxableRaw = $shippingGstRate > 0 ? ($shipping / (1 + ($shippingGstRate / 100))) : $shipping;
+$shippingTaxRaw = max(0, $shipping - $shippingTaxableRaw);
+
 if ($shipping > 0) {
-    $itemsSubtotal += $shipping;
-    $itemRowsHtml .= '<tr>
-        <td class="cell c-center c-mid b-r b-b"></td>
-        <td class="cell b-r b-b"><div class="item-title">Shipping Charges</div></td>
-        <td class="cell c-center c-mid b-r b-b">9965</td>
-        <td class="cell c-center c-mid b-r b-b">-</td>
-        <td class="cell c-center c-mid b-r b-b">1.000</td>
-        <td class="cell c-right c-mid b-r b-b">' . money($shipping) . '</td>
+    $totalTaxableRaw += $shippingTaxableRaw;
+    $totalTaxAmtRaw += $shippingTaxRaw;
+    $auditRowsHtml .= '<tr>
+        <td class="cell b-r b-b">Shipping Charges</td>
+        <td class="cell c-center c-mid b-r b-b">' . ($shippingGstRate > 0 ? rtrim(rtrim(number_format($shippingGstRate, 2), '0'), '.') . '%' : '-') . '</td>
+        <td class="cell c-right c-mid b-r b-b">' . money($shippingTaxableRaw) . '</td>
+        <td class="cell c-right c-mid b-r b-b">' . money($shippingTaxRaw) . '</td>
         <td class="cell c-right c-mid b-b"><b>' . money($shipping) . '</b></td>
     </tr>';
 }
 
-if ($discount > 0) {
-    $itemsSubtotal -= $discount;
-    $itemRowsHtml .= '<tr>
-        <td class="cell c-center c-mid b-r b-b"></td>
-        <td class="cell b-r b-b"><div class="item-title">' . h($discountLabel) . '</div></td>
-        <td class="cell c-center c-mid b-r b-b">-</td>
-        <td class="cell c-center c-mid b-r b-b">-</td>
-        <td class="cell c-center c-mid b-r b-b">-</td>
-        <td class="cell c-right c-mid b-r b-b">-' . money($discount) . '</td>
-        <td class="cell c-right c-mid b-b"><b>-' . money($discount) . '</b></td>
-    </tr>';
+$computedGrandTotal = round(max(0, $tableTotalAmount + $shipping), 2);
+$grand_total = $computedGrandTotal;
+if ($storedOrderTotal > 0 && abs($storedOrderTotal - $computedGrandTotal) <= 0.05) {
+    $grand_total = round($storedOrderTotal, 2);
 }
 
-$summaryTaxAmount = !empty($inv['order_tax']) ? (float)$inv['order_tax'] : $totalTaxAmt;
-$summaryBaseSubtotal = !empty($inv['order_base_subtotal'])
-    ? (float)$inv['order_base_subtotal']
-    : max(0, $grand_total - $shipping + $discount);
-$summaryTaxable = max(0, $summaryBaseSubtotal - $discount - $summaryTaxAmount);
+$totalTaxAmount = round(max(0, $totalTaxAmtRaw), 2);
+$summaryTaxable = round(max(0, $grand_total - $totalTaxAmount), 2);
+
+$cgstAmount = 0.0;
+$sgstAmount = 0.0;
+$igstAmount = 0.0;
+if ($isInterState) {
+    $igstAmount = $totalTaxAmount;
+} else {
+    $cgstAmount = round($totalTaxAmount / 2, 2);
+    $sgstAmount = round($totalTaxAmount - $cgstAmount, 2);
+}
+
+$discountSummaryDisplay = $totalDiscountApplied > 0 ? '-' . money($totalDiscountApplied) : money(0);
+$shippingRateLabel = $shippingGstRate > 0 ? rtrim(rtrim(number_format($shippingGstRate, 2), '0'), '.') . '%' : '-';
+$invoiceValueCheck = round($summaryTaxable + $cgstAmount + $sgstAmount + $igstAmount, 2);
+
+$auditRowsHtml .= '<tr style="font-weight:700; background:#f7f7f7;">
+    <td class="cell b-r b-t">Total</td>
+    <td class="cell c-center c-mid b-r b-t">-</td>
+    <td class="cell c-right c-mid b-r b-t">' . money($summaryTaxable) . '</td>
+    <td class="cell c-right c-mid b-r b-t">' . money($totalTaxAmount) . '</td>
+    <td class="cell c-right c-mid b-t"><b>' . money($invoiceValueCheck) . '</b></td>
+</tr>';
 
 $totalDisplayQty = number_format($totalQty, 3);
 
@@ -460,7 +533,7 @@ table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 
     <tr>
         <td class="cell b-r b-b break" style="width:56%;">
-            <div class="section-title">Consignee (Ship to)</div>
+            <div class="section-title">Buyer (Bill to)</div>
             <div><b><?= h($inv['customer_name']) ?></b></div>
             <div class="tight"><?= h($addressCompact) ?></div>
             <?php if (!empty($customerGstin)): ?><div>GSTIN/UIN : <?= h($customerGstin) ?></div><?php endif; ?>
@@ -469,9 +542,9 @@ table { width: 100%; border-collapse: collapse; table-layout: fixed; }
             <?php if (!empty($inv['customer_phone'])): ?><div>Contact : <?= h($inv['customer_phone']) ?></div><?php endif; ?>
         </td>
         <td class="cell b-b break" style="width:44%;">
-            <div class="section-title">Buyer (Bill to)</div>
+            <div class="section-title">Consignee (Ship to)</div>
             <div><b><?= h($inv['customer_name']) ?></b></div>
-            <div>Same as Consignee</div>
+            <div>Same as Buyer (Bill to)</div>
             <?php if (!empty($customerGstin)): ?><div>GSTIN/UIN : <?= h($customerGstin) ?></div><?php endif; ?>
             <div>Place of Supply : <?= h($placeOfSupply) ?></div>
             <?php if (!empty($inv['customer_phone'])): ?><div>Contact : <?= h($inv['customer_phone']) ?></div><?php endif; ?>
@@ -482,20 +555,22 @@ table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 <table class="frame" style="border-top:none;">
     <colgroup>
         <col style="width:5%;">
-        <col style="width:40%;">
-        <col style="width:11%;">
+        <col style="width:28%;">
+        <col style="width:10%;">
         <col style="width:8%;">
-        <col style="width:12%;">
-        <col style="width:12%;">
-        <col style="width:12%;">
+        <col style="width:7%;">
+        <col style="width:14%;">
+        <col style="width:10%;">
+        <col style="width:18%;">
     </colgroup>
     <tr style="background:#f7f7f7; font-weight:700;">
         <td class="cell b-r b-b c-center">Sl No.</td>
-        <td class="cell b-r b-b c-center">Description of Goods</td>
-        <td class="cell b-r b-b c-center">HSN/SAC</td>
+        <td class="cell b-r b-b c-center">Item Description</td>
+        <td class="cell b-r b-b c-center">HSN Code</td>
         <td class="cell b-r b-b c-center">GST Rate</td>
-        <td class="cell b-r b-b c-center">Quantity</td>
-        <td class="cell b-r b-b c-center">Rate<br>(Incl. of Tax)</td>
+        <td class="cell b-r b-b c-center">Qty</td>
+        <td class="cell b-r b-b c-center">MRP<br>(Incl. of Tax)</td>
+        <td class="cell b-r b-b c-center">Discount</td>
         <td class="cell b-b c-center">Amount</td>
     </tr>
     <?= $itemRowsHtml ?>
@@ -503,8 +578,9 @@ table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     <tr style="font-weight:700;">
         <td class="cell b-r b-t c-right" colspan="4">Total</td>
         <td class="cell b-r b-t c-center"><b><?= h($totalDisplayQty) ?></b></td>
-        <td class="cell b-r b-t"></td>
-        <td class="cell b-t c-right"><b><?= money($grand_total) ?></b></td>
+        <td class="cell b-r b-t c-right"><b><?= money($totalMrpInclTax) ?></b></td>
+        <td class="cell b-r b-t c-right"><b><?= money($totalDiscountApplied) ?></b></td>
+        <td class="cell b-t c-right"><b><?= money($tableTotalAmount) ?></b></td>
     </tr>
 </table>
 
@@ -523,14 +599,25 @@ table { width: 100%; border-collapse: collapse; table-layout: fixed; }
                     echo implode(' | ', $companyIds);
                 ?>
             </div>
+            <div class="small" style="margin-top:4px;"><b>Terms &amp; Conditions</b></div>
+            <div class="small">1. Goods once sold will not be taken back.</div>
+            <div class="small">2. Subject to Tamil Nadu jurisdiction.</div>
+            <div class="small">3. This is a computer generated invoice.</div>
             <div class="small" style="margin-top:2px;">E. &amp; O.E</div>
         </td>
         <td class="cell" style="width:32%;">
             <table style="width:100%;">
+                <tr><td class="small">Products Subtotal (MRP)</td><td class="c-right"><?= money($totalMrpInclTax) ?></td></tr>
+                <tr><td class="small"><?= h($discountLabel) ?></td><td class="c-right"><?= h($discountSummaryDisplay) ?></td></tr>
+                <tr><td class="small">Products Total</td><td class="c-right"><?= money($tableTotalAmount) ?></td></tr>
+                <tr><td class="small">Shipping (GST @ <?= h($shippingRateLabel) ?>)</td><td class="c-right"><?= money($shipping) ?></td></tr>
                 <tr><td class="small">Taxable Value</td><td class="c-right"><?= money($summaryTaxable) ?></td></tr>
-                <tr><td class="small"><?= h($taxLabel) ?></td><td class="c-right"><?= money($summaryTaxAmount) ?></td></tr>
-                <tr><td class="small">Shipping</td><td class="c-right"><?= money($shipping) ?></td></tr>
-                <tr><td class="small"><?= h($discountLabel) ?></td><td class="c-right">-<?= money($discount) ?></td></tr>
+                <?php if ($isInterState): ?>
+                    <tr><td class="small">IGST</td><td class="c-right"><?= money($igstAmount) ?></td></tr>
+                <?php else: ?>
+                    <tr><td class="small">CGST</td><td class="c-right"><?= money($cgstAmount) ?></td></tr>
+                    <tr><td class="small">SGST</td><td class="c-right"><?= money($sgstAmount) ?></td></tr>
+                <?php endif; ?>
                 <tr><td class="b-t"><b>Grand Total</b></td><td class="c-right b-t"><b><?= money($grand_total) ?></b></td></tr>
             </table>
             <div style="height:8px;"></div>
@@ -543,6 +630,24 @@ table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         <td class="cell b-r b-t small">Customer's Seal and Signature</td>
         <td class="cell b-t c-center small">Authorised Signatory</td>
     </tr>
+</table>
+
+<table class="frame" style="border-top:none;">
+    <colgroup>
+        <col style="width:40%;">
+        <col style="width:12%;">
+        <col style="width:16%;">
+        <col style="width:16%;">
+        <col style="width:16%;">
+    </colgroup>
+    <tr style="background:#f7f7f7; font-weight:700;">
+        <td class="cell b-r b-b c-center">Item</td>
+        <td class="cell b-r b-b c-center">GST Rate</td>
+        <td class="cell b-r b-b c-center">Taxable Value</td>
+        <td class="cell b-r b-b c-center">GST Amount</td>
+        <td class="cell b-b c-center">Invoice Value</td>
+    </tr>
+    <?= $auditRowsHtml ?>
 </table>
 <div class="c-center small" style="margin-top:2px;">SUBJECT TO CHITTOGARH JURISDICTION | Computer Generated Invoice</div>
 
