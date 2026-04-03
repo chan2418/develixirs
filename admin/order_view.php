@@ -139,10 +139,38 @@ function status_badge($s) {
                 
                 <!-- Totals -->
                 <div class="px-6 py-4 bg-gray-50/50 border-t border-gray-100">
+                    <?php
+                        $couponDiscount = (float)($order['coupon_discount'] ?? 0);
+                        $subscriptionDiscount = (float)($order['subscription_discount'] ?? 0);
+                        $appliedDiscountType = (string)($order['applied_discount_type'] ?? '');
+                        $displayDiscount = 0.0;
+                        $displayDiscountLabel = 'Discount';
+
+                        if ($appliedDiscountType === 'subscription' && $subscriptionDiscount > 0) {
+                            $displayDiscount = $subscriptionDiscount;
+                            $displayDiscountLabel = 'Subscription Discount';
+                            if (!empty($order['subscription_plan_name'])) {
+                                $displayDiscountLabel .= ' (' . $order['subscription_plan_name'] . ')';
+                            }
+                        } elseif ($couponDiscount > 0) {
+                            $displayDiscount = $couponDiscount;
+                            $displayDiscountLabel = 'Discount';
+                            if (!empty($order['coupon_code'])) {
+                                $displayDiscountLabel .= ' (' . $order['coupon_code'] . ')';
+                            }
+                        } elseif ($subscriptionDiscount > 0) {
+                            $displayDiscount = $subscriptionDiscount;
+                            $displayDiscountLabel = 'Subscription Discount';
+                        }
+
+                        $summarySubtotal = !empty($order['base_subtotal'])
+                            ? max(0, (float)$order['base_subtotal'] - (float)($order['tax_amount'] ?? 0))
+                            : (float)$order['total_amount'] - (float)($order['shipping_charge'] ?? 0) + $displayDiscount - (float)($order['tax_amount'] ?? 0);
+                    ?>
                     <div class="max-w-xs ml-auto space-y-2">
                         <div class="flex justify-between text-sm text-slate-600">
                             <span>Subtotal</span>
-                            <span>₹ <?php echo number_format($order['total_amount'] - ($order['shipping_charge'] ?? 0) + ($order['coupon_discount'] ?? 0) - ($order['tax_amount'] ?? 0), 2); ?></span>
+                            <span>₹ <?php echo number_format($summarySubtotal, 2); ?></span>
                         </div>
                         <div class="flex justify-between text-sm text-slate-600">
                             <span>Tax (18% GST)</span>
@@ -152,10 +180,10 @@ function status_badge($s) {
                             <span>Shipping</span>
                             <span>₹ <?php echo number_format($order['shipping_charge'] ?? 0, 2); ?></span>
                         </div>
-                        <?php if (!empty($order['coupon_discount']) && $order['coupon_discount'] > 0): ?>
+                        <?php if ($displayDiscount > 0): ?>
                         <div class="flex justify-between text-sm text-green-600">
-                            <span>Discount (<?php echo htmlspecialchars($order['coupon_code'] ?? 'COUPON'); ?>)</span>
-                            <span>- ₹ <?php echo number_format($order['coupon_discount'], 2); ?></span>
+                            <span><?php echo htmlspecialchars($displayDiscountLabel); ?></span>
+                            <span>- ₹ <?php echo number_format($displayDiscount, 2); ?></span>
                         </div>
                         <?php endif; ?>
                         <div class="flex justify-between text-base font-bold text-slate-900 pt-2 border-t border-gray-200">
@@ -186,6 +214,10 @@ function status_badge($s) {
                                 <?php if (!empty($order['customer_phone'])): ?>
                                     <div class="text-sm text-slate-500"><?php echo htmlspecialchars($order['customer_phone']); ?></div>
                                 <?php endif; ?>
+                                <div class="text-xs text-slate-400 mt-2 font-medium uppercase tracking-wider">Payment Method</div>
+                                <div class="font-medium text-slate-700">
+                                    <?php echo (str_starts_with($order['order_number'] ?? '', 'COD-')) ? 'Cash on Delivery' : 'Online / UPI'; ?>
+                                </div>
                             </div>
                         </div>
                     </div>

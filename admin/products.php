@@ -33,8 +33,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['bulk_action'])) {
 // Toggle Single (GET)
 // ----------------------
 if (isset($_GET['toggle'])) {
-    // 'is_active' column missing, toggle skipped
-    header('Location: products.php'); 
+    $toggleId = (int)$_GET['toggle'];
+    if ($toggleId > 0) {
+        // Toggle is_active
+        $stmtTags = $pdo->prepare("UPDATE products SET is_active = NOT is_active WHERE id = ?");
+        $stmtTags->execute([$toggleId]);
+    }
+    header('Location: products.php'); // Redirect to clear query param
     exit;
 }
 
@@ -53,6 +58,32 @@ $offset  = ($page - 1) * $perPage;
 // ----------------------
 $whereParts = ["1=1"];
 $params = [];
+
+// Dynamic Filters Query Logic
+// (We rely on $filterGroups being fetched below, but we need query logic here. 
+//  For cleanliness, I'll fetch just IDs or move fetching up. I'll move fetching up.)
+$filterGroups = [];
+try {
+    $stmtFG = $pdo->query("SELECT * FROM filter_groups WHERE is_active = 1 ORDER BY sort_order ASC, name ASC");
+    $filterGroups = $stmtFG->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($filterGroups as &$fg) {
+        $stmtOpt = $pdo->prepare("SELECT * FROM filter_options WHERE group_id = ? ORDER BY sort_order ASC, name ASC");
+        $stmtOpt->execute([$fg['id']]);
+        $fg['options'] = $stmtOpt->fetchAll(PDO::FETCH_ASSOC);
+    }
+    unset($fg);
+} catch (Exception $e) { }
+
+foreach ($filterGroups as $fg) {
+    $param = 'filter_' . $fg['id'];
+    if (!empty($_GET[$param])) {
+        $optId = (int)$_GET[$param];
+        if ($optId > 0) {
+            $whereParts[] = "EXISTS (SELECT 1 FROM product_filter_values pfv_{$fg['id']} WHERE pfv_{$fg['id']}.product_id = p.id AND pfv_{$fg['id']}.filter_option_id = ?)";
+            $params[] = $optId;
+        }
+    }
+}
 
 if ($q !== '') {
     $whereParts[] = "(p.name LIKE ? OR p.sku LIKE ? OR p.slug LIKE ?)";
@@ -95,11 +126,13 @@ $pages = max(1, ceil($total / $perPage));
  */
 $sql = "SELECT 
             p.*,
-            NULL AS parent_category_name,
+            c_parent.title AS parent_category_name,
             c_sub.title AS sub_category_name
         FROM products p
         LEFT JOIN categories c_sub 
                ON p.category_id = c_sub.id
+        LEFT JOIN categories c_parent 
+               ON p.parent_category_id = c_parent.id
         WHERE $whereSql
         ORDER BY p.created_at DESC
         LIMIT ? OFFSET ?";
@@ -165,8 +198,21 @@ function products_preserve_qs($overrides = []) {
     </div>
 
     <div class="flex items-center gap-3">
-      <a href="#" class="bg-white border border-gray-200 px-3 py-2 rounded-lg text-sm hover:shadow">Import</a>
-      <a href="#" class="bg-white border border-gray-200 px-3 py-2 rounded-lg text-sm hover:shadow">Export</a>
+      <form id="importForm" action="products_import.php" method="POST" enctype="multipart/form-data" class="hidden">
+           <input type="file" name="csv_file" id="csvFile" accept=".csv" onchange="document.getElementById('importForm').submit()">
+      </form>
+
+      <button onclick="document.getElementById('csvFile').click()" class="bg-white border border-gray-200 px-3 py-2 rounded-lg text-sm hover:shadow flex items-center gap-2">
+           <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+           Import CSV
+      </button>
+
+      <a href="products_export.php" class="bg-white border border-gray-200 px-3 py-2 rounded-lg text-sm hover:shadow flex items-center gap-2">
+           <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+           Export CSV
+      </a>
+      
+      <a href="download_template.php" class="text-xs text-indigo-600 hover:underline mr-2">Download Template</a>
       <a href="add_product.php" class="bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold shadow">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
         Add Product
@@ -197,6 +243,18 @@ function products_preserve_qs($overrides = []) {
             </option>
           <?php endforeach; ?>
         </select>
+
+        <!-- Dynamic Filters -->
+        <?php foreach($filterGroups as $fg): ?>
+          <select name="filter_<?= $fg['id'] ?>" class="border border-gray-200 rounded-lg px-3 py-2 text-sm dynamic-filter">
+            <option value="">All <?= htmlspecialchars($fg['name']) ?></option>
+            <?php foreach($fg['options'] as $opt): ?>
+              <option value="<?= $opt['id'] ?>" <?php if((int)($_GET['filter_'.$fg['id']]??0) === $opt['id']) echo 'selected'; ?>>
+                <?= htmlspecialchars($opt['name']) ?>
+              </option>
+            <?php endforeach; ?>
+          </select>
+        <?php endforeach; ?>
 
         <a id="resetBtn" href="products.php" class="px-3 py-2 rounded-lg bg-gray-50 border border-gray-100 text-sm">Reset</a>
       </div>
@@ -232,9 +290,16 @@ function products_preserve_qs($overrides = []) {
             <?php else: foreach($rows as $r):
               $img = htmlspecialchars(get_product_first_image($r['images']));
               $stock = (int)$r['stock'];
-              // Default to active since column missing
-              $statusText  = 'Published'; 
-              $statusClass = 'bg-green-50 text-green-700';
+              
+              // Status Logic
+              $isActive = (int)($r['is_active'] ?? 1);
+              if ($isActive === 1) {
+                  $statusText  = 'Published'; 
+                  $statusClass = 'bg-green-100 text-green-800 border border-green-200';
+              } else {
+                  $statusText  = 'Draft'; 
+                  $statusClass = 'bg-gray-100 text-gray-600 border border-gray-200';
+              }
 
               $parentCat = $r['parent_category_name'] ?? '';
               $subCat    = $r['sub_category_name'] ?? '';
@@ -249,20 +314,20 @@ function products_preserve_qs($overrides = []) {
                   $catLabel = '-';
               }
             ?>
-              <tr class="hover:bg-gray-50">
+              <tr class="hover:bg-gray-50 transition-colors">
                 <td class="px-4 py-4">
-                  <input type="checkbox" name="ids[]" value="<?php echo (int)$r['id']; ?>" class="h-4 w-4 text-indigo-600 border-gray-200 rounded" />
+                  <input type="checkbox" name="ids[]" value="<?php echo (int)$r['id']; ?>" class="h-4 w-4 text-indigo-600 border-gray-200 rounded focus:ring-indigo-500" />
                 </td>
 
                 <td class="px-4 py-4 flex items-center gap-3">
-                  <div class="w-14 h-14 rounded-lg overflow-hidden bg-gray-100 border">
-                    <img src="<?php echo $img; ?>" alt="" class="object-cover w-full h-full">
+                  <div class="w-14 h-14 rounded-lg overflow-hidden bg-gray-100 border relative group">
+                    <img src="<?php echo $img; ?>" alt="" class="object-cover w-full h-full transition-transform group-hover:scale-105">
                   </div>
                   <div>
                     <div class="font-semibold text-slate-800">
                       <?php echo htmlspecialchars($r['name']); ?>
                     </div>
-                    <div class="text-xs text-slate-400 mt-0.5">
+                    <div class="text-xs text-slate-400 mt-0.5 font-mono">
                       <?php echo htmlspecialchars($r['sku'] ?: substr($r['name'],0,60)); ?>
                     </div>
                   </div>
@@ -274,20 +339,24 @@ function products_preserve_qs($overrides = []) {
 
                 <td class="px-4 py-4 text-sm">
                   <?php if ($stock <= 0): ?>
-                    <span class="text-sm font-semibold text-red-600">Out of stock</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                      Out of stock
+                    </span>
                   <?php elseif ($stock <= 5): ?>
-                    <span class="text-sm font-semibold text-amber-600"><?php echo $stock; ?> Low Stock</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                      <?php echo $stock; ?> Low Stock
+                    </span>
                   <?php else: ?>
-                    <span class="text-sm text-slate-600"><?php echo $stock; ?></span>
+                    <span class="text-slate-600 font-medium"><?php echo $stock; ?></span>
                   <?php endif; ?>
                 </td>
 
-                <td class="px-4 py-4 text-sm font-semibold">
+                <td class="px-4 py-4 text-sm font-semibold text-slate-700">
                   ₹ <?php echo number_format($r['price'],2); ?>
                 </td>
 
                 <td class="px-4 py-4">
-                  <span class="inline-flex items-center px-3 py-1 rounded-full <?php echo $statusClass; ?> text-sm">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium <?php echo $statusClass; ?>">
                     <?php echo $statusText; ?>
                   </span>
                 </td>
@@ -352,12 +421,16 @@ const debounceMs = 450;
 
 /* Read filters */
 function readFilters() {
-  return { 
+  const params = { 
     q: document.getElementById('q').value || '', 
     status: document.getElementById('status').value || '', 
     category: document.getElementById('category').value || '', 
     perPage: 10 
   };
+  document.querySelectorAll('.dynamic-filter').forEach(el => {
+      if(el.value) params[el.name] = el.value;
+  });
+  return params;
 }
 
 /* AJAX search */
@@ -406,6 +479,11 @@ document.addEventListener('DOMContentLoaded', function(){
   if (st) st.addEventListener('change', function(){ doSearch(1); });
   const ct = document.getElementById('category'); 
   if (ct) ct.addEventListener('change', function(){ doSearch(1); });
+  
+  // Dynamic filters
+  document.querySelectorAll('.dynamic-filter').forEach(el => {
+      el.addEventListener('change', function(){ doSearch(1); });
+  });
   const checkAll = document.getElementById('checkAll'); 
   if (checkAll) checkAll.addEventListener('change', function(e){ 
     const ch = e.target.checked; 

@@ -7,6 +7,7 @@
 
 require_once __DIR__ . '/_auth.php';
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/invoice_number_helper.php';
 
 if (session_status() === PHP_SESSION_NONE) session_start();
 
@@ -16,6 +17,12 @@ if ($id <= 0) {
     http_response_code(400);
     echo "Bad request";
     exit;
+}
+
+try {
+    sync_invoice_number($pdo, $id);
+} catch (Exception $e) {
+    error_log('Invoice number sync error: ' . $e->getMessage());
 }
 
 try {

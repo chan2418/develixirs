@@ -4,6 +4,7 @@
 
 require_once __DIR__ . '/_auth.php';
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/invoice_number_helper.php';
 
 $orderId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
@@ -34,8 +35,8 @@ try {
         die("Order not found.");
     }
 
-    // Generate Invoice Number
-    $invoiceNum = 'INV-' . $order['order_number'] . '-' . date('ymd');
+    // Generate Invoice Number with shared format
+    $invoiceNum = build_invoice_number($pdo, (int)$orderId, $order['created_at'] ?? null);
 
     // Insert Invoice
     $stmt = $pdo->prepare("

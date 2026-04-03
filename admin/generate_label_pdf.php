@@ -1,4 +1,5 @@
 <?php
+ob_start(); // Start buffering immediately to catch any whitespace/errors from includes
 // admin/generate_label_pdf.php
 // Generate shipping label PDF (uses dompdf).
 //
@@ -14,6 +15,27 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 function money($n){ return number_format((float)$n, 2); }
+function strip_label_gst_text($text){
+    $text = (string)$text;
+    if ($text === '') {
+        return '';
+    }
+
+    $lines = preg_split('/\R/', $text);
+    $clean = [];
+    foreach ($lines as $line) {
+        if (preg_match('/\bGST(?:IN|TIN)?(?:\/UIN)?\b/i', $line)) {
+            continue;
+        }
+        $clean[] = $line;
+    }
+
+    $text = implode("\n", $clean);
+    $text = preg_replace('/(?:^|[\s,])GST(?:IN|TIN)?(?:\/UIN)?\s*[:\-]?\s*[0-9A-Z]{15}\b/i', '', $text);
+    $text = preg_replace("/\n{3,}/", "\n\n", $text);
+
+    return trim($text);
+}
 
 // get id
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
@@ -26,7 +48,7 @@ if ($id <= 0) {
 // fetch shipment + order
 try {
     $stmt = $pdo->prepare("
-      SELECT s.*, o.order_number, o.customer_name, o.customer_address, o.customer_phone, o.customer_email
+      SELECT s.*, o.order_number, o.user_id, o.customer_name, o.customer_address, o.customer_phone, o.customer_email
       FROM shipments s
       LEFT JOIN orders o ON s.order_id = o.id
       WHERE s.id = ? LIMIT 1
@@ -43,6 +65,89 @@ if (!$sh) {
     echo "<h2>Shipment not found</h2>";
     exit;
 }
+
+// Fetch Company Settings for "Ship From"
+$companyName = 'DEVELIXIR'; 
+$companyAddress = "No:6, 3rd Cross Street\nKamatchiamman Garden, Sethukkarai\nGudiyatham-632602, Vellore\nTamil Nadu, INDIA";
+$companyPhone = '9500650454';
+
+try {
+    $stmtSettings = $pdo->query("SELECT setting_key, setting_value FROM site_settings WHERE setting_key IN ('company_name', 'company_address', 'company_phone')");
+    while ($row = $stmtSettings->fetch(PDO::FETCH_ASSOC)) {
+        if ($row['setting_key'] === 'company_name' && !empty($row['setting_value'])) $companyName = $row['setting_value'];
+        if ($row['setting_key'] === 'company_address' && !empty($row['setting_value'])) $companyAddress = $row['setting_value'];
+        if ($row['setting_key'] === 'company_phone' && !empty($row['setting_value'])) $companyPhone = $row['setting_value'];
+    }
+} catch (Exception $e) { 
+    // minimal fallback already set 
+}
+
+$companyAddress = strip_label_gst_text($companyAddress);
+
+// Resolve Address & Phone (Same logic as invoice)
+$addressString = $sh['recipient_address'] ?? $sh['customer_address'];
+$customerPhone = $sh['recipient_phone'] ?? $sh['customer_phone'];
+
+// 1. Try to decode if JSON
+if (strpos($addressString, '{') === 0) {
+    $decoded = @json_decode($addressString, true);
+    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+        $parts = [];
+        if (!empty($decoded['address'])) $parts[] = $decoded['address'];
+        $cityState = [];
+        if (!empty($decoded['city'])) $cityState[] = $decoded['city'];
+        if (!empty($decoded['state'])) $cityState[] = $decoded['state'];
+        if (!empty($decoded['postal'])) $cityState[] = $decoded['postal'];
+        if (!empty($cityState)) $parts[] = implode(', ', $cityState);
+        $addressString = implode("\n", $parts);
+        
+        // Update phone if present in JSON and current phone is empty
+        if (empty($customerPhone) && !empty($decoded['phone'])) {
+            $customerPhone = $decoded['phone'];
+        }
+    }
+}
+
+// 2. Fallback to user profile if address invalid
+$cleanAddr = trim(strip_tags($addressString));
+if (empty($cleanAddr) || stripos($cleanAddr, 'Not provided') !== false || strlen($cleanAddr) < 5) {
+    if (!empty($sh['user_id'])) {
+        try {
+            $stmtAddr = $pdo->prepare("SELECT * FROM user_addresses WHERE user_id = ? ORDER BY is_default DESC, id DESC LIMIT 1");
+            $stmtAddr->execute([$sh['user_id']]);
+            $uAddr = $stmtAddr->fetch(PDO::FETCH_ASSOC);
+            
+            if ($uAddr) {
+                $parts = [];
+                if (!empty($uAddr['address_line1'])) $parts[] = $uAddr['address_line1'];
+                if (!empty($uAddr['address_line2'])) $parts[] = $uAddr['address_line2'];
+                $cityState = [];
+                if (!empty($uAddr['city'])) $cityState[] = $uAddr['city'];
+                if (!empty($uAddr['state'])) $cityState[] = $uAddr['state'];
+                if (!empty($uAddr['pincode'])) $cityState[] = $uAddr['pincode'];
+                
+                if (!empty($cityState)) $parts[] = implode(', ', $cityState);
+                $addressString = implode("\n", $parts);
+                
+                if (empty($customerPhone) && !empty($uAddr['phone'])) {
+                    $customerPhone = $uAddr['phone'];
+                }
+            }
+        } catch (Exception $e) {}
+    }
+}
+
+// 3. Last resort for phone
+if (empty($customerPhone) && !empty($sh['user_id'])) {
+    try {
+        $stmtPhone = $pdo->prepare("SELECT phone FROM user_addresses WHERE user_id = ? AND phone != '' AND phone IS NOT NULL ORDER BY is_default DESC LIMIT 1");
+        $stmtPhone->execute([$sh['user_id']]);
+        $foundPhone = $stmtPhone->fetchColumn();
+        if ($foundPhone) $customerPhone = $foundPhone;
+    } catch (Exception $e) {}
+}
+
+$addressString = strip_label_gst_text($addressString);
 
 // fetch items
 $items = [];
@@ -103,18 +208,15 @@ $html .= '</td>
         <tr>
             <td style="width: 50%; vertical-align: top; padding: 10px; border: 1px solid #000;">
                 <div class="label">SHIP FROM:</div>
-                <div class="value">DEVELIXIR</div>
-                <div class="address">No:6, 3rd Cross Street
-Kamatchiamman Garden, Sethukkarai
-Gudiyatham-632602, Vellore
-Tamil Nadu, INDIA
-Ph: 9500650454</div>
+                <div class="value"><?= h($companyName) ?></div>
+                <div class="address"><?= nl2br(h($companyAddress)) ?>
+Ph: <?= h($companyPhone) ?></div>
             </td>
             <td style="width: 50%; vertical-align: top; padding: 10px; border: 1px solid #000;">
                 <div class="label">SHIP TO:</div>
                 <div class="value">'.h($sh['recipient_name'] ?? $sh['customer_name']).'</div>
-                <div class="address">'.nl2br(h($sh['recipient_address'] ?? $sh['customer_address'])).'</div>
-                <div style="margin-top:5px">Ph: '.h($sh['recipient_phone'] ?? $sh['customer_phone']).'</div>
+                <div class="address">'.nl2br(h($addressString)).'</div>
+                <div style="margin-top:5px">Ph: '.h($customerPhone).'</div>
             </td>
         </tr>
     </table>
@@ -160,11 +262,15 @@ if (class_exists('Dompdf\\Dompdf') || class_exists('Dompdf')) {
         $dompdf->loadHtml($html);
         $dompdf->render();
         $filename = 'label-'.$sh['shipment_number'].'.pdf';
+        
+        if (ob_get_length()) ob_end_clean(); // Clean any previous output
+
         header('Content-Type: application/pdf');
         header('Content-Disposition: attachment; filename="'.basename($filename).'"');
         echo $dompdf->output();
         exit;
     } catch (Exception $e) {
+        file_put_contents(__DIR__ . '/pdf_error.log', date('Y-m-d H:i:s') . " - Error: " . $e->getMessage() . "\n", FILE_APPEND);
         error_log('DOMPDF render error: ' . $e->getMessage());
     }
 }

@@ -28,8 +28,13 @@ echo "    </url>\n\n";
 
 // Static pages
 $staticPages = [
-    ['url' => 'shop.php', 'changefreq' => 'daily', 'priority' => '0.9'],
-    ['url' => 'product.php', 'changefreq' => 'daily', 'priority' => '0.9'],
+    ['url' => 'product.php', 'changefreq' => 'daily', 'priority' => '0.9'], // Was shop.php
+    // 'product.php' is already here? Line 32 was product.php. 
+    // If shop.php is gone, I should remove it or rename it.
+    // The original list had shop.php AND product.php.
+    // Let's just remove shop.php if it's dead, or map it to product.php?
+    // User file list only shows product.php.
+    
     ['url' => 'blog.php', 'changefreq' => 'weekly', 'priority' => '0.7'],
     ['url' => 'contact.php', 'changefreq' => 'monthly', 'priority' => '0.6']
 ];
@@ -56,7 +61,8 @@ try {
             $lastmod = $cat['updated_at'] ?? $today;
             $catId = (int)$cat['id'];
             echo "    <url>\n";
-            echo "        <loc>https://develixirs.com/shop.php?category={$catId}</loc>\n";
+            // Corrected to product.php?cat=ID (matching product.php logic)
+            echo "        <loc>https://develixirs.com/product.php?cat={$catId}</loc>\n"; 
             echo "        <lastmod>{$lastmod}</lastmod>\n";
             echo "        <changefreq>weekly</changefreq>\n";
             echo "        <priority>0.8</priority>\n";

@@ -1,9 +1,16 @@
 <?php
 require_once __DIR__ . '/_auth.php';
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/invoice_number_helper.php';
 
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if ($id <= 0) { die("Invalid invoice"); }
+
+try {
+    sync_invoice_number($pdo, $id);
+} catch (Exception $e) {
+    error_log('Invoice number sync error: ' . $e->getMessage());
+}
 
 // fetch invoice + order + customer
 $stmt = $pdo->prepare("SELECT 

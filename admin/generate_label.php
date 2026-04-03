@@ -9,6 +9,27 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 
 function h($s){ return htmlspecialchars((string)($s ?? ''), ENT_QUOTES, 'UTF-8'); }
 function money($n){ return number_format((float)$n, 2); }
+function strip_label_gst_text($text){
+    $text = (string)$text;
+    if ($text === '') {
+        return '';
+    }
+
+    $lines = preg_split('/\R/', $text);
+    $clean = [];
+    foreach ($lines as $line) {
+        if (preg_match('/\bGST(?:IN|TIN)?(?:\/UIN)?\b/i', $line)) {
+            continue;
+        }
+        $clean[] = $line;
+    }
+
+    $text = implode("\n", $clean);
+    $text = preg_replace('/(?:^|[\s,])GST(?:IN|TIN)?(?:\/UIN)?\s*[:\-]?\s*[0-9A-Z]{15}\b/i', '', $text);
+    $text = preg_replace("/\n{3,}/", "\n\n", $text);
+
+    return trim($text);
+}
 
 // get id
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
@@ -146,6 +167,7 @@ if ($labelUrl === null && file_exists($samplePdf)) {
                 // if you stored recipient address in shipments table, use it; otherwise show order customer
                 $recipient = $sh['recipient_name'] ?? $sh['customer_name'] ?? '-';
                 $recipient_addr = $sh['recipient_address'] ?? $sh['customer_address'] ?? '-';
+                $recipient_addr = strip_label_gst_text($recipient_addr);
               ?>
               <div style="font-weight:700"><?= h($recipient) ?></div>
               <div><?= nl2br(h($recipient_addr)) ?></div>

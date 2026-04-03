@@ -1,0 +1,102 @@
+# ========================================
+# SENSITIVE CONFIGURATION FILES
+# ========================================
+includes/db.php
+includes/google_config.php
+includes/razorpay_config.php
+
+# ========================================
+# TEMPORARY & DIAGNOSTIC SCRIPTS
+# ========================================
+# Admin utility scripts
+add_admin.php
+check_admin.php
+create_admin.sql
+generate_admin_hash.php
+admin/reset_admin_password.php
+admin/test_login.php
+admin/debug_admin.php
+admin/verify_admin_system.php
+
+# Database diagnostic scripts
+check_*.php
+debug_*.php
+verify_*.php
+fix_*.php
+diagnostic.php
+admin/check_*.php
+admin/diagnose_*.php
+admin/diagnostic.php
+admin/fix_*.php
+admin/list_product_columns.php
+admin/sync_schema_to_hostinger.php
+
+# Schema management
+add_*_column.php
+backfill_*.php
+create_*_schema.php
+drop_*_tables.php
+database_setup.sql
+export_and_sync_schema.sh
+
+# ========================================
+# DATABASE FILES
+# ========================================
+*.db
+*.sql.bak
+backup.sql
+
+# ========================================
+# LOG FILES
+# ========================================
+*.log
+php-error.log
+debug_review.log
+
+# ========================================
+# SYSTEM FILES
+# ========================================
+.DS_Store
+.php-preview-router.php
+Thumbs.db
+desktop.ini
+
+# ========================================
+# VENDOR & DEPENDENCIES
+# ========================================
+vendor/
+node_modules/
+composer.lock
+package-lock.json
+
+# ========================================
+# USER UPLOADS (Large/Dynamic Content)
+# ========================================
+# Uncomment if you don't want to track uploads
+# assets/uploads/**
+# !assets/uploads/.gitkeep
+
+# ========================================
+# GENERATED FILES
+# ========================================
+sitemap.xml
+robots.txt
+
+# ========================================
+# IDE & EDITOR FILES
+# ========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# ========================================
+# TEMPORARY FILES
+# ========================================
+*.tmp
+*.bak
+*.cache
+.htaccess.bak

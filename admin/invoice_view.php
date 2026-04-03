@@ -10,12 +10,39 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 require_once __DIR__ . '/_auth.php';
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/invoice_number_helper.php';
+require_once __DIR__ . '/../includes/order_pricing_helper.php';
 
 if (session_status() === PHP_SESSION_NONE) session_start();
+
+ensure_order_pricing_schema($pdo);
 
 // Helpers
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 function money($n){ return number_format((float)$n, 2); }
+
+// Helper for images
+function get_invoice_image($images) {
+    $default = '/assets/images/avatar-default.png'; // Fallback
+    if (!$images) return $default;
+    
+    $val = $default;
+    $maybe = @json_decode($images, true);
+    if (is_array($maybe) && !empty($maybe[0])) {
+        $val = $maybe[0];
+    } elseif (strpos($images, ',') !== false) {
+        $parts = array_map('trim', explode(',', $images));
+        $val = $parts[0] ?? '';
+    } else {
+        $val = trim($images);
+    }
+
+    if (!$val) return $default;
+    if (preg_match('#^https?://#i', $val) || strpos($val, '/') === 0) {
+        return $val;
+    }
+    return '/assets/uploads/products/' . ltrim($val, '/');
+}
 
 // Get invoice id
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
@@ -23,6 +50,12 @@ if ($id <= 0) {
     // redirect to invoices list if id missing/invalid
     header('Location: invoices.php');
     exit;
+}
+
+try {
+    sync_invoice_number($pdo, $id);
+} catch (Exception $e) {
+    error_log('Invoice number sync error: ' . $e->getMessage());
 }
 
 // fetch invoice + order (safe try/catch)
@@ -34,11 +67,16 @@ try {
                o.customer_name, 
                o.customer_address, 
                o.total_amount AS order_total_amount,
+               o.base_subtotal AS order_base_subtotal,
                o.payment_status, 
                o.order_status, 
                o.created_at AS order_created_at,
                o.shipping_charge AS order_shipping,
-               o.coupon_discount AS order_discount,
+               o.coupon_discount AS order_coupon_discount,
+               o.subscription_discount AS order_subscription_discount,
+               o.subscription_plan_name,
+               o.subscription_discount_percent,
+               o.applied_discount_type,
                o.coupon_code,
                o.tax_amount AS order_tax
         FROM invoices i
@@ -70,19 +108,56 @@ $page_title = 'Invoice: ' . h($inv['invoice_number'] ?? ('#' . $id));
 include __DIR__ . '/layout/header.php';
 
 // --- Fetch invoice items (if table exists) ---
+// --- Fetch invoice items (from order_items to get images) ---
 $items = [];
 try {
-    $it = $pdo->prepare("SELECT description, qty, unit_price, amount FROM invoice_items WHERE invoice_id = ? ORDER BY id ASC");
-    $it->execute([$id]);
-    $items = $it->fetchAll(PDO::FETCH_ASSOC);
+    // We prefer order_items linked to products to show images
+    // Calculate amount as price * qty since order_items might not have 'amount' column depending on schema
+    $sqlItems = "
+        SELECT 
+            oi.product_name AS description,
+            oi.variant,
+            oi.qty,
+            oi.price AS unit_price,
+            (oi.price * oi.qty) AS amount,
+            p.images,
+            p.hsn
+        FROM order_items oi
+        LEFT JOIN products p ON oi.product_id = p.id
+        WHERE oi.order_id = ?
+        ORDER BY oi.id ASC
+    ";
+    $stmtIt = $pdo->prepare($sqlItems);
+    $stmtIt->execute([$inv['order_id']]);
+    $items = $stmtIt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
-    // invoice_items may not exist or be empty — that's OK
+    // Fallback if something fails
     $items = [];
 }
 
 // --- Numeric invoice columns with safe defaults ---
 // Prefer order data if invoice data is missing/zero
-$discount       = !empty($inv['order_discount']) ? (float)$inv['order_discount'] : (isset($inv['discount']) ? (float)$inv['discount'] : 0.00);
+$couponDiscount = !empty($inv['order_coupon_discount']) ? (float)$inv['order_coupon_discount'] : 0.00;
+$subscriptionDiscount = !empty($inv['order_subscription_discount']) ? (float)$inv['order_subscription_discount'] : 0.00;
+$appliedDiscountType = (string)($inv['applied_discount_type'] ?? '');
+$discountLabel = 'Discount';
+$discount = 0.00;
+if ($appliedDiscountType === 'subscription' && $subscriptionDiscount > 0) {
+    $discount = $subscriptionDiscount;
+    $discountLabel = 'Subscription Discount';
+    if (!empty($inv['subscription_plan_name'])) {
+        $discountLabel .= ' (' . trim((string)$inv['subscription_plan_name']) . ')';
+    }
+} elseif ($couponDiscount > 0) {
+    $discount = $couponDiscount;
+    $discountLabel = 'Discount';
+    if (!empty($inv['coupon_code'])) {
+        $discountLabel .= ' (' . trim((string)$inv['coupon_code']) . ')';
+    }
+} elseif ($subscriptionDiscount > 0) {
+    $discount = $subscriptionDiscount;
+    $discountLabel = 'Subscription Discount';
+}
 $shipping       = !empty($inv['order_shipping']) ? (float)$inv['order_shipping'] : (isset($inv['shipping_charge']) ? (float)$inv['shipping_charge'] : 0.00);
 $tax_amount     = !empty($inv['order_tax'])      ? (float)$inv['order_tax']      : (isset($inv['tax_amount']) ? (float)$inv['tax_amount'] : 0.00);
 
@@ -92,11 +167,14 @@ $total_fee      = isset($inv['total_fee'])        ? (float)$inv['total_fee']    
 
 // --- Subtotal calculation: sum invoice_items OR fallback to invoice.amount or order_total_amount ---
 $subtotal = 0.0;
-if (!empty($items)) {
+if (!empty($inv['order_base_subtotal'])) {
+    $subtotal = max(0, (float)$inv['order_base_subtotal'] - $tax_amount);
+} elseif (!empty($items)) {
     foreach ($items as $it) {
         // ensure amount numeric
         $subtotal += (float)$it['amount'];
     }
+    $subtotal = max(0, $subtotal - $tax_amount);
 } else {
     // fallback logic
     $subtotal = (float)$inv['order_total_amount'] - $shipping + $discount - $tax_amount;
@@ -156,6 +234,35 @@ if (file_exists($possibleLocal)) {
   .bill-grid { grid-template-columns: 1fr; }
   .invoice-head { flex-direction:column; align-items:flex-start; }
   .summary { width:100%; margin-left:0; margin-top:14px; }
+  .summary { width:100%; margin-left:0; margin-top:14px; }
+}
+
+@media print {
+  /* Hide UI chrome */
+  aside, header, .actions, .filter-row, .pagination, .page-link, .btn, .notif-backdrop, .notif-panel, #profileDropdown { 
+    display:none !important; 
+  }
+  
+  /* Reset layout containers */
+  body, .page-wrap, .card, .flex, .flex-1 {
+    background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    display: block !important;
+    height: auto !important;
+  }
+  
+  /* Ensure page wrap takes full width */
+  .page-wrap { max-width: 100% !important; }
+  
+  /* Reset main column flex behavior from header.php */
+  .flex-col, .min-w-0 {
+    display: block !important;
+  }
 }
 </style>
 
@@ -206,7 +313,9 @@ if (file_exists($possibleLocal)) {
     <table class="table" aria-label="Invoice items">
       <thead>
         <tr>
-          <th style="width:58%;">Description</th>
+          <th style="width:8%;">Image</th>
+          <th style="width:40%;">Description</th>
+          <th style="width:10%;">HSN</th>
           <th style="width:10%;">Qty</th>
           <th style="width:16%;" class="right">Unit</th>
           <th style="width:16%;" class="right">Amount</th>
@@ -216,7 +325,18 @@ if (file_exists($possibleLocal)) {
         <?php if (!empty($items)): ?>
           <?php foreach ($items as $it): ?>
             <tr>
-              <td><?= h($it['description']) ?></td>
+              <td>
+                <div style="width:40px;height:40px;background:#f1f5f9;border-radius:6px;overflow:hidden;border:1px solid #e2e8f0">
+                    <img src="<?= h(get_invoice_image($it['images'] ?? '')) ?>" alt="" style="width:100%;height:100%;object-fit:cover;">
+                </div>
+              </td>
+              <td>
+                  <div style="font-weight:600;color:#334155"><?= h($it['description']) ?></div>
+                  <?php if(!empty($it['variant'])): ?>
+                    <div style="font-size:12px;color:#64748b">Variant: <?= h($it['variant']) ?></div>
+                  <?php endif; ?>
+              </td>
+              <td><?= h($it['hsn'] ?? '-') ?></td>
               <td><?= h($it['qty']) ?></td>
               <td class="right">₹ <?= money($it['unit_price']) ?></td>
               <td class="right">₹ <?= money($it['amount']) ?></td>
@@ -224,6 +344,7 @@ if (file_exists($possibleLocal)) {
           <?php endforeach; ?>
         <?php else: ?>
           <tr>
+            <td></td>
             <td>Order <?= h($inv['order_number']) ?> — goods / services</td>
             <td>1</td>
             <td class="right">₹ <?= money($subtotal) ?></td>
@@ -244,7 +365,7 @@ if (file_exists($possibleLocal)) {
         <div class="row"><div>Subtotal</div><div class="right">₹ <?= money($subtotal) ?></div></div>
 
         <?php if ($discount > 0): ?>
-          <div class="row"><div>Discount</div><div class="right">- ₹ <?= money($discount) ?></div></div>
+          <div class="row"><div><?= h($discountLabel) ?></div><div class="right">- ₹ <?= money($discount) ?></div></div>
         <?php endif; ?>
 
         <?php if ($other_discount > 0): ?>

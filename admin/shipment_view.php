@@ -102,11 +102,11 @@ function fmt_dt($dt){
       <div style="text-align:right">
     <div style="margin-bottom:8px"><?= status_badge($sh['status']) ?></div>
     <div class="actions">
-        <?php if (!empty($labelUrl) || true): // always use generate_label endpoint ?>
-        <a href="download_label.php?id=<?= (int)$sh['id'] ?>" class="btn ghost" download>Download Label</a>
+        <?php if (!empty($labelUrl) || true): // always use generated label endpoint ?>
+        <a href="label_pdf.php?id=<?= (int)$sh['id'] ?>" class="btn ghost" download>Download Label</a>
         <a href="generate_label.php?id=<?= (int)$sh['id'] ?>&preview=1" target="_blank" class="btn">Preview</a>
         <?php else: ?>
-        <button class="btn ghost" onclick="window.location.href='generate_label_pdf.php?id=<?= (int)$sh['id'] ?>'">Download Label</button>
+        <button class="btn ghost" onclick="window.location.href='label_pdf.php?id=<?= (int)$sh['id'] ?>'">Download Label</button>
         <?php endif; ?>
         <a href="shipments.php" class="btn">Back</a>
     </div>
@@ -118,6 +118,7 @@ function fmt_dt($dt){
         <div class="info-block">
           <div class="info-row"><div><strong>Carrier</strong></div><div class="small"><?= h($sh['carrier'] ?: '-') ?></div></div>
           <div class="info-row"><div><strong>Tracking #</strong></div><div class="small"><?= h($sh['tracking_number'] ?: '-') ?></div></div>
+          <div class="info-row"><div><strong>Shipment Date</strong></div><div class="small"><?= h(fmt_dt($sh['shipment_date'])) ?></div></div>
           <div class="info-row"><div><strong>Method</strong></div><div class="small"><?= h($sh['shipping_method'] ?: '-') ?></div></div>
           <div class="info-row"><div><strong>Shipping Cost</strong></div><div class="small">₹ <?= money($sh['shipping_cost'] ?? 0) ?></div></div>
           <div class="info-row"><div><strong>Weight</strong></div><div class="small"><?= h($sh['weight'] ?? '-') ?> kg</div></div>
@@ -149,6 +150,10 @@ function fmt_dt($dt){
               <input type="number" step="0.01" name="shipping_cost" placeholder="Shipping cost" value="<?= h($sh['shipping_cost']) ?>" />
             </div>
 
+            <div class="form-row" style="margin-bottom:10px">
+              <input type="datetime-local" name="shipment_date" value="<?= !empty($sh['shipment_date']) ? date('Y-m-d\TH:i', strtotime($sh['shipment_date'])) : '' ?>" />
+            </div>
+
             <div style="margin-bottom:10px">
               <label class="small">Upload label PDF (optional)</label>
               <input type="file" name="label_pdf" accept="application/pdf" />
@@ -174,13 +179,13 @@ function fmt_dt($dt){
             <div class="small">Stored file: <?= h($sh['label_file']) ?></div>
             <div class="mt-3">
             <div class="mt-3">
-              <a href="download_label.php?id=<?= (int)$sh['id'] ?>" class="btn ghost" download>Download</a>
-              <a href="download_label.php?id=<?= (int)$sh['id'] ?>" target="_blank" class="btn">Preview</a>
+              <a href="label_pdf.php?id=<?= (int)$sh['id'] ?>" class="btn ghost" download>Download</a>
+              <a href="generate_label.php?id=<?= (int)$sh['id'] ?>&preview=1" target="_blank" class="btn">Preview</a>
             </div>
           <?php else: ?>
             <div class="small">No label uploaded. You can generate a label PDF below.</div>
             <div class="mt-3">
-              <a href="generate_label_pdf.php?id=<?= (int)$sh['id'] ?>" class="btn ghost" download>Download Label</a>
+              <a href="label_pdf.php?id=<?= (int)$sh['id'] ?>" class="btn ghost" download>Download Label</a>
             </div>
           <?php endif; ?>
         </div>

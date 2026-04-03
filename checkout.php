@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/coupon_helpers.php';
+require_once __DIR__ . '/includes/order_pricing_helper.php';
 session_start();
 
 if (!isset($_SESSION['user_id'])) {
@@ -20,30 +21,100 @@ try {
     $addresses = [];
 }
 
+$selectedAddressId = (int)($_SESSION['selected_address_id'] ?? 0);
+$sessionGstNumber = strtoupper(trim((string)($_SESSION['gst_number'] ?? '')));
+
 // Fetch cart items
 $cartItems = [];
 $cartTotal = 0;
 $appliedCoupon = getAppliedCoupon();
 $discountAmount = 0;
+$deliveryCharge = 0;
+$finalTotal = 0;
+$discountLabel = 'Discount';
+$couponSavedNotApplied = false;
 
 try {
-    $stmt = $pdo->prepare("
-        SELECT c.id, c.product_id, c.quantity, p.name, p.price, p.images
-        FROM cart c
-        JOIN products p ON c.product_id = p.id
-        WHERE c.user_id = :uid
-    ");
-    $stmt->execute([':uid' => $userId]);
-    $cartItems = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
     
-    foreach ($cartItems as $item) {
-        $cartTotal += $item['price'] * $item['quantity'];
+    // HANDLE DIRECT BUY FROM URL (Bypassing AJAX to avoid race conditions)
+    if (isset($_GET['source']) && $_GET['source'] === 'direct_buy' && isset($_GET['product_id'])) {
+        $_SESSION['direct_buy_item'] = [
+            'product_id' => (int)$_GET['product_id'],
+            'quantity' => isset($_GET['quantity']) ? (int)$_GET['quantity'] : 1
+        ];
+
+    } else {
+
+    }
+
+    // Check for "Direct Buy" session
+    $directBuyItem = $_SESSION['direct_buy_item'] ?? null;
+
+    $isDirectSource = (isset($_GET['source']) && $_GET['source'] === 'direct_buy');
+    
+    // IMPORTANT: Clear direct buy session if NOT coming from Buy Now button
+    // This prevents old Buy Now session from interfering with normal cart checkout
+    if (!$isDirectSource && isset($_SESSION['direct_buy_item'])) {
+        unset($_SESSION['direct_buy_item']);
+        $directBuyItem = null;
+
     }
     
-    // Apply discount if coupon is applied
-    if ($appliedCoupon) {
-        $discountAmount = $appliedCoupon['discount_amount'];
+    // If direct buy exists, use THAT instead of DB cart
+    if ($directBuyItem && isset($directBuyItem['product_id'])) {
+        $cartItems = [];
+        // Fetch product details for this single item
+        $stmtP = $pdo->prepare("SELECT id, name, price, images, category_id FROM products WHERE id = ?");
+        $stmtP->execute([$directBuyItem['product_id']]);
+        $prod = $stmtP->fetch(PDO::FETCH_ASSOC);
+        
+
+        
+        if ($prod) {
+             $prod['quantity'] = $directBuyItem['quantity']; // Override with buy now qty
+             $prod['product_id'] = $prod['id']; // Map to expected key
+             $cartItems[] = $prod;
+             $cartTotal = $prod['price'] * $prod['quantity'];
+
+        }
+    } else {
+        // FALLBACK: Normal DB Cart
+
+        // CRITICAL DEBUG: If user came from "Buy Now" button but session is empty, STOP and show error.
+        if ($isDirectSource) {
+            echo '<div style="background:#f8d7da; color:#721c24; padding:20px; text-align:center; margin:20px; border:1px solid #f5c6cb; border-radius:5px;">
+                    <h3><i class="fa fa-exclamation-circle"></i> Direct Buy Error</h3>
+                    <p>Session data for the product was lost during redirect.</p>
+                    <p>Debug Info: Session ID: '.session_id().' | Direct Item: '.(isset($_SESSION['direct_buy_item']) ? 'SET' : 'MISSING').'</p>
+                    <a href="index.php" style="color:#721c24; font-weight:bold; text-decoration:underline;">Return to Shop</a>
+                  </div>';
+            exit;
+        }
+
+        $stmt = $pdo->prepare("
+            SELECT c.id, c.product_id, c.quantity, p.name, p.price, p.images, p.category_id
+            FROM cart c
+            JOIN products p ON c.product_id = p.id
+            WHERE c.user_id = :uid
+        ");
+        $stmt->execute([':uid' => $userId]);
+        $cartItems = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+
+        
+        foreach ($cartItems as $item) {
+            $cartTotal += $item['price'] * $item['quantity'];
+        }
     }
+    
+    $pricing = calculate_order_pricing($pdo, $userId, $cartItems, $appliedCoupon);
+    $appliedCoupon = $pricing['coupon']['data'] ?? null;
+    $discountAmount = (float)($pricing['applied_discount_amount'] ?? 0);
+    $deliveryCharge = (float)($pricing['delivery_charge'] ?? 0);
+    $finalTotal = (float)($pricing['final_total'] ?? $cartTotal);
+    $discountLabel = (string)($pricing['discount_label'] ?? 'Discount');
+    $couponSavedNotApplied = !empty($pricing['coupon']['saved_not_applied']);
 } catch (PDOException $e) {
     $cartItems = [];
 }
@@ -78,7 +149,15 @@ function get_first_image($images) {
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
   <link rel="stylesheet" href="assets/css/navbar.css">
-  <?php include __DIR__ . '/navbar.php'; ?>
+  <?php 
+  // CRITICAL: Preserve checkout's cartTotal before navbar overwrites it
+  $checkoutCartTotal = $cartTotal;
+  $checkoutCartItems = $cartItems;
+  include __DIR__ . '/navbar.php'; 
+  // Restore checkout values after navbar
+  $cartTotal = $checkoutCartTotal;
+  $cartItems = $checkoutCartItems;
+  ?>
   
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -273,6 +352,45 @@ function get_first_image($images) {
       text-decoration: none;
       font-size: 14px;
     }
+
+    .gst-field-wrap {
+      margin-top: 18px;
+      padding: 14px;
+      border: 1px solid #eee;
+      border-radius: 8px;
+      background: #fafafa;
+    }
+
+    .gst-field-wrap label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 8px;
+    }
+
+    .gst-input {
+      width: 100%;
+      padding: 11px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-family: "Poppins", sans-serif;
+      font-size: 14px;
+      text-transform: uppercase;
+    }
+
+    .gst-input:focus {
+      outline: none;
+      border-color: #D4AF37;
+      box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.12);
+    }
+
+    .gst-help {
+      display: block;
+      margin-top: 6px;
+      color: #777;
+      font-size: 12px;
+    }
     
     @media (max-width: 900px) {
       .checkout-layout { grid-template-columns: 1fr; }
@@ -301,9 +419,14 @@ function get_first_image($images) {
         <?php else: ?>
           <div class="address-list">
             <?php foreach ($addresses as $index => $addr): ?>
-              <label class="address-card <?php echo $addr['is_default'] ? 'selected' : ''; ?>">
+              <?php
+                $isSelected = $selectedAddressId > 0
+                    ? ((int)$addr['id'] === $selectedAddressId)
+                    : !empty($addr['is_default']);
+              ?>
+              <label class="address-card <?php echo $isSelected ? 'selected' : ''; ?>">
                 <input type="radio" name="delivery_address" value="<?php echo $addr['id']; ?>" 
-                       class="address-radio" <?php echo $addr['is_default'] ? 'checked' : ''; ?>>
+                       class="address-radio" <?php echo $isSelected ? 'checked' : ''; ?>>
                 <div class="address-details">
                   <span class="address-name"><?php echo htmlspecialchars($addr['full_name']); ?></span>
                   <div><?php echo htmlspecialchars($addr['address_line1']); ?>, <?php echo htmlspecialchars($addr['city']); ?></div>
@@ -313,7 +436,19 @@ function get_first_image($images) {
               </label>
             <?php endforeach; ?>
           </div>
-          <button class="deliver-btn" onclick="goToStep2()">Deliver Here</button>
+          <div class="gst-field-wrap">
+            <label for="gst_number">GST Number (Optional)</label>
+            <input
+              type="text"
+              id="gst_number"
+              class="gst-input"
+              maxlength="15"
+              placeholder="Ex: 29ABCDE1234F2Z5"
+              value="<?php echo htmlspecialchars($sessionGstNumber); ?>"
+            >
+            <small class="gst-help">Used for business invoice if provided.</small>
+          </div>
+          <button class="deliver-btn" onclick="goToStep2(this)">Deliver Here</button>
         <?php endif; ?>
       </div>
       
@@ -348,30 +483,33 @@ function get_first_image($images) {
     </div>
     
     <!-- PRICE DETAILS -->
+
     <div class="price-details">
       <div class="price-header">Price Details</div>
       <div class="price-row">
         <span>Price (<?php echo count($cartItems); ?> items)</span>
         <span>₹<?php echo number_format($cartTotal, 2); ?></span>
       </div>
-      <?php if ($appliedCoupon): ?>
+      <?php if ($discountAmount > 0): ?>
         <div class="price-row" style="color: #28a745;">
-          <span><i class="fa fa-tag"></i> Coupon (<?php echo htmlspecialchars($appliedCoupon['code']); ?>)</span>
+          <span><i class="fa fa-tag"></i> <?php echo htmlspecialchars($discountLabel); ?></span>
           <span>-₹<?php echo number_format($discountAmount, 2); ?></span>
+        </div>
+      <?php endif; ?>
+      <?php if ($couponSavedNotApplied && $appliedCoupon): ?>
+        <div style="margin-bottom: 12px; font-size: 12px; color: #8a6d3b;">
+          Coupon <strong><?php echo htmlspecialchars($appliedCoupon['code']); ?></strong> is saved, but your subscription gives better savings for this cart.
         </div>
       <?php endif; ?>
       <div class="price-row">
         <span>Delivery Charges</span>
-        <?php 
-          $deliveryCharge = ($cartTotal < 1000) ? 80 : 0;
-        ?>
         <span style="color:<?php echo ($deliveryCharge > 0) ? '#333' : '#388e3c'; ?>;">
           <?php echo ($deliveryCharge > 0) ? '₹' . number_format($deliveryCharge, 2) : 'FREE'; ?>
         </span>
       </div>
       <div class="total-row">
         <span>Total Payable</span>
-        <span>₹<?php echo number_format($cartTotal - $discountAmount + $deliveryCharge, 2); ?></span>
+        <span>₹<?php echo number_format($finalTotal, 2); ?></span>
       </div>
       <?php if ($discountAmount > 0): ?>
         <div style="background: #d4edda; color: #155724; padding: 10px; border-radius: 6px; font-size: 13px; text-align: center; margin-top: 15px;">
@@ -421,14 +559,60 @@ function showStep(stepNumber) {
     }
 }
 
-function goToStep2() {
+function isValidGstNumber(gstNumber) {
+    return /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(gstNumber);
+}
+
+async function goToStep2(btn) {
     const selected = document.querySelector('input[name="delivery_address"]:checked');
     if (!selected) {
         alert('Please select a delivery address');
         return;
     }
-    showStep(2);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    const gstInput = document.getElementById('gst_number');
+    const gstNumber = gstInput ? gstInput.value.trim().toUpperCase().replace(/\s+/g, '') : '';
+
+    if (gstInput) {
+        gstInput.value = gstNumber;
+    }
+
+    if (gstNumber && !isValidGstNumber(gstNumber)) {
+        alert('Please enter a valid GST number or leave it empty.');
+        if (gstInput) gstInput.focus();
+        return;
+    }
+
+    if (btn) {
+        btn.disabled = true;
+        btn.dataset.originalText = btn.dataset.originalText || btn.innerText;
+        btn.innerText = 'Saving...';
+    }
+
+    try {
+        const response = await fetch('api/set_checkout_details.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `address_id=${encodeURIComponent(selected.value)}&gst_number=${encodeURIComponent(gstNumber)}`
+        });
+        const data = await response.json();
+
+        if (!data.success) {
+            alert(data.message || 'Failed to save delivery details');
+            return;
+        }
+
+        showStep(2);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (error) {
+        console.error(error);
+        alert('Unable to save delivery details. Please try again.');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerText = btn.dataset.originalText || 'Deliver Here';
+        }
+    }
 }
 
 function removeFromCart(productId) {
@@ -454,6 +638,13 @@ document.querySelectorAll('input[name="delivery_address"]').forEach(radio => {
         this.closest('.address-card').classList.add('selected');
     });
 });
+
+const gstInput = document.getElementById('gst_number');
+if (gstInput) {
+    gstInput.addEventListener('input', function() {
+        this.value = this.value.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 15);
+    });
+}
 </script>
 
 <?php include 'footer.php'; ?>

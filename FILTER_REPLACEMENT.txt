@@ -1,0 +1,23 @@
+    // For dynamic filters (NOT category), use product_filter_values table
+    $optionIds = array_filter($vals, function($v) {
+        return is_numeric($v) && (int)$v > 0;
+    });
+    
+    if (empty($optionIds)) {
+        continue;
+    }
+    
+    $phList = [];
+    foreach ($optionIds as $optId) {
+        $ph = ':opt_' . $paramIndex;
+        $paramIndex++;
+        $phList[] = $ph;
+        $params[$ph] = (int)$optId;
+    }
+    
+    $whereParts[] = "products.id IN (
+        SELECT product_id 
+        FROM product_filter_values 
+        WHERE filter_group_id = {$g['id']}
+        AND filter_option_id IN (" . implode(',', $phList) . ")
+    )";

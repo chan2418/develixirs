@@ -12,6 +12,15 @@ try {
     $productColumns = [];
 }
 
+// 🔹 Load Categories for Dropdown (Top Level Only)
+$categories = [];
+try {
+    $stmtCats = $pdo->query("SELECT id, name FROM categories WHERE parent_id IS NULL OR parent_id = 0 ORDER BY name ASC");
+    $categories = $stmtCats->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    $categories = [];
+}
+
 // 🔹 Handle form submit BEFORE any HTML output
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name       = trim($_POST['name'] ?? '');
@@ -20,19 +29,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $sortOrder  = (int)($_POST['sort_order'] ?? 0);
     $isActive   = isset($_POST['is_active']) ? 1 : 0;
 
-    if ($name === '' || $paramKey === '' || $columnName === '') {
-        $error = 'Name, Param Key and Column Name are required.';
+    if ($name === '' || $paramKey === '') {
+        $error = 'Name and Param Key are required.';
     } else {
         $stmt = $pdo->prepare("
-            INSERT INTO filter_groups (name, param_key, column_name, sort_order, is_active)
-            VALUES (:name, :param_key, :column_name, :sort_order, :is_active)
+            INSERT INTO filter_groups (name, param_key, column_name, sort_order, is_active, category_id)
+            VALUES (:name, :param_key, :column_name, :sort_order, :is_active, :category_id)
         ");
+        
+        // Handle 'Common' (empty string) as NULL for category_id
+        $catId = !empty($_POST['category_id']) ? $_POST['category_id'] : null;
+        
         $stmt->execute([
             'name'        => $name,
             'param_key'   => $paramKey,
-            'column_name' => $columnName,
+            'column_name' => $columnName, // Can be empty now
             'sort_order'  => $sortOrder,
             'is_active'   => $isActive,
+            'category_id' => $catId
         ]);
 
         // ✅ redirect safely (no output has been sent yet)
@@ -89,6 +103,28 @@ $selectedColumn = $_POST['column_name'] ?? '';
         </p>
       </div>
 
+      <!-- Category (Generic vs Specific) -->
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">
+          Applies To (Category)
+        </label>
+        <select
+          name="category_id"
+          class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+        >
+          <option value="">-- Generic / Common Filter (All Products) --</option>
+          <?php foreach ($categories as $cat): ?>
+             <option value="<?= $cat['id'] ?>" <?= (isset($_POST['category_id']) && $_POST['category_id'] == $cat['id']) ? 'selected' : '' ?>>
+                <?= htmlspecialchars($cat['name']) ?>
+             </option>
+          <?php endforeach; ?>
+        </select>
+        <p class="text-xs text-slate-500 mt-1">
+          If selected, this filter will <strong>only</strong> appear on that Category's page (and override common filters if logic dictates). 
+          <strong>Leave empty</strong> for a common filter that shows everywhere (or as a fallback).
+        </p>
+      </div>
+
       <!-- Param Key -->
       <div>
         <label class="block text-sm font-medium text-slate-700 mb-1">
@@ -116,7 +152,6 @@ $selectedColumn = $_POST['column_name'] ?? '';
         <select
           name="column_name"
           class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-          required
         >
           <option value="">-- Select column from products table --</option>
           <?php foreach ($productColumns as $col): ?>

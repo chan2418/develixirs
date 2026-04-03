@@ -30,19 +30,21 @@ $old = [
 ];
 
 // ✅ AUTO FETCH VALUES FROM PRODUCT COLUMN
-$columnName = $group['column_name']; // ex: color, size, category
+$columnName = $group['column_name'] ?? ''; // ex: color, size, category
 $columnValues = [];
 
-try {
-    $sql = "SELECT DISTINCT `$columnName` 
-            FROM products 
-            WHERE `$columnName` IS NOT NULL 
-              AND `$columnName` != ''
-            ORDER BY `$columnName` ASC";
-    $stmtVals = $pdo->query($sql);
-    $columnValues = $stmtVals->fetchAll(PDO::FETCH_COLUMN);
-} catch (Exception $e) {
-    $columnValues = [];
+if (!empty($columnName)) {
+    try {
+        $sql = "SELECT DISTINCT `$columnName` 
+                FROM products 
+                WHERE `$columnName` IS NOT NULL 
+                  AND `$columnName` != ''
+                ORDER BY `$columnName` ASC";
+        $stmtVals = $pdo->query($sql);
+        $columnValues = $stmtVals->fetchAll(PDO::FETCH_COLUMN);
+    } catch (Exception $e) {
+        $columnValues = [];
+    }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -51,6 +53,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $sortOrder = (int)($_POST['sort_order'] ?? 0);
     $isActive  = isset($_POST['is_active']) ? 1 : 0;
 
+    // If value is empty, default to label
+    if ($value === '') {
+        $value = $label;
+    }
+
     $old = [
         'label'      => $label,
         'value'      => $value,
@@ -58,8 +65,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'is_active'  => $isActive,
     ];
 
-    if ($label === '' || $value === '') {
-        $error = 'Label and Value are required.';
+    if ($label === '') {
+        $error = 'Label is required.';
     } else {
         $stmt = $pdo->prepare("
             INSERT INTO filter_options (group_id, label, value, sort_order, is_active)
@@ -107,31 +114,46 @@ include __DIR__ . '/layout/header.php';
         required>
     </div>
 
-    <!-- ✅ VALUE DROPDOWN FROM PRODUCTS -->
+    <!-- VALUE -->
     <div>
       <label class="block text-sm font-medium mb-1">
-        Value (from products.<?php echo $columnName; ?>)
+        Value <?php echo (!empty($columnName)) ? "(from products.$columnName)" : "(internal val)"; ?>
       </label>
 
-      <select
-        name="value"
-        class="w-full border rounded px-3 py-2"
-        required>
+      <?php if (!empty($columnValues)): ?>
+          <!-- Dropdown if we have column values -->
+          <select
+            name="value"
+            class="w-full border rounded px-3 py-2">
 
-        <option value="">-- Select Value From Products --</option>
+            <option value="">-- Same as Label (Default) --</option>
 
-        <?php foreach ($columnValues as $val): ?>
-          <option value="<?php echo htmlspecialchars($val); ?>"
-            <?php echo ($old['value'] === $val) ? 'selected' : ''; ?>>
-            <?php echo htmlspecialchars($val); ?>
-          </option>
-        <?php endforeach; ?>
+            <?php foreach ($columnValues as $val): ?>
+              <option value="<?php echo htmlspecialchars($val); ?>"
+                <?php echo ($old['value'] === $val) ? 'selected' : ''; ?>>
+                <?php echo htmlspecialchars($val); ?>
+              </option>
+            <?php endforeach; ?>
 
-      </select>
-
-      <p class="text-xs text-slate-500 mt-1">
-        These values come directly from <strong>products.<?php echo $columnName; ?></strong> column.
-      </p>
+          </select>
+          <p class="text-xs text-slate-500 mt-1">
+            Or leave empty to use Label. Values from <strong>products.<?php echo htmlspecialchars($columnName); ?></strong>.
+          </p>
+      <?php else: ?>
+          <!-- Free text input if no column or no values -->
+          <input
+            type="text"
+            name="value"
+            value="<?php echo htmlspecialchars($old['value']); ?>"
+            class="w-full border rounded px-3 py-2"
+            placeholder="Optional - will use Label if empty">
+            
+          <?php if(!empty($columnName)): ?>
+            <p class="text-xs text-slate-500 mt-1">
+                No existing values found in <strong><?php echo htmlspecialchars($columnName); ?></strong> column. You can type a new one.
+            </p>
+          <?php endif; ?>
+      <?php endif; ?>
     </div>
 
     <!-- SORT ORDER -->

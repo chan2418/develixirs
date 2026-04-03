@@ -2,6 +2,7 @@
 session_start();
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/coupon_helpers.php';
+require_once __DIR__ . '/includes/order_pricing_helper.php';
 
 header('Content-Type: application/json');
 
@@ -52,12 +53,16 @@ try {
     // Store in session
     applyCouponToSession($coupon, $discountAmount);
     
-    // Calculate new total
-    $newTotal = $cartTotal - $discountAmount;
+    $pricing = calculate_order_pricing($pdo, $userId, $cartItems, getAppliedCoupon());
+    $newTotal = (float)($pricing['final_total'] ?? ($cartTotal - $discountAmount));
+    $message = 'Coupon applied successfully!';
+    if (!empty($pricing['coupon']['saved_not_applied'])) {
+        $message = 'Coupon saved, but your subscription discount is better for this cart.';
+    }
     
     echo json_encode([
         'success' => true,
-        'message' => 'Coupon applied successfully!',
+        'message' => $message,
         'coupon' => [
             'code' => $coupon['code'],
             'title' => $coupon['title'],
@@ -67,7 +72,8 @@ try {
         ],
         'cart_total' => $cartTotal,
         'discount_amount' => $discountAmount,
-        'new_total' => $newTotal
+        'new_total' => $newTotal,
+        'pricing' => order_pricing_frontend_payload($pricing)
     ]);
     
 } catch (Exception $e) {

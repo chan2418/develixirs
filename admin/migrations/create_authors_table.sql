@@ -1,0 +1,15 @@
+-- Create authors table
+CREATE TABLE IF NOT EXISTS `authors` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `name` VARCHAR(255) NOT NULL,
+  `profile_pic` VARCHAR(255) DEFAULT NULL,
+  `user_id` INT(10) UNSIGNED DEFAULT NULL,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Add author_id to blogs table
+ALTER TABLE `blogs`
+ADD COLUMN `author_id` INT DEFAULT NULL AFTER `category_id`,
+ADD CONSTRAINT `fk_blogs_author` FOREIGN KEY (`author_id`) REFERENCES `authors`(`id`) ON DELETE SET NULL;

@@ -1,0 +1,3 @@
+id,name,sku,price,compare_price,stock,description,category_id,image_url,is_active
+,Sample Product,PROD-001,199.00,249.00,100,This is a sample product description.,1,https://example.com/image.jpg,1
+,Second Product,PROD-002,599.00,,50,Another product description.,2,,1

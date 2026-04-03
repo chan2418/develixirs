@@ -1,10 +1,24 @@
 <?php
-require 'includes/db.php';
+// test_categories.php - Standalone test
+require_once __DIR__ . '/includes/db.php';
 
-$stmt = $pdo->query('SELECT id, name, parent_id FROM categories ORDER BY parent_id, name');
-$categories = $stmt->fetchAll();
+echo '<h1>Category Test</h1>';
+echo '<pre>';
 
-foreach ($categories as $cat) {
-    $indent = $cat['parent_id'] > 0 ? '  ' : '';
-    echo $indent . 'ID: ' . $cat['id'] . ' | Name: ' . $cat['name'] . ' | Parent: ' . ($cat['parent_id'] ?: 'TOP') . PHP_EOL;
+try {
+    $stmt = $pdo->query("SELECT * FROM categories WHERE parent_id = 0 OR parent_id IS NULL ORDER BY id ASC");
+    $cats = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    echo "Found " . count($cats) . " categories:\n\n";
+    
+    foreach ($cats as $cat) {
+        echo "ID: " . $cat['id'] . "\n";
+        echo "Name: " . ($cat['name'] ?? $cat['title']) . "\n";
+        echo "Image: " . ($cat['image'] ?? 'NULL') . "\n";
+        echo "---\n";
+    }
+} catch (Exception $e) {
+    echo "ERROR: " . $e->getMessage();
 }
+
+echo '</pre>';

@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/coupon_helpers.php';
+require_once __DIR__ . '/includes/order_pricing_helper.php';
 session_start();
 
 if (!isset($_SESSION['user_id'])) {
@@ -11,41 +12,22 @@ if (!isset($_SESSION['user_id'])) {
 $userId = $_SESSION['user_id'];
 
 // Fetch cart total
-$cartTotal = 0;
-$cartItemsCount = 0;
-try {
-    $stmt = $pdo->prepare("
-        SELECT c.quantity, p.price
-        FROM cart c
-        JOIN products p ON c.product_id = p.id
-        WHERE c.user_id = :uid
-    ");
-    $stmt->execute([':uid' => $userId]);
-    $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    foreach ($items as $item) {
-        $cartTotal += $item['price'] * $item['quantity'];
-        $cartItemsCount++;
-    }
-} catch (PDOException $e) {
-    // Handle error
-}
-
-if ($cartItemsCount === 0) {
+$cartItems = fetch_order_context_items($pdo, $userId, true);
+if (empty($cartItems)) {
     header("Location: cart.php");
     exit;
 }
 
-// Calculate Discount
 $appliedCoupon = getAppliedCoupon();
-$discountAmount = 0;
-if ($appliedCoupon) {
-    $discountAmount = calculateDiscount($appliedCoupon, $cartTotal);
-}
-
-// Calculate Delivery Charge and Final Total
-$deliveryCharge = ($cartTotal < 1000) ? 80 : 0;
-$finalTotal = $cartTotal + $deliveryCharge - $discountAmount;
+$pricing = calculate_order_pricing($pdo, $userId, $cartItems, $appliedCoupon);
+$appliedCoupon = $pricing['coupon']['data'] ?? null;
+$cartTotal = (float)($pricing['base_subtotal'] ?? 0);
+$cartItemsCount = (int)($pricing['line_item_count'] ?? count($cartItems));
+$discountAmount = (float)($pricing['applied_discount_amount'] ?? 0);
+$deliveryCharge = (float)($pricing['delivery_charge'] ?? 0);
+$finalTotal = (float)($pricing['final_total'] ?? $cartTotal);
+$discountLabel = (string)($pricing['discount_label'] ?? 'Discount');
+$couponSavedNotApplied = !empty($pricing['coupon']['saved_not_applied']);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -56,7 +38,19 @@ $finalTotal = $cartTotal + $deliveryCharge - $discountAmount;
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
   <link rel="stylesheet" href="assets/css/navbar.css">
-  <?php include __DIR__ . '/navbar.php'; ?>
+  <?php
+  $paymentCartTotal = $cartTotal;
+  $paymentCartItemsCount = $cartItemsCount;
+  $paymentDiscountAmount = $discountAmount;
+  $paymentDeliveryCharge = $deliveryCharge;
+  $paymentFinalTotal = $finalTotal;
+  include __DIR__ . '/navbar.php';
+  $cartTotal = $paymentCartTotal;
+  $cartItemsCount = $paymentCartItemsCount;
+  $discountAmount = $paymentDiscountAmount;
+  $deliveryCharge = $paymentDeliveryCharge;
+  $finalTotal = $paymentFinalTotal;
+  ?>
   
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -327,18 +321,20 @@ $finalTotal = $cartTotal + $deliveryCharge - $discountAmount;
         <span>₹<?php echo number_format($cartTotal, 2); ?></span>
       </div>
       
-      <?php if ($appliedCoupon): ?>
+      <?php if ($discountAmount > 0): ?>
         <div class="price-row" style="color: #28a745;">
-          <span><i class="fa fa-tag"></i> Coupon (<?php echo htmlspecialchars($appliedCoupon['code']); ?>)</span>
+          <span><i class="fa fa-tag"></i> <?php echo htmlspecialchars($discountLabel); ?></span>
           <span>-₹<?php echo number_format($discountAmount, 2); ?></span>
+        </div>
+      <?php endif; ?>
+      <?php if ($couponSavedNotApplied && $appliedCoupon): ?>
+        <div style="margin-bottom:15px; font-size:12px; color:#8a6d3b;">
+          Coupon <strong><?php echo htmlspecialchars($appliedCoupon['code']); ?></strong> is saved, but your subscription gives better savings for this cart.
         </div>
       <?php endif; ?>
 
       <div class="price-row">
         <span>Delivery Charges</span>
-        <?php 
-          // Calculations moved to top
-        ?>
         <span style="color:<?php echo ($deliveryCharge > 0) ? '#333' : '#388e3c'; ?>;">
           <?php echo ($deliveryCharge > 0) ? '₹' . number_format($deliveryCharge, 2) : 'FREE'; ?>
         </span>
@@ -384,7 +380,8 @@ document.querySelectorAll('.pay-btn').forEach(btn => {
         const methodValue = selectedMethod.value;
         
         if (methodValue === 'cod') {
-            alert('Cash on Delivery is not supported in this demo. Please use Online Payment.');
+            // Process COD order
+            processCODOrder(this);
             return;
         }
         
@@ -392,6 +389,32 @@ document.querySelectorAll('.pay-btn').forEach(btn => {
         startRazorpayPayment(this);
     });
 });
+
+function processCODOrder(btn) {
+    const originalText = btn.innerText;
+    btn.innerText = 'Processing...';
+    btn.disabled = true;
+
+    fetch('api/create_cod_order.php', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.location.href = 'my-profile.php?order_success=true&id=' + data.order_id;
+        } else {
+            alert('Error: ' + data.message);
+            btn.innerText = originalText;
+            btn.disabled = false;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Something went wrong. Please try again.');
+        btn.innerText = originalText;
+        btn.disabled = false;
+    });
+}
 
 function startRazorpayPayment(btn) {
     const originalText = btn.innerText;

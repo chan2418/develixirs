@@ -2,6 +2,7 @@
 // admin/invoice_cut.php
 require_once __DIR__ . '/_auth.php';
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/invoice_number_helper.php';
 include __DIR__ . '/header.php';
 
 // ensure admin session
@@ -48,8 +49,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['action']) && $_POST[
             if ($inv) {
                 $createdInvoice = $inv;
             } else {
-                // create invoice number: INV-YYYYMMDD-<random 4>
-                $base = 'INV-' . date('Ymd') . '-' . substr(bin2hex(random_bytes(3)),0,6);
+                // create invoice number with shared format
+                $base = build_invoice_number($pdo, (int)$order_id, $order['created_at'] ?? null);
                 // compute amount from order.total_amount (or sum items)
                 $amount = (float)$order['total_amount'];
 

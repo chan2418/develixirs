@@ -14,17 +14,104 @@ if ($isAjax && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $_GET = $parsed;
 }
 
+// ==================== CATEGORY RESOLUTION (Moved to Top) ====================
+
+// 1. Basic ID from URL
+$categoryId = isset($_GET['cat']) && $_GET['cat'] !== '' ? (int)$_GET['cat'] : null;
+
+// 2. Parse Category Names from sidebar/filter params
+$selectedCategoryName = null; // parent-only name -> "Men Care"
+$selectedCategoryFull = null; // full path        -> "Men Care / Face Wash"
+
+if (isset($_GET['category'])) {
+    $rawVals = is_array($_GET['category']) ? $_GET['category'] : [$_GET['category']];
+    foreach ($rawVals as $rawVal) {
+        $val = trim($rawVal);
+        if ($val === '') continue;
+        if (strpos($val, '/') !== false) {
+            if ($selectedCategoryFull === null) {
+                $selectedCategoryFull = $val;
+                $parts = explode('/', $val, 2);
+                $parentName = trim($parts[0] ?? '');
+                if ($parentName !== '' && $selectedCategoryName === null) {
+                    $selectedCategoryName = $parentName;
+                }
+            }
+        } else {
+            if ($selectedCategoryName === null) {
+                $selectedCategoryName = $val;
+            }
+        }
+    }
+}
+
+// 3. Resolve these Names to IDs
+$resolvedParentId = null;
+$resolvedSubId    = null;
+$bannerCategoryId = null;
+
+// Column detection (name vs title)
+$categoryLabelField = 'name'; // Default
+try {
+    $cols = $pdo->query("SHOW COLUMNS FROM categories")->fetchAll(PDO::FETCH_ASSOC);
+    $fields = array_column($cols, 'Field');
+    if (in_array('title', $fields)) $categoryLabelField = 'title';
+} catch (Exception $e) {}
+
+if ($categoryLabelField) {
+    try {
+        // A) Full path "Parent / Sub"
+        if (!empty($selectedCategoryFull)) {
+            $parts = explode('/', $selectedCategoryFull, 2);
+            $pName = trim($parts[0]);
+            $cName = trim($parts[1]);
+            
+            $stmt = $pdo->prepare("SELECT parent.id as pid, child.id as cid FROM categories parent JOIN categories child ON child.parent_id = parent.id WHERE parent.$categoryLabelField = ? AND child.$categoryLabelField = ? LIMIT 1");
+            $stmt->execute([$pName, $cName]);
+            if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $resolvedParentId = $row['pid'];
+                $resolvedSubId = $row['cid'];
+            }
+        }
+        // B) Just Parent "Parent"
+        if ($resolvedParentId === null && !empty($selectedCategoryName)) {
+            $stmt = $pdo->prepare("SELECT id FROM categories WHERE $categoryLabelField = ? AND (parent_id IS NULL OR parent_id = 0) LIMIT 1");
+            $stmt->execute([$selectedCategoryName]);
+            if ($id = $stmt->fetchColumn()) {
+                $resolvedParentId = $id;
+            }
+        }
+    } catch(Exception $e) {}
+}
+
+// 4. Final Decision for "Current Page Category"
+if ($resolvedSubId !== null) {
+    $bannerCategoryId = $resolvedSubId;
+} elseif ($resolvedParentId !== null) {
+    $bannerCategoryId = $resolvedParentId;
+} elseif ($categoryId !== null && $categoryId > 0) {
+    $bannerCategoryId = $categoryId;
+}
+
 // ===== LOAD ALL FILTER GROUPS + OPTIONS =====
 $filterGroups = [];   // each group has its options inside
 
 try {
-    // load groups
-    $stmt = $pdo->prepare("
-        SELECT *
-        FROM filter_groups
-        WHERE is_active = 1
-        ORDER BY sort_order ASC, name ASC
-    ");
+    // load groups (FALLBACK LOGIC)
+    $sqlGroups = "SELECT * FROM filter_groups WHERE is_active = 1 AND category_id IS NULL ORDER BY sort_order ASC, name ASC"; // Default Common
+    
+    // If we are on a category page, check for specific filters
+    if ($bannerCategoryId) {
+        // Check if this category has specific filters
+        $stmtCheck = $pdo->prepare("SELECT COUNT(*) FROM filter_groups WHERE is_active = 1 AND category_id = ?");
+        $stmtCheck->execute([$bannerCategoryId]);
+        if ($stmtCheck->fetchColumn() > 0) {
+            // Yes, load specific filters INSTEAD of common ones
+            $sqlGroups = "SELECT * FROM filter_groups WHERE is_active = 1 AND category_id = " . (int)$bannerCategoryId . " ORDER BY sort_order ASC, name ASC";
+        }
+    }
+
+    $stmt = $pdo->prepare($sqlGroups);
     $stmt->execute();
     $groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -97,46 +184,7 @@ $priceMax = isset($_GET['price_max']) && $_GET['price_max'] !== ''
     ? (float)$_GET['price_max']
     : null;
 
-// category filter from URL (?cat=4)
-$categoryId = isset($_GET['cat']) && $_GET['cat'] !== ''
-    ? (int)$_GET['cat']
-    : null;
-// 🔹 category NAME from ?category[]=Mens+Care (index.php link)
-// 🔹 category from filters (can be "Men Care" OR "Men Care / Face Wash")
-$selectedCategoryName = null; // parent-only name -> "Men Care"
-$selectedCategoryFull = null; // full path        -> "Men Care / Face Wash"
-
-if (isset($_GET['category'])) {
-    $rawVals = is_array($_GET['category'])
-        ? $_GET['category']
-        : [$_GET['category']];
-
-    foreach ($rawVals as $rawVal) {
-        $val = trim($rawVal);
-        if ($val === '') {
-            continue;
-        }
-
-        // If it is a subcategory: "Parent / Sub"
-        if (strpos($val, '/') !== false) {
-            if ($selectedCategoryFull === null) {
-                $selectedCategoryFull = $val;
-
-                // also extract the parent name
-                $parts = explode('/', $val, 2);
-                $parentName = trim($parts[0] ?? '');
-                if ($parentName !== '' && $selectedCategoryName === null) {
-                    $selectedCategoryName = $parentName;
-                }
-            }
-        } else {
-            // just parent category like "Men Care"
-            if ($selectedCategoryName === null) {
-                $selectedCategoryName = $val;
-            }
-        }
-    }
-}
+// (Moved logic to top)
 $sort = $_GET['sort'] ?? 'default';
 $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
 $perPage = 9; // products per page
@@ -149,7 +197,7 @@ $offset  = ($page - 1) * $perPage;
  *   - category_id (from ?cat=)
  *   - price range
  */
-$whereParts = ["(is_active = 1 OR is_active IS NULL)"];
+$whereParts = ["products.is_active = 1"];
 $params     = [];      // named params like [':color1' => 'Black']
 $paramIndex = 1;       // to create unique param names
 
@@ -215,17 +263,31 @@ foreach ($filterGroups as $g) {
     }
     // ---------- END CATEGORY SPECIAL CASE ----------
 
-    // Default: simple IN() for non-category filters
-    $phList = [];
-    foreach ($vals as $val) {
-        $ph = ':' . $paramKey . $paramIndex;
-        $paramIndex++;
-
-        $phList[]    = $ph;
-        $params[$ph] = $val;
+    // For dynamic filters (NOT category), use product_filter_values table
+    $optionIds = array_filter($vals, function($v) {
+        return is_numeric($v) && (int)$v > 0;
+    });
+    
+    if (empty($optionIds)) {
+        continue;
     }
-
-    $whereParts[] = "{$columnName} IN (" . implode(',', $phList) . ")";
+    
+    $phList = [];
+    foreach ($optionIds as $optId) {
+        $ph = ':opt_' . $paramIndex;
+        $paramIndex++;
+        $phList[] = $ph;
+        $params[$ph] = (int)$optId;
+    }
+    
+    $subquery = "products.id IN (
+        SELECT product_id 
+        FROM product_filter_values 
+        WHERE filter_group_id = " . (int)$g['id'] . "
+        AND filter_option_id IN (" . implode(',', $phList) . ")
+    )";
+    
+    $whereParts[] = $subquery;
 }
 
 // 2) Category filter (from cat= in URL – optional)
@@ -309,7 +371,64 @@ if ($searchQuery !== '') {
     }
 }
 
-// 5) Final WHERE SQL
+// 5) Product Group Filter (group_id=)
+$groupId = isset($_GET['group_id']) ? (int)$_GET['group_id'] : 0;
+if ($groupId > 0) {
+    try {
+        // Ensure the table exists to avoid errors if not created yet
+        // A simple subquery: id IN (...)
+        $whereParts[] = "products.id IN (SELECT product_id FROM product_group_map WHERE group_id = :group_id)";
+        $params[':group_id'] = $groupId;
+    } catch (Exception $e) {
+        // ignore if table doesn't exist
+    }
+}
+
+// 6) Homepage Section Filter (section=)
+$sectionFilter = isset($_GET['section']) ? trim($_GET['section']) : '';
+if ($sectionFilter !== '') {
+    try {
+        // Filter by homepage_products table
+        $whereParts[] = "products.id IN (SELECT product_id FROM homepage_products WHERE section = :section)";
+        $params[':section'] = $sectionFilter;
+    } catch (Exception $e) {
+        // ignore
+    }
+}
+
+// 7) Concern Filter (concern=slug)
+$concernSlug = isset($_GET['concern']) ? trim($_GET['concern']) : '';
+if ($concernSlug !== '') {
+    try {
+        // Find concern ID from slug
+        $stmtC = $pdo->prepare("SELECT id FROM concerns WHERE slug = ? LIMIT 1");
+        $stmtC->execute([$concernSlug]);
+        $concernId = $stmtC->fetchColumn();
+        
+        if ($concernId) {
+             $whereParts[] = "products.concern_id = :concern_id";
+             $params[':concern_id'] = $concernId;
+        }
+    } catch (Exception $e) { }
+}
+
+// 8) Seasonal Filter (seasonal=slug)
+$seasonalSlug = isset($_GET['seasonal']) ? trim($_GET['seasonal']) : '';
+if ($seasonalSlug !== '') {
+    try {
+        // Find seasonal ID from slug
+        $stmtSea = $pdo->prepare("SELECT id FROM seasonals WHERE slug = ? LIMIT 1");
+        $stmtSea->execute([$seasonalSlug]);
+        $seasonalId = $stmtSea->fetchColumn();
+        
+        if ($seasonalId) {
+             $whereParts[] = "products.seasonal_id = :seasonal_id";
+             $params[':seasonal_id'] = $seasonalId;
+        }
+    } catch (Exception $e) { }
+}
+
+// 6) Final WHERE SQL
 $whereSql = '';
 if (!empty($whereParts)) {
     $whereSql = 'WHERE ' . implode(' AND ', $whereParts);
@@ -365,7 +484,8 @@ if ($searchQuery !== '' && $sort === 'default') {
 
 switch ($sort) {
     case 'popularity':
-        $orderBy = 'sold_count DESC';
+        // Fallback to created_at if sold_count doesn't exist
+        $orderBy = 'created_at DESC';
         break;
     case 'latest':
         $orderBy = 'created_at DESC';
@@ -415,14 +535,47 @@ $totalPages = $totalProducts > 0 ? (int)ceil($totalProducts / $perPage) : 1;
 /* ----- fetch products for current page ----- */
 $products = [];
 try {
-    $sqlProducts = "
-        SELECT products.*, categories.name as category_name
-        FROM products
-        LEFT JOIN categories ON products.category_id = categories.id
-        {$whereSql}
-        ORDER BY {$orderBy}
-        LIMIT :limit OFFSET :offset
-    ";
+    // Check if product_labels table exists
+    $hasLabelsTable = false;
+    try {
+        $pdo->query("SELECT 1 FROM product_labels LIMIT 0");
+        $hasLabelsTable = true;
+    } catch (PDOException $e) {
+        $hasLabelsTable = false;
+    }
+    
+    // Build SQL with or without labels
+    if ($hasLabelsTable) {
+        $sqlProducts = "
+            SELECT products.*, categories.name as category_name,
+                   product_labels.name AS label_name,
+                   product_labels.color AS label_color,
+                   product_labels.text_color AS label_text_color,
+                   COALESCE(AVG(product_reviews.rating), 0) as avg_rating,
+                   COUNT(product_reviews.id) as review_count
+            FROM products
+            LEFT JOIN categories ON products.category_id = categories.id
+            LEFT JOIN product_labels ON products.label_id = product_labels.id AND product_labels.is_active = 1
+            LEFT JOIN product_reviews ON products.id = product_reviews.product_id AND product_reviews.status = 'approved'
+            {$whereSql}
+            GROUP BY products.id
+            ORDER BY {$orderBy}
+            LIMIT :limit OFFSET :offset
+        ";
+    } else {
+        $sqlProducts = "
+            SELECT products.*, categories.name as category_name,
+                   COALESCE(AVG(product_reviews.rating), 0) as avg_rating,
+                   COUNT(product_reviews.id) as review_count
+            FROM products
+            LEFT JOIN categories ON products.category_id = categories.id
+            LEFT JOIN product_reviews ON products.id = product_reviews.product_id AND product_reviews.status = 'approved'
+            {$whereSql}
+            GROUP BY products.id
+            ORDER BY {$orderBy}
+            LIMIT :limit OFFSET :offset
+        ";
+    }
     $stmtProducts = $pdo->prepare($sqlProducts);
 
     // bind named params for filters (color/size/category/price)
@@ -437,55 +590,10 @@ try {
     $stmtProducts->execute();
     $products = $stmtProducts->fetchAll(PDO::FETCH_ASSOC);
 
-    // --- DEBUG BLOCK ---
-    if (isset($_GET['debug']) && $_GET['debug'] === '1') {
-        echo "<div style='background:#f8f9fa; padding:20px; border:2px solid red; margin:20px; z-index:9999; position:relative;'>";
-        echo "<h3>DEBUG MODE</h3>";
-        
-        echo "<h4>1. SQL Query:</h4>";
-        echo "<pre>" . htmlspecialchars($sqlProducts) . "</pre>";
-        
-        echo "<h4>2. Parameters:</h4>";
-        echo "<pre>" . print_r($params, true) . "</pre>";
-        
-        echo "<h4>3. Products Found: " . count($products) . "</h4>";
-        
-        echo "<h4>4. Total Count Query:</h4>";
-        echo "<pre>" . htmlspecialchars($sqlCount) . "</pre>";
-        echo "Total Products Count: " . $totalProducts;
-
-        echo "<h4>5. Table Structure (products):</h4>";
-        try {
-            $cols = $pdo->query("SHOW COLUMNS FROM products")->fetchAll(PDO::FETCH_ASSOC);
-            echo "<table border='1' style='border-collapse:collapse;'>";
-            echo "<tr><th>Field</th><th>Type</th><th>Null</th><th>Key</th><th>Default</th><th>Extra</th></tr>";
-            foreach ($cols as $c) {
-                echo "<tr>";
-                foreach ($c as $v) echo "<td style='padding:4px;'>" . htmlspecialchars($v) . "</td>";
-                echo "</tr>";
-            }
-            echo "</table>";
-        } catch (Exception $e) {
-            echo "Error showing columns: " . $e->getMessage();
-        }
-        
-        echo "<h4>6. Raw Dump of First 5 Products (ignoring filters):</h4>";
-        try {
-            $raw = $pdo->query("SELECT * FROM products LIMIT 5")->fetchAll(PDO::FETCH_ASSOC);
-            echo "<pre>" . print_r($raw, true) . "</pre>";
-        } catch (Exception $e) {
-            echo "Error raw dump: " . $e->getMessage();
-        }
-
-        echo "</div>";
-    }
-    // --- END DEBUG BLOCK ---
-
 } catch (PDOException $e) {
     $products = [];
-    if (isset($_GET['debug'])) {
-        echo "<div style='background:#fee; color:red; padding:20px; border:1px solid red;'>SQL Error: " . $e->getMessage() . "</div>";
-    }
+    // Log error silently
+    error_log("Product fetch error: " . $e->getMessage());
 }
 
 /* ==================== BANNERS FOR PRODUCT PAGE (CATEGORY AWARE) ==================== */
@@ -496,93 +604,72 @@ try {
 
 /* ==================== BANNERS FOR PRODUCT PAGE (CATEGORY AWARE) ==================== */
 
-$heroBanners = [];
+// (Moved Logic to top)
 
-// Try to detect which column is used for category label: 'title' or 'name'
-$categoryLabelField = null;
-try {
-    $cols   = $pdo->query("SHOW COLUMNS FROM categories")->fetchAll(PDO::FETCH_ASSOC);
-    $fields = array_column($cols, 'Field');
+// 6️⃣ Fetch Category SEO & FAQs if a category is selected
+$catSeo = ['title' => 'Devilixirs – Shop', 'desc' => '', 'faqs' => [], 'gallery' => []];
 
-    if (in_array('title', $fields, true)) {
-        $categoryLabelField = 'title';
-    } elseif (in_array('name', $fields, true)) {
-        $categoryLabelField = 'name';
-    }
-} catch (Exception $e) {
-    $categoryLabelField = null;
-}
-
-// Resolve parent + sub category IDs from selected filters
-$resolvedParentId = null;
-$resolvedSubId    = null;
-
-if ($categoryLabelField !== null) {
+if ($bannerCategoryId) { // Use resolved category ID
     try {
-        // 1️⃣ If we have a FULL subcategory like "Men Care / Face Wash"
-        if (!empty($selectedCategoryFull)) {
-            $parts      = explode('/', $selectedCategoryFull, 2);
-            $parentName = trim($parts[0] ?? '');
-            $childName  = trim($parts[1] ?? '');
+        $stmtSeo = $pdo->prepare("SELECT meta_title, meta_description, description, image, faqs, media_gallery FROM categories WHERE id = ?");
+        $stmtSeo->execute([$bannerCategoryId]);
+        $rowSeo = $stmtSeo->fetch(PDO::FETCH_ASSOC);
+        if ($rowSeo) {
+            if (!empty($rowSeo['meta_title'])) $catSeo['title'] = $rowSeo['meta_title'];
+            if (!empty($rowSeo['meta_description'])) $catSeo['desc'] = $rowSeo['meta_description'];
+            if (!empty($rowSeo['description'])) $catSeo['content'] = $rowSeo['description'];
+            if (!empty($rowSeo['image'])) $catSeo['main_image'] = $rowSeo['image'];
+            if (!empty($rowSeo['faqs'])) $catSeo['faqs'] = json_decode($rowSeo['faqs'], true) ?: [];
+            if (!empty($rowSeo['media_gallery'])) $catSeo['gallery'] = json_decode($rowSeo['media_gallery'], true) ?: [];
+        }
+    } catch (PDOException $e) { /* Silently fail */ }
+}
 
-            if ($parentName !== '' && $childName !== '') {
-                $sql = "
-                    SELECT parent.id AS parent_id, child.id AS child_id
-                    FROM categories parent
-                    JOIN categories child ON child.parent_id = parent.id
-                    WHERE parent.{$categoryLabelField} = :pname
-                      AND child.{$categoryLabelField}  = :cname
-                    LIMIT 1
-                ";
-                $stmt = $pdo->prepare($sql);
-                $stmt->execute([
-                    ':pname' => $parentName,
-                    ':cname' => $childName,
-                ]);
-                if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                    $resolvedParentId = (int)$row['parent_id'];
-                    $resolvedSubId    = (int)$row['child_id'];
+// 6.5 PREVIEW OVERRIDE (Category Mode)
+if (!empty($_GET['preview_token']) && session_status() === PHP_SESSION_ACTIVE && !empty($_SESSION['previews'][$_GET['preview_token']])) {
+    $pData = $_SESSION['previews'][$_GET['preview_token']];
+    // Check if this preview data is actually for a category (optional safety)
+    if (($pData['preview_type'] ?? '') === 'category') {
+        if (!empty($pData['title'])) $catSeo['title'] = $pData['title'];
+        if (!empty($pData['meta_title'])) $catSeo['title'] = $pData['meta_title']; // Meta title takes precedence
+        if (!empty($pData['meta_description'])) $catSeo['desc'] = $pData['meta_description'];
+        if (isset($pData['description'])) $catSeo['content'] = $pData['description']; // Allow empty string to clear
+
+        // Main Image (Upload > Selected > DB/Existing fallback)
+        if (!empty($pData['image_paths'][0])) {
+            $catSeo['main_image'] = $pData['image_paths'][0];
+        } elseif (!empty($pData['image_selected'])) {
+            $catSeo['main_image'] = $pData['image_selected'];
+        }
+
+        // Gallery Construction
+        // start with existing (hidden inputs)
+        $pGallery = [];
+        if (!empty($pData['existing_images'])) {
+             $pGallery = is_array($pData['existing_images']) ? $pData['existing_images'] : explode(',', $pData['existing_images']);
+        }
+        // merge library selections
+        if (!empty($pData['media_gallery_selected'])) {
+            $libSel = json_decode($pData['media_gallery_selected'], true) ?: [];
+            $pGallery = array_merge($pGallery, $libSel);
+        }
+        // merge new uploads
+        if (!empty($pData['media_gallery_paths'])) {
+            $pGallery = array_merge($pGallery, $pData['media_gallery_paths']);
+        }
+        // Unique and assign if not empty (or empty to clear if intention was clear)
+        $catSeo['gallery'] = array_values(array_unique($pGallery));
+
+        // FAQs
+        if (!empty($pData['faq_questions'])) {
+            $catSeo['faqs'] = [];
+            foreach ($pData['faq_questions'] as $i => $q) {
+                if (!empty($q)) {
+                    $catSeo['faqs'][] = ['q' => $q, 'a' => $pData['faq_answers'][$i] ?? ''];
                 }
             }
         }
-
-        // 2️⃣ If no sub found but we have a parent name like "Men Care"
-        if ($resolvedParentId === null && $selectedCategoryName !== null && $selectedCategoryName !== '') {
-            $sql = "
-                SELECT id
-                FROM categories
-                WHERE {$categoryLabelField} = :pname
-                  AND (parent_id IS NULL OR parent_id = 0)
-                LIMIT 1
-            ";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([':pname' => $selectedCategoryName]);
-            if ($id = $stmt->fetchColumn()) {
-                $resolvedParentId = (int)$id;
-            }
-        }
-
-    } catch (PDOException $e) {
-        error_log('Category name→ID resolve error: ' . $e->getMessage());
-        $resolvedParentId = null;
-        $resolvedSubId    = null;
     }
-}
-
-// 3️⃣ Choose which category_id to use for banners, in priority:
-//
-//    a) Subcategory ID (most specific)
-//    b) Parent ID from name
-//    c) Numeric ?cat= from URL
-//
-$bannerCategoryId = null;
-
-if ($resolvedSubId !== null) {
-    $bannerCategoryId = $resolvedSubId;
-} elseif ($resolvedParentId !== null) {
-    $bannerCategoryId = $resolvedParentId;
-} elseif ($categoryId !== null && $categoryId > 0) {
-    $bannerCategoryId = $categoryId;
 }
 
 // 4️⃣ Load banners based on resolved category_id (if any)
@@ -595,6 +682,7 @@ if ($bannerCategoryId !== null) {
               AND page_slot IN ('category','top_category')
               AND category_id = :cid
             ORDER BY id DESC
+            LIMIT 1
         ");
         $stmt->execute([':cid' => $bannerCategoryId]);
         $heroBanners = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -605,7 +693,9 @@ if ($bannerCategoryId !== null) {
 }
 
 // 5️⃣ Fallback – generic product banners
-if (empty($heroBanners)) {
+// Only show fallback IF: no specific banner AND no category text/gallery to show
+// We check catSeo main_image and gallery.
+if (empty($heroBanners) && empty($catSeo['main_image']) && empty($catSeo['gallery'])) {
     try {
         $stmt = $pdo->prepare("
             SELECT *
@@ -681,27 +771,50 @@ function renderProductResults($products, $totalPages, $page, $sort) { ?>
 
             $img = get_product_page_first_image($p['images'] ?? '');
 
-            $rating      = isset($p['rating']) ? (float)$p['rating'] : 0;
-            $ratingCount = isset($p['rating_count']) ? (int)$p['rating_count'] : 0;
-            $stars       = $rating > 0 ? str_repeat('★', round($rating)) : '★★★★★';
+            // Get ratings from the query result (calculated from reviews)
+            $rating      = isset($p['avg_rating']) ? (float)$p['avg_rating'] : 0;
+            $ratingCount = isset($p['review_count']) ? (int)$p['review_count'] : 0;
+            
+            // Generate stars based on actual rating
+            $fullStars = floor($rating);
+            $halfStar = ($rating - $fullStars) >= 0.5 ? 1 : 0;
+            $emptyStars = 5 - $fullStars - $halfStar;
+            
+            $stars = str_repeat('★', $fullStars);
+            if ($halfStar) $stars .= '✰';
+            $stars .= str_repeat('☆', $emptyStars);
+            
+            // Prepare WhatsApp Link
+            $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
+            $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+            $fullProductUrl = $protocol . "://" . $host . "/" . $detailUrl;
+            $waMessage = "Hi, I'm interested in this product: " . $name . " - " . $fullProductUrl;
+            $waLink = "https://wa.me/919500650454?text=" . urlencode($waMessage);
           ?>
           <article class="product-card">
             <!-- 🔹 Wrap clickable area with <a> -->
             <a href="<?php echo htmlspecialchars($detailUrl, ENT_QUOTES); ?>" class="product-link" style="display:block;">
               <div class="product-image-wrap">
-                <?php if ($oldPrice): ?>
-                  <span class="product-badge sale">Sale</span>
-                <?php else: ?>
-                  <span class="product-badge">New</span>
+                <?php if (!empty($p['label_name'])): ?>
+                  <span class="product-badge" style="background-color: <?php echo htmlspecialchars($p['label_color'] ?? '#000000', ENT_QUOTES); ?>; color: <?php echo htmlspecialchars($p['label_text_color'] ?? '#FFFFFF', ENT_QUOTES); ?>;">
+                    <?php echo htmlspecialchars($p['label_name'], ENT_QUOTES); ?>
+                  </span>
                 <?php endif; ?>
 
                 <img
                   src="<?php echo htmlspecialchars($img, ENT_QUOTES); ?>"
                   alt="<?php echo htmlspecialchars($name, ENT_QUOTES); ?>">
 
+                <!-- Separate Large WhatsApp Button -->
+                <span class="whatsapp-inquiry-btn large-wa-btn" 
+                      data-url="<?php echo htmlspecialchars($waLink, ENT_QUOTES); ?>" 
+                      title="Inquire on WhatsApp">
+                    <i class="fa-brands fa-whatsapp"></i>
+                </span>
+
                 <div class="product-actions">
                   <span class="wishlist-btn" data-product-id="<?php echo $productId; ?>"><i class="fa-regular fa-heart"></i></span>
-                  <span><i class="fa-regular fa-eye"></i></span>
+                  <span class="buy-now-btn" data-product-id="<?php echo $productId; ?>" title="Buy Now"><i class="fa-solid fa-bolt"></i></span>
                   <span class="cart-btn" data-product-id="<?php echo $productId; ?>"><i class="fa-solid fa-bag-shopping"></i></span>
                 </div>
               </div>
@@ -754,6 +867,44 @@ function renderProductResults($products, $totalPages, $page, $sort) { ?>
 <?php
 }
 
+
+// 7️⃣ OFF: User requested NOT to merge Category Main Image + Gallery into Hero Banners
+// (They only want banners from the 'banners' table)
+$catBanners = [];
+
+/* 
+// A) Add Main Image (if exists)
+if (!empty($catSeo['main_image'])) {
+    $img = $catSeo['main_image'];
+    $fullUrl = (strpos($img, '/') === 0) ? $img : '/assets/uploads/categories/' . $img;
+    $catBanners[] = [
+        'filename' => $img,
+        'full_url' => $fullUrl,
+        'alt_text' => $catSeo['title'],
+        'link'     => ''
+    ];
+}
+
+// B) Add Gallery Images
+if (!empty($catSeo['gallery'])) {
+    foreach ($catSeo['gallery'] as $img) {
+        $fullUrl = (strpos($img, '/') === 0) ? $img : '/assets/uploads/categories/' . $img;
+        $catBanners[] = [
+            'filename' => $img, 
+            'full_url' => $fullUrl,
+            'alt_text' => $catSeo['title'],
+            'link'     => ''
+        ];
+    }
+}
+
+if (!empty($catBanners)) {
+    $heroBanners = array_merge($catBanners, $heroBanners);
+}
+*/
+
+?>
+<?php 
 // 🔹 If this is an AJAX request, just return this block and stop
 if ($isAjax) {
     renderProductResults($products, $totalPages, $page, $sort);
@@ -764,7 +915,10 @@ if ($isAjax) {
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Devilixirs – Shop</title>
+  <title><?= htmlspecialchars($catSeo['title']) ?></title>
+  <?php if (!empty($catSeo['desc'])): ?>
+  <meta name="description" content="<?= htmlspecialchars($catSeo['desc']) ?>">
+  <?php endif; ?>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <!-- Google Font -->
@@ -1341,28 +1495,34 @@ ul{
   }
 }
 
+
+/* Hide mobile filter overlay by default on ALL screens */
+.filter-overlay {
+  display: none;
+}
+
 @media(max-width:576px){
   .products-grid{
-    grid-template-columns:repeat(2, 1fr);
-    gap:12px;
-  }
+    /* Hide desktop header & nav on mobile */
+    .abc, .header, .nav {
+      display:none !important;
+    }
 
-  .product-image-wrap img{
-    height:180px;
-  }
+    /* Adjust shop content margin for fixed mobile header */
+    .shop-hero {
+      margin-top:20px; /* Reduced from 60px since main has padding */
+    }
 
-  .product-name{
-    font-size:12px;
+    .shop-hero-slide{
+      height:260px;
+    }
+    .shop-hero-inner{
+      padding:20px 18px;
+    }
+    .shop-hero-inner h1{
+      font-size:20px;
+    }
   }
-
-  .product-price{
-    font-size:12px;
-  }
-
-  .footer-inner{
-    grid-template-columns:1fr;
-  }
-}
 
 /* Hide wishlist & cart icons ONLY on mobile */
 @media (max-width:768px){
@@ -1518,21 +1678,38 @@ ul{
       <div class="shop-hero-track">
         <?php foreach ($heroBanners as $idx => $b): ?>
           <?php
-            $src  = '/assets/uploads/banners/' . ltrim($b['filename'] ?? '', '/');
+            if (!empty($b['full_url'])) {
+                $src = $b['full_url'];
+            } else {
+                $src = '/assets/uploads/banners/' . ltrim($b['filename'] ?? '', '/');
+            }
             $alt  = $b['alt_text'] ?? '';
             $link = trim($b['link'] ?? '');
           ?>
-          <div class="shop-hero-slide"
-               style="background-image:url('<?php echo htmlspecialchars($src, ENT_QUOTES); ?>');">
-            <?php if ($link): ?>
-              <a href="<?php echo htmlspecialchars($link, ENT_QUOTES); ?>" class="shop-hero-slide-link">
+          <?php
+            // Check if it's a video
+            $ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
+            $isVid = in_array($ext, ['mp4', 'webm', 'ogg']);
+          ?>
+          
+          <div class="shop-hero-slide" <?php if(!$isVid) echo 'style="background-image:url(\'' . htmlspecialchars($src, ENT_QUOTES) . '\');"'; ?>>
+            <?php if ($isVid): ?>
+                <video src="<?= htmlspecialchars($src, ENT_QUOTES) ?>" autoplay loop muted playsinline style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; z-index:0;"></video>
+                <!-- Add a dark overlay for text readability if needed -->
+                <div style="position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.3); z-index:1;"></div>
             <?php endif; ?>
 
-              <div class="shop-hero-overlay">
+            <?php if ($link): ?>
+              <a href="<?php echo htmlspecialchars($link, ENT_QUOTES); ?>" class="shop-hero-slide-link" style="z-index:2;">
+            <?php endif; ?>
+
+              <div class="shop-hero-overlay" style="z-index:2;">
                 <div class="shop-hero-inner">
+                  <!-- Alt text hidden by request
                   <?php if (!empty($b['alt_text'])): ?>
                     <h1><?php echo htmlspecialchars($b['alt_text'], ENT_QUOTES, 'UTF-8'); ?></h1>
                   <?php endif; ?>
+                  -->
                 </div>
               </div>
 
@@ -1586,16 +1763,17 @@ ul{
                   ?>
                   <?php foreach ($g['options'] as $opt): ?>
                     <?php
-                      $val   = $opt['value'];
+                      $optId = $opt['id'];  // Use ID for filter matching
                       $label = $opt['label'];
+                      $isChecked = in_array($optId, $selectedValues, false);
                     ?>
                     <li>
                       <label>
                         <input
                           type="checkbox"
                           name="<?php echo htmlspecialchars($paramKey, ENT_QUOTES); ?>[]"
-                          value="<?php echo htmlspecialchars($val, ENT_QUOTES); ?>"
-                          <?php echo in_array($val, $selectedValues, true) ? 'checked' : ''; ?>
+                          value="<?php echo (int)$optId; ?>"
+                          <?php echo $isChecked ? 'checked' : ''; ?>
                         >
                         <span><?php echo htmlspecialchars($label, ENT_QUOTES); ?></span>
                       </label>
@@ -1753,18 +1931,84 @@ ul{
     </div>
   </form>
 
-  <!-- BRAND STRIP -->
-  <!-- <section class="brand-strip">
-    <div class="brand-strip-inner">
-      <span>Wild Mountain</span>
-      <span>Vintage Studio</span>
-      <span>Organic Blend</span>
-      <span>Inspire Graphic</span>
-      <span>Pure Aroma</span>
-    </div>
-  </section> -->
+  <!-- CATEGORY CONTENT SECTION (Description + FAQs + Gallery) -->
+  <?php if (!empty($catSeo['content']) || !empty($catSeo['faqs']) || !empty($catSeo['gallery'])): ?>
+  <section class="category-content-section" style="max-width:1200px; margin:40px auto 60px; padding:0 15px; border-top:1px solid #eee; pt-10">
+      
+      <!-- 1. Rich Text Description -->
+      <?php if (!empty($catSeo['content'])): ?>
+          <div class="cat-description rich-text" style="color:#333 !important; font-size:15px; line-height:1.8; margin-top:40px; margin-bottom:40px;">
+              <?= $catSeo['content'] ?>
+          </div>
+      <?php endif; ?>
 
-  <!-- FOOTER -->
+      <!-- 2. Media Gallery Grid (Bottom) -->
+      <?php if (!empty($catSeo['gallery'])): ?>
+          <div class="cat-gallery" style="margin-bottom:40px;">
+              <h3 style="font-size:20px; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:20px; color:#111;">Gallery</h3>
+              <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:15px;">
+                  <?php foreach ($catSeo['gallery'] as $img): 
+                      $gSrc = (strpos($img, '/') === 0) ? $img : '/assets/uploads/categories/' . $img;
+                      $ext = strtolower(pathinfo($gSrc, PATHINFO_EXTENSION));
+                      $isVid = in_array($ext, ['mp4', 'webm', 'ogg']);
+                  ?>
+                      <div style="height:200px; border-radius:8px; overflow:hidden; border:1px solid #eee; background:#f9f9f9;">
+                          <?php if ($isVid): ?>
+                              <video src="<?= htmlspecialchars($gSrc) ?>" controls style="width:100%; height:100%; object-fit:cover;"></video>
+                          <?php else: ?>
+                              <img src="<?= htmlspecialchars($gSrc) ?>" style="width:100%; height:100%; object-fit:cover;">
+                          <?php endif; ?>
+                      </div>
+                  <?php endforeach; ?>
+              </div>
+          </div>
+      <?php endif; ?>
+
+      <!-- 3. FAQs Accordion -->
+      <?php if (!empty($catSeo['faqs'])): ?>
+          <div class="cat-faqs">
+              <h3 style="font-size:20px; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:20px; border-bottom:1px solid #ddd; padding-bottom:10px; color:#111;">Frequently Asked Questions</h3>
+              
+              <div class="faq-accordion">
+                  <?php foreach ($catSeo['faqs'] as $idx => $faq): ?>
+                      <div class="faq-item" style="border-bottom:1px solid #eee;">
+                          <button class="faq-btn" onclick="toggleFaq(this)" style="width:100%; text-align:left; padding:15px 0; background:none; border:none; cursor:pointer; font-size:15px; font-weight:600; color:#333; display:flex; justify-content:space-between; align-items:center;">
+                              <span><?= htmlspecialchars($faq['q']) ?></span>
+                              <i class="fa-solid fa-chevron-down transition-transform duration-300" style="color:#777;"></i>
+                          </button>
+                          <div class="faq-answer" style="display:none; padding-bottom:15px; color:#555; font-size:14px; line-height:1.6;">
+                              <?= nl2br(htmlspecialchars($faq['a'])) ?>
+                          </div>
+                      </div>
+                  <?php endforeach; ?>
+              </div>
+          </div>
+
+          <script>
+            function toggleFaq(btn) {
+                const answer = btn.nextElementSibling;
+                const icon = btn.querySelector('i');
+                if (answer.style.display === 'none') {
+                    answer.style.display = 'block';
+                    icon.style.transform = 'rotate(180deg)';
+                } else {
+                    answer.style.display = 'none';
+                    icon.style.transform = 'rotate(0deg)';
+                }
+            }
+          </script>
+      <?php endif; ?>
+      
+  </section>
+  <style>
+    .cat-description.rich-text h2 { font-size:18px; margin-top:20px; margin-bottom:10px; color:#111; }
+    .cat-description.rich-text h3 { font-size:16px; margin-top:15px; margin-bottom:8px; color:#111; }
+    .cat-description.rich-text p { margin-bottom:15px; color:#333; }
+    .cat-description.rich-text ul { list-style:disc; margin-left:20px; margin-bottom:15px; color:#333; }
+    .cat-description.rich-text img { max-width:100%; height:auto; border-radius:4px; margin:10px 0; }
+  </style>
+  <?php endif; ?>
+
   <!-- FOOTER -->
   <?php include 'footer.php'; ?>
 
@@ -1824,6 +2068,16 @@ ul{
 
       const formData = new FormData(form);
       const params   = new URLSearchParams(formData);
+
+      // 1. Preserve 'cat' from current URL
+      const currentUrlParams = new URLSearchParams(window.location.search);
+      if (currentUrlParams.has('cat')) {
+        params.set('cat', currentUrlParams.get('cat'));
+      }
+      // Also preserve 'category' if it's in the URL but not in form (for sidebar links)
+      if (currentUrlParams.has('category') && !params.has('category')) {
+          params.set('category', currentUrlParams.get('category'));
+      }
 
       // pagination support
       if (extraParams.page) {
@@ -2172,65 +2426,116 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.body.addEventListener('click', function(e) {
         const btn = e.target.closest('.cart-btn');
-        if (!btn) return;
+        if (btn) {
+            e.preventDefault();
+            e.stopPropagation();
 
-        e.preventDefault();
-        e.stopPropagation();
+            const productId = btn.getAttribute('data-product-id');
+            const icon = btn.querySelector('i');
 
-        const productId = btn.getAttribute('data-product-id');
-        const icon = btn.querySelector('i');
+            // Show adding animation
+            const originalColor = icon.style.color;
+            icon.style.color = '#4CAF50';
 
-        // Show adding animation
-        const originalColor = icon.style.color;
-        icon.style.color = '#4CAF50';
-
-        fetch('ajax_cart.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `action=add&product_id=${productId}&quantity=1`
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                // Show success toast
-                showToast('Product added to cart successfully!', 'success');
-                
-                // Update navbar count
-                const cartCountEl = document.querySelector('.cart-count');
-                if (cartCountEl) {
-                    cartCountEl.textContent = data.count;
-                    if (data.count > 0) {
-                        cartCountEl.style.display = 'flex';
-                        cartCountEl.style.position = 'absolute';
-                        cartCountEl.style.top = '-6px';
-                        cartCountEl.style.right = '-6px';
-                    } else {
-                        cartCountEl.style.display = 'none';
+            fetch('ajax_cart.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `action=add&product_id=${productId}&quantity=1`
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Product added to cart successfully!', 'success');
+                    
+                    // Update navbar count
+                    const cartCountEl = document.querySelector('.cart-count');
+                    if (cartCountEl) {
+                        cartCountEl.textContent = data.count;
+                        if (data.count > 0) {
+                            cartCountEl.style.display = 'flex';
+                            cartCountEl.style.position = 'absolute';
+                            cartCountEl.style.top = '-6px';
+                            cartCountEl.style.right = '-6px';
+                        } else {
+                            cartCountEl.style.display = 'none';
+                        }
                     }
-                }
-                
-                // Update navbar total
-                const cartTotalEl = document.querySelector('.cart-total');
-                if (cartTotalEl && data.total !== undefined) {
-                    cartTotalEl.textContent = '₹' + data.total.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-                }
-                
-                // Show success feedback
-                setTimeout(() => {
+                    
+                    // Update navbar total
+                    const cartTotalEl = document.querySelector('.cart-total');
+                    if (cartTotalEl && data.total !== undefined) {
+                        cartTotalEl.textContent = '₹' + data.total.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                    }
+                    
+                    setTimeout(() => {
+                        icon.style.color = originalColor;
+                    }, 500);
+                } else {
+                    showToast(data.message || 'Error adding to cart', 'error');
                     icon.style.color = originalColor;
-                }, 500);
-            } else {
-                showToast(data.message || 'Error adding to cart', 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Cart add error:', err);
+                showToast('Error adding to cart', 'error');
                 icon.style.color = originalColor;
-            }
-        })
-        .catch(err => {
-            console.error('Cart add error:', err);
-            showToast('Error adding to cart', 'error');
-            icon.style.color = originalColor;
-        });
+            });
+            return;
+        }
+        
+        // Buy Now Button Logic (Direct Redirect for Reliability)
+        const buyBtn = e.target.closest('.buy-now-btn');
+        if (buyBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const productId = buyBtn.getAttribute('data-product-id');
+            const icon = buyBtn.querySelector('i');
+            
+            // Show processing state
+            icon.className = 'fa-solid fa-spinner fa-spin';
+
+            // Direct redirect to checkout
+            window.location.href = `checkout.php?source=direct_buy&product_id=${productId}&quantity=1`;
+        }
+
+        // WhatsApp Inquiry Logic
+        const waBtn = e.target.closest('.whatsapp-inquiry-btn');
+        if (waBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            const url = waBtn.getAttribute('data-url');
+            if(url) window.open(url, '_blank');
+        }
     });
 });
 </script>
+<style>
+/* Large WhatsApp Button Style for Product Grid */
+.large-wa-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: #fff;
+    color: #25D366;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+    z-index: 5;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+.large-wa-btn:hover {
+    transform: scale(1.1);
+    background: #25D366;
+    color: #fff;
+    box-shadow: 0 6px 15px rgba(37, 211, 102, 0.4);
+}
+</style>
 </body>
 </html>

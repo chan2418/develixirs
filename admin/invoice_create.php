@@ -4,6 +4,7 @@
 
 require_once __DIR__ . '/_auth.php';
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/invoice_number_helper.php';
 
 $page_title = 'Create Invoice';
 include __DIR__ . '/layout/header.php';
@@ -27,8 +28,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['order_id'])) {
     $order = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($order) {
-        // Generate Invoice Number (e.g., INV-ORDERID-TIMESTAMP)
-        $invoiceNum = 'INV-' . $order['order_number'] . '-' . date('ymd');
+        // Generate Invoice Number with shared format
+        $invoiceNum = build_invoice_number($pdo, (int)$orderId, $order['created_at'] ?? null);
         
         // Create Invoice
         $stmt = $pdo->prepare("

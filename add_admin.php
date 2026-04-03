@@ -17,7 +17,7 @@ try {
         echo "❌ Admin with email '$email' already exists!<br>";
         exit;
     }
-    
+
     // Hash the password
     $password_hash = password_hash($password, PASSWORD_DEFAULT);
     

@@ -53,6 +53,7 @@ $allowedSlots = [
     'home_sidebar',
     'home_center',
     'home_offer',   // child slot for home
+    'home_before_blogs', // child slot for home (before blogs)
     'product',
     'product_sidebar', // child slot for product listing sidebar
     'product_detail',
@@ -132,6 +133,7 @@ $childParents = [
     'home_sidebar'    => 'home',
     'home_center'     => 'home',
     'home_offer'      => 'home',
+    'home_before_blogs' => 'home',
     'product_sidebar' => 'product',
     'product_detail_sidebar' => 'product_detail',  // product detail child slot
 ];
@@ -140,9 +142,32 @@ if (!empty($_SESSION['form_errors'])) {
     redirect_to_slot($parentSlot);
 }
 
-// if (!empty($_SESSION['form_errors'])) {
-//     $parentSlot = $childParents[$page_slot] ?? $page_slot;
-// }
+/* ---------- HANDLE MEDIA LIBRARY SELECTIONS ---------- */
+$mediaFiles = $_POST['banners_from_media'] ?? [];
+if (!is_array($mediaFiles)) {
+    $mediaFiles = [];
+}
+
+foreach ($mediaFiles as $mPath) {
+    if (empty($mPath)) continue;
+
+    // Convert web path to system path
+    // Remove query params if any
+    $mPath = parse_url($mPath, PHP_URL_PATH);
+    
+    // Check if it starts with /assets/
+    if (strpos($mPath, '/assets/') === 0) {
+        $realPath = __DIR__ . '/..' . $mPath;
+        if (file_exists($realPath)) {
+            $ext = strtolower(pathinfo($realPath, PATHINFO_EXTENSION));
+            $validFiles[] = [
+                'tmp_name' => $realPath, // Use existing file as source
+                'ext'      => $ext ?: 'jpg',
+                'orig'     => basename($realPath)
+            ];
+        }
+    }
+}
 
 /* ---------- UPLOAD DIR ---------- */
 $uploadDir = __DIR__ . '/../assets/uploads/banners/';

@@ -27,6 +27,15 @@ try {
 } catch (PDOException $e) {
     $productColumns = [];
 }
+// 🔹 Load Categories for Dropdown (Top Level Only)
+$categories = [];
+try {
+    $stmtCats = $pdo->query("SELECT id, name FROM categories WHERE parent_id IS NULL OR parent_id = 0 ORDER BY name ASC");
+    $categories = $stmtCats->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    $categories = [];
+}
+
 
 // 🔹 Handle form submit BEFORE any HTML output
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -36,8 +45,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $sortOrder  = (int)($_POST['sort_order'] ?? 0);
     $isActive   = isset($_POST['is_active']) ? 1 : 0;
 
-    if ($name === '' || $paramKey === '' || $columnName === '') {
-        $error = 'Name, Param Key and Column Name are required.';
+    if ($name === '' || $paramKey === '') {
+        $error = 'Name and Param Key are required.';
     } else {
         $stmt = $pdo->prepare("
             UPDATE filter_groups 
@@ -45,15 +54,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 param_key = :param_key, 
                 column_name = :column_name, 
                 sort_order = :sort_order, 
-                is_active = :is_active
+                is_active = :is_active,
+                category_id = :category_id
             WHERE id = :id
         ");
         $stmt->execute([
             'name'        => $name,
             'param_key'   => $paramKey,
-            'column_name' => $columnName,
+            'column_name' => $columnName, // Can be empty
             'sort_order'  => $sortOrder,
             'is_active'   => $isActive,
+            'category_id' => !empty($_POST['category_id']) ? $_POST['category_id'] : null,
             'id'          => $id,
         ]);
 
@@ -115,6 +126,32 @@ $isActive   = isset($_POST['is_active']) ? $_POST['is_active'] : $group['is_acti
         </p>
       </div>
 
+      </div>
+
+      <!-- Category (Generic vs Specific) -->
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">
+          Applies To (Category)
+        </label>
+        <select
+          name="category_id"
+          class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+        >
+          <option value="">-- Generic / Common Filter (All Products) --</option>
+          <?php 
+             $currentCat = $_POST['category_id'] ?? $group['category_id'] ?? null;
+             foreach ($categories as $cat): 
+          ?>
+             <option value="<?= $cat['id'] ?>" <?= ($currentCat == $cat['id']) ? 'selected' : '' ?>>
+                <?= htmlspecialchars($cat['name']) ?>
+             </option>
+          <?php endforeach; ?>
+        </select>
+        <p class="text-xs text-slate-500 mt-1">
+          If selected, this filter will <strong>only</strong> appear on that Category's page.
+        </p>
+      </div>
+
       <!-- Param Key -->
       <div>
         <label class="block text-sm font-medium text-slate-700 mb-1">
@@ -142,7 +179,6 @@ $isActive   = isset($_POST['is_active']) ? $_POST['is_active'] : $group['is_acti
         <select
           name="column_name"
           class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-          required
         >
           <option value="">-- Select column from products table --</option>
           <?php foreach ($productColumns as $col): ?>

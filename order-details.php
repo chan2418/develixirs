@@ -25,7 +25,6 @@ $stmt->execute([$orderId, $userId]);
 $order = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$order) {
-    // Order not found or doesn't belong to user
     header("Location: my-profile.php");
     exit;
 }
@@ -40,12 +39,12 @@ $stmtItems = $pdo->prepare("
 $stmtItems->execute([$orderId]);
 $items = $stmtItems->fetchAll(PDO::FETCH_ASSOC);
 
-// Decode shipping address if it's JSON
+// Decode shipping address
 $shippingAddress = $order['shipping_address'] ?? '';
 $shipping = [];
 
 if (empty($shippingAddress)) {
-    // Fallback: Fetch default address
+    // Fallback
     $stmtAddr = $pdo->prepare("SELECT * FROM user_addresses WHERE user_id = ? ORDER BY is_default DESC LIMIT 1");
     $stmtAddr->execute([$userId]);
     $fallbackAddr = $stmtAddr->fetch(PDO::FETCH_ASSOC);
@@ -67,6 +66,28 @@ if (empty($shippingAddress)) {
     }
 }
 
+// Return Logic
+$canReturn = false;
+$returnStatus = null;
+$returnRequest = null;
+
+$created = strtotime($order['created_at']);
+$diffDays = (time() - $created) / (60 * 60 * 24);
+
+// Fetch Return Request if exists
+try {
+    $stmtRet = $pdo->prepare("SELECT * FROM order_returns WHERE order_id = ? LIMIT 1");
+    $stmtRet->execute([$orderId]);
+    $returnRequest = $stmtRet->fetch(PDO::FETCH_ASSOC);
+    if ($returnRequest) {
+        $returnStatus = $returnRequest['status'];
+    }
+} catch(Exception $e) {}
+
+if ($diffDays <= 7 && strtolower($order['order_status']) !== 'cancelled' && !$returnStatus) {
+    $canReturn = true;
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -75,413 +96,279 @@ if (empty($shippingAddress)) {
   <title>Order #<?php echo htmlspecialchars($order['order_number']); ?> – Devilixirs</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
   <link rel="stylesheet" href="assets/css/navbar.css">
+  <script src="https://cdn.tailwindcss.com"></script>
 
   <style>
-    :root{
-      --primary: #D4AF37;
-      --primary-dark: #b5952f;
-      --bg: #f5f5f5; /* Match other pages */
-      --card-bg: #ffffff;
-      --text-main: #2d3748;
-      --text-muted: #718096;
-      --border: #e2e8f0;
-      --success: #48bb78;
-      --danger: #f56565;
-      --warning: #ed8936;
-      --info: #4299e1;
-    }
-    body{
-      font-family: 'Poppins', sans-serif;
-      background: var(--bg);
-      color: var(--text-main);
-      /* padding-top removed to fix spacing issue */
-      line-height: 1.6;
-    }
-    .container{
-      max-width: 1000px;
-      margin: 0 auto 60px;
-      padding: 0 20px;
-    }
-    
-    /* Header */
-    .page-header{
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 30px;
-    }
-    .page-title{
-      font-size: 28px;
-      font-weight: 700;
-      color: #1a202c;
-      letter-spacing: -0.5px;
-    }
-    .back-link{
-      font-size: 14px;
-      color: var(--text-muted);
-      text-decoration: none;
-      font-weight: 500;
-      transition: color 0.2s;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .back-link:hover{
-      color: var(--primary);
-    }
-
-    /* Cards */
-    .card{
-      background: var(--card-bg);
-      border-radius: 12px;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-      padding: 30px;
-      margin-bottom: 30px;
-      border: 1px solid rgba(0,0,0,0.02);
-    }
-
-    /* Order Header Grid */
-    .order-header{
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 24px;
-      padding-bottom: 24px;
-      border-bottom: 1px solid var(--border);
-      margin-bottom: 24px;
-    }
-    .order-meta-group{
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .meta-label{
-      font-size: 11px;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-      font-weight: 600;
-    }
-    .meta-value{
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--text-main);
-    }
-    
-    /* Status Badges */
-    .status-badge{
-      display: inline-flex;
-      align-items: center;
-      padding: 6px 12px;
-      border-radius: 9999px;
-      font-size: 12px;
-      font-weight: 600;
-      text-transform: capitalize;
-      line-height: 1;
-    }
-    .status-badge::before {
-        content: '';
-        display: inline-block;
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        margin-right: 6px;
-        background-color: currentColor;
-    }
-    .status-pending{ background: #fffaf0; color: var(--warning); }
-    .status-processing{ background: #ebf8ff; color: var(--info); }
-    .status-shipped{ background: #e6fffa; color: #38b2ac; }
-    .status-delivered{ background: #f0fff4; color: var(--success); }
-    .status-cancelled{ background: #fff5f5; color: var(--danger); }
-
-    /* Items Table */
-    .items-table{
-      width: 100%;
-      border-collapse: separate;
-      border-spacing: 0 12px;
-      margin-top: -12px;
-    }
-    .items-table th{
-      text-align: left;
-      padding: 0 10px 10px;
-      font-size: 12px;
-      color: var(--text-muted);
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      border-bottom: 1px solid var(--border);
-    }
-    .items-table td{
-      padding: 16px 10px;
-      vertical-align: middle;
-      background: #fff;
-      border-bottom: 1px solid var(--border);
-    }
-    .items-table tr:last-child td {
-        border-bottom: none;
-    }
-    
-    .item-product{
-      display: flex;
-      align-items: center;
-      gap: 20px;
-    }
-    .item-img{
-      width: 70px;
-      height: 70px;
-      object-fit: cover;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: #f7fafc;
-    }
-    .item-info{
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-    .item-name{
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--text-main);
-    }
-    .item-meta{
-      font-size: 13px;
-      color: var(--text-muted);
-    }
-
-    /* Summary Section */
-    .summary-section{
-      display: flex;
-      justify-content: flex-end;
-      margin-top: 30px;
-      padding-top: 20px;
-      border-top: 1px solid var(--border);
-    }
-    .summary-box{
-      width: 100%;
-      max-width: 350px;
-    }
-    .summary-row{
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 12px;
-      font-size: 14px;
-      color: var(--text-muted);
-    }
-    .summary-row span:last-child {
-        color: var(--text-main);
-        font-weight: 500;
-    }
-    .summary-row.total{
-      margin-top: 16px;
-      padding-top: 16px;
-      border-top: 2px dashed var(--border);
-      font-weight: 700;
-      font-size: 18px;
-      color: var(--text-main);
-      align-items: center;
-    }
-    .summary-row.total span:last-child {
-        color: var(--primary);
-        font-size: 20px;
-    }
-
-    /* Address Section */
-    .address-section{
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 40px;
-    }
-    .addr-box h3{
-      font-size: 16px;
-      margin-bottom: 16px;
-      font-weight: 600;
-      color: var(--text-main);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .addr-box h3 i {
-        color: var(--primary);
-    }
-    .addr-card {
-        background: #f8f9fa;
-        padding: 20px;
-        border-radius: 8px;
-        border: 1px solid var(--border);
-        height: 100%;
-    }
-    .addr-text{
-      font-size: 14px;
-      line-height: 1.7;
-      color: #4a5568;
-    }
-    .addr-text strong {
-        color: var(--text-main);
-        font-weight: 600;
-        display: block;
-        margin-bottom: 4px;
-        font-size: 15px;
-    }
-
-    @media(max-width: 768px){
-      .page-header { flex-direction: column; align-items: flex-start; gap: 10px; }
-      .items-table th:nth-child(2), .items-table td:nth-child(2){ display: none; }
-      .order-header { grid-template-columns: 1fr 1fr; gap: 16px; }
-      .card { padding: 20px; }
-    }
+    body { font-family: 'Outfit', sans-serif; background: #fdfbf7; color: #1f2937; }
+    .gold-text { color: #D4AF37; }
+    .bg-soft-gold { background-color: #fdfbf7; }
   </style>
 </head>
-<body>
+<body class="flex flex-col min-h-screen">
 
 <?php include __DIR__ . '/navbar.php'; ?>
 
-<div class="container">
-  <div class="page-header">
-    <h1 class="page-title">Order Details</h1>
-    <a href="my-profile.php" class="back-link"><i class="fa-solid fa-arrow-left"></i> Back to My Orders</a>
-  </div>
+<main class="flex-grow container mx-auto px-4 py-8 max-w-5xl">
 
-  <div class="card">
-    <div class="order-header">
-      <div class="order-meta-group">
-        <span class="meta-label">Order ID</span>
-        <span class="meta-value">#<?php echo htmlspecialchars($order['order_number']); ?></span>
-      </div>
-      <div class="order-meta-group">
-        <span class="meta-label">Date Placed</span>
-        <span class="meta-value"><?php echo date('d M Y, h:i A', strtotime($order['created_at'])); ?></span>
-      </div>
-      <div class="order-meta-group">
-        <span class="meta-label">Total Amount</span>
-        <span class="meta-value">₹<?php echo number_format($order['total_amount'], 2); ?></span>
-      </div>
-      <div class="order-meta-group">
-        <span class="meta-label">Status</span>
-        <span class="meta-value">
-          <?php 
-            $status = strtolower($order['order_status'] ?? 'pending');
-            $class = 'status-' . $status;
-          ?>
-          <span class="status-badge <?php echo $class; ?>"><?php echo ucfirst($status); ?></span>
-        </span>
-      </div>
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+        <div>
+            <div class="flex items-center gap-2 mb-1">
+                <a href="my-profile.php" class="text-gray-400 hover:text-gray-600 transition text-sm">
+                    <i class="fa-solid fa-arrow-left"></i> Back to Orders
+                </a>
+            </div>
+            <h1 class="text-3xl font-bold text-gray-900">
+                Order <span class="text-gray-500">#<?php echo htmlspecialchars($order['order_number']); ?></span>
+            </h1>
+            <p class="text-gray-500 text-sm mt-1">
+                Placed on <?php echo date('F d, Y \a\t h:i A', strtotime($order['created_at'])); ?>
+            </p>
+        </div>
+        
+         <div class="flex items-center gap-3">
+             <a href="https://wa.me/919500650454?text=Help%20with%20Order%20%23<?php echo $order['order_number']; ?>" target="_blank" class="px-5 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-50 hover:border-gray-300 transition shadow-sm flex items-center gap-2">
+               <i class="fa-brands fa-whatsapp text-green-500 text-lg"></i> Need Help?
+             </a>
+             
+             <?php if ($returnStatus): ?>
+                <span class="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-50 text-amber-700 rounded-xl font-medium border border-amber-200 shadow-sm">
+                   <i class="fa-solid fa-clock-rotate-left"></i>
+                   Return: <?php echo ucfirst($returnStatus); ?>
+                </span>
+             <?php elseif ($canReturn): ?>
+                <a href="order-return.php?id=<?php echo $orderId; ?>" class="inline-flex items-center gap-2 px-5 py-2.5 bg-white text-red-600 rounded-xl font-medium border border-red-200 shadow-sm hover:bg-red-50 hover:border-red-300 transition-all transform hover:-translate-y-0.5">
+                   <i class="fa-solid fa-box-open"></i>
+                   Return Items
+                </a>
+             <?php endif; ?>
+         </div>
     </div>
 
-    <table class="items-table">
-      <thead>
-        <tr>
-          <th>Product</th>
-          <th>Price</th>
-          <th>Quantity</th>
-          <th style="text-align:right;">Total</th>
-        </tr>
-      </thead>
-      <tbody>
-        <?php 
-        $productTotal = 0; // Init subtotal
-        foreach ($items as $item): 
-            $img = 'https://via.placeholder.com/60';
-            if (!empty($item['product_images'])) {
-                $imgs = json_decode($item['product_images'], true);
-                if (is_array($imgs) && !empty($imgs[0])) {
-                    $img = '/assets/uploads/products/' . $imgs[0];
-                }
-            }
-            $lineTotal = $item['price'] * $item['qty'];
-            $productTotal += $lineTotal; // Accumulate subtotal
-        ?>
-        <tr>
-          <td>
-            <div class="item-product">
-              <img src="<?php echo htmlspecialchars($img); ?>" alt="" class="item-img">
-              <div class="item-info">
-                <div class="item-name"><?php echo htmlspecialchars($item['product_name'] ?? 'Product'); ?></div>
-                <!-- Optional: Variant info if available -->
-              </div>
-            </div>
-          </td>
-          <td>₹<?php echo number_format($item['price'], 2); ?></td>
-          <td><?php echo (int)$item['qty']; ?></td>
-          <td style="text-align:right;">₹<?php echo number_format($lineTotal, 2); ?></td>
-        </tr>
-        <?php endforeach; ?>
-      </tbody>
-    </table>
-
-    <div class="summary-section">
-      <div class="summary-box">
-        <div class="summary-row">
-          <span>Subtotal</span>
-          <span>₹<?php echo number_format($productTotal, 2); ?></span>
-        </div>
-        <?php if (!empty($order['coupon_discount']) && $order['coupon_discount'] > 0): ?>
-        <div class="summary-row" style="color: #28a745;">
-          <span>Discount <?php echo !empty($order['coupon_code']) ? '(' . htmlspecialchars($order['coupon_code']) . ')' : ''; ?></span>
-          <span>-₹<?php echo number_format($order['coupon_discount'], 2); ?></span>
-        </div>
-        <?php endif; ?>
-        <div class="summary-row">
-          <span>Shipping</span>
-          <span><?php 
-            $shippingDb = (float)($order['shipping_charge'] ?? 0);
-            $discount   = (float)($order['coupon_discount'] ?? 0);
-            $total      = (float)$order['total_amount'];
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        <!-- Left Col: Items & Return Info -->
+        <div class="lg:col-span-2 space-y-6">
             
-            // If DB has shipping, use it. Else infer: Total - Products + Discount
-            $shippingVal = $shippingDb;
-            if ($shippingVal <= 0) {
-                $inferred = $total - $productTotal + $discount;
-                // Allow small float margin or just round
-                if ($inferred > 1) { 
-                    $shippingVal = $inferred;
-                }
-            }
+            <!-- Items Card -->
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+                    <h2 class="font-semibold text-gray-800">Items Ordered</h2>
+                    <span class="text-sm px-3 py-1 rounded-full 
+                        <?php 
+                        $st = strtolower($order['order_status']);
+                        echo match($st) {
+                            'delivered' => 'bg-green-100 text-green-700',
+                            'shipped' => 'bg-blue-50 text-blue-700',
+                            'cancelled' => 'bg-red-50 text-red-700',
+                             default => 'bg-yellow-50 text-amber-700'
+                        };
+                        ?> font-medium">
+                        <?php echo ucfirst($st); ?>
+                    </span>
+                </div>
+                
+                <div class="divide-y divide-gray-100">
+                    <?php 
+                    $productTotal = 0;
+                    foreach ($items as $item): 
+                        $img = 'https://via.placeholder.com/60';
+                        if (!empty($item['product_images'])) {
+                            $imgs = json_decode($item['product_images'], true);
+                            if (is_array($imgs) && !empty($imgs[0])) {
+                                $img = '/assets/uploads/products/' . $imgs[0];
+                            }
+                        }
+                        $lineTotal = $item['price'] * $item['qty'];
+                        $productTotal += $lineTotal;
+                    ?>
+                    <div class="p-6 flex gap-4 hover:bg-gray-50/50 transition-colors">
+                        <div class="w-20 h-20 flex-shrink-0 rounded-lg border border-gray-200 overflow-hidden bg-white">
+                            <img src="<?php echo htmlspecialchars($img); ?>" class="w-full h-full object-cover">
+                        </div>
+                        <div class="flex-grow">
+                            <h3 class="font-semibold text-gray-900 mb-1"><?php echo htmlspecialchars($item['product_name'] ?? 'Product'); ?></h3>
+                            <div class="text-sm text-gray-500 mb-2">Quantity: <?php echo (int)$item['qty']; ?></div>
+                            <div class="font-semibold text-gray-900">₹<?php echo number_format($item['price'], 2); ?></div>
+                        </div>
+                        <div class="text-right font-bold text-gray-900 self-center">
+                            ₹<?php echo number_format($lineTotal, 2); ?>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+
+            <!-- Return Details Card (If Exists) -->
+            <?php if ($returnRequest): ?>
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 bg-amber-50/30 flex items-center gap-2">
+                    <i class="fa-solid fa-rotate-left text-amber-600"></i>
+                    <h2 class="font-semibold text-gray-800">Return Request</h2>
+                </div>
+                <div class="p-6">
+                    <div class="flex flex-col md:flex-row gap-6">
+                        <div class="flex-grow">
+                            <label class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1 block">Reason</label>
+                            <p class="text-gray-700 text-sm leading-relaxed bg-gray-50 p-3 rounded-lg border border-gray-100">
+                                <?php echo nl2br(htmlspecialchars($returnRequest['reason'])); ?>
+                            </p>
+                        </div>
+                        
+                        <?php 
+                        $retImages = json_decode($returnRequest['images'] ?? '[]', true);
+                        if (!empty($retImages)): 
+                        ?>
+                        <div class="min-w-[150px]">
+                            <label class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Proof</label>
+                            <div class="flex flex-wrap gap-2">
+                                <?php foreach ($retImages as $rImg): ?>
+                                    <a href="assets/uploads/returns/<?php echo htmlspecialchars($rImg); ?>" target="_blank" class="w-12 h-12 rounded-lg border border-gray-200 overflow-hidden hover:border-amber-400 transition block">
+                                        <img src="assets/uploads/returns/<?php echo htmlspecialchars($rImg); ?>" class="w-full h-full object-cover">
+                                    </a>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                    
+                    <div class="mt-4 pt-4 border-t border-gray-100 flex justify-between items-center text-xs text-gray-500">
+                        <span>Requested Request ID: #RET-<?php echo $returnRequest['id']; ?></span>
+                        <span class="px-2 py-1 rounded bg-amber-100 text-amber-700 font-semibold">
+                            <?php echo ucfirst($returnRequest['status']); ?>
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+
+        </div>
+
+        <!-- Right Col: Summary & Addresses -->
+        <div class="space-y-6">
             
-            echo ($shippingVal > 0) ? '₹' . number_format($shippingVal, 2) : 'Free'; 
-          ?></span>
-        </div>
-        <div class="summary-row total">
-          <span>Grand Total</span>
-          <span>₹<?php echo number_format($order['total_amount'], 2); ?></span>
-        </div>
-      </div>
-    </div>
-  </div>
+            <!-- Summary Card -->
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <h3 class="font-semibold text-gray-900 border-b border-gray-100 pb-3 mb-4">Order Summary</h3>
+                
+                <?php
+                    $couponDiscount = (float)($order['coupon_discount'] ?? 0);
+                    $subscriptionDiscount = (float)($order['subscription_discount'] ?? 0);
+                    $appliedDiscountType = (string)($order['applied_discount_type'] ?? '');
+                    $displayDiscount = 0.0;
+                    $displayDiscountLabel = 'Discount';
 
-  <div class="card">
-    <div class="address-section">
-      <div class="addr-box">
-        <h3><i class="fa-solid fa-truck-fast"></i> Shipping Address</h3>
-        <div class="addr-card">
-            <div class="addr-text">
-              <?php if (!empty($shipping)): ?>
-                <strong><?php echo htmlspecialchars($shipping['name'] ?? ''); ?></strong>
-                <?php echo htmlspecialchars($shipping['address'] ?? ''); ?><br>
-                <?php echo htmlspecialchars($shipping['city'] ?? ''); ?>, <?php echo htmlspecialchars($shipping['state'] ?? ''); ?> - <?php echo htmlspecialchars($shipping['postal'] ?? ''); ?><br>
-                Phone: <?php echo htmlspecialchars($shipping['phone'] ?? ''); ?>
-              <?php else: ?>
-                <?php echo nl2br(htmlspecialchars($order['shipping_address'] ?? '')); ?>
-              <?php endif; ?>
-            </div>
-        </div>
-      </div>
-      <div class="addr-box">
-        <h3><i class="fa-solid fa-credit-card"></i> Payment Info</h3>
-        <div class="addr-card">
-            <div class="addr-text">
-              Status: <strong><?php echo ucfirst($order['payment_status']); ?></strong><br>
-              Method: Online / UPI <!-- Replace if method is stored -->
-            </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+                    if ($appliedDiscountType === 'subscription' && $subscriptionDiscount > 0) {
+                        $displayDiscount = $subscriptionDiscount;
+                        $displayDiscountLabel = 'Subscription Discount';
+                        if (!empty($order['subscription_plan_name'])) {
+                            $displayDiscountLabel .= ' (' . $order['subscription_plan_name'] . ')';
+                        }
+                    } elseif ($couponDiscount > 0) {
+                        $displayDiscount = $couponDiscount;
+                        $displayDiscountLabel = 'Discount';
+                        if (!empty($order['coupon_code'])) {
+                            $displayDiscountLabel .= ' (' . $order['coupon_code'] . ')';
+                        }
+                    } elseif ($subscriptionDiscount > 0) {
+                        $displayDiscount = $subscriptionDiscount;
+                        $displayDiscountLabel = 'Subscription Discount';
+                    }
+                ?>
 
-<?php include 'footer.php'; ?>
+                <div class="space-y-3 text-sm">
+                    <div class="flex justify-between text-gray-500">
+                        <span>Subtotal</span>
+                        <span class="font-medium text-gray-900">₹<?php echo number_format($productTotal, 2); ?></span>
+                    </div>
+                    
+                    <?php if ($displayDiscount > 0): ?>
+                    <div class="flex justify-between text-green-600">
+                        <span><?php echo htmlspecialchars($displayDiscountLabel); ?></span>
+                        <span>-₹<?php echo number_format($displayDiscount, 2); ?></span>
+                    </div>
+                    <?php endif; ?>
+                    
+                    <div class="flex justify-between text-gray-500">
+                        <span>Shipping</span>
+                        <span class="font-medium text-gray-900">
+                        <?php 
+                            $shippingDb = (float)($order['shipping_charge'] ?? 0);
+                            $discount   = $displayDiscount;
+                            $total      = (float)$order['total_amount'];
+                            
+                            $shippingVal = $shippingDb;
+                            if ($shippingVal <= 0) {
+                                $inferred = $total - $productTotal + $discount;
+                                if ($inferred > 1) { 
+                                    $shippingVal = $inferred;
+                                }
+                            }
+                            echo ($shippingVal > 0) ? '₹' . number_format($shippingVal, 2) : 'Free'; 
+                        ?>
+                        </span>
+                    </div>
+                    
+                    <div class="pt-3 mt-3 border-t border-dashed border-gray-200 flex justify-between items-center">
+                        <span class="font-bold text-gray-900">Total</span>
+                        <span class="font-bold text-xl text-yellow-600">₹<?php echo number_format($order['total_amount'], 2); ?></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Payment Info -->
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <h3 class="font-semibold text-gray-900 border-b border-gray-100 pb-3 mb-4">Payment Details</h3>
+                <div class="space-y-3 text-sm">
+                     <div class="flex justify-between">
+                        <span class="text-gray-500">Status</span>
+                        <span class="font-medium px-2 py-0.5 rounded bg-green-50 text-green-700 text-xs uppercase tracking-wide">
+                            <?php echo ucfirst($order['payment_status']); ?>
+                        </span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Method</span>
+                        <span class="font-medium text-gray-900">
+                            <?php 
+                                if (str_starts_with($order['order_number'], 'COD-')) {
+                                    echo 'Cash on Delivery';
+                                } else {
+                                    echo 'Online / UPI';
+                                }
+                            ?>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Shipping Address -->
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <h3 class="font-semibold text-gray-900 border-b border-gray-100 pb-3 mb-4">Shipping Address</h3>
+                <div class="text-sm text-gray-600 leading-relaxed">
+                  <?php if (!empty($shipping)): ?>
+                    <p class="font-bold text-gray-900 mb-1"><?php echo htmlspecialchars($shipping['name'] ?? ''); ?></p>
+                    <p><?php echo htmlspecialchars($shipping['address'] ?? ''); ?></p>
+                    <p class="mb-2"><?php echo htmlspecialchars($shipping['city'] ?? ''); ?>, <?php echo htmlspecialchars($shipping['state'] ?? ''); ?> - <?php echo htmlspecialchars($shipping['postal'] ?? ''); ?></p>
+                    <div class="flex items-center gap-2 text-gray-500 mt-2 pt-2 border-t border-gray-50">
+                        <i class="fa-solid fa-phone text-xs"></i> 
+                        <?php echo htmlspecialchars($shipping['phone'] ?? ''); ?>
+                    </div>
+                  <?php else: ?>
+                    <?php echo nl2br(htmlspecialchars($order['shipping_address'] ?? '')); ?>
+                  <?php endif; ?>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</main>
+
+<?php include __DIR__ . '/includes/footer.php'; ?>
 
 </body>
 </html>

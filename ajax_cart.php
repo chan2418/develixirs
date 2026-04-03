@@ -1,242 +1,188 @@
 <?php
-require_once __DIR__ . '/includes/db.php';
-require_once __DIR__ . '/includes/coupon_helpers.php';
+// CRITICAL: Prevent ANY non-JSON output
+ini_set('display_errors', 0);
+error_reporting(E_ALL);
+ob_start(); 
 
-header('Content-Type: application/json');
-
-session_start();
-
-if (!isset($_SESSION['user_id'])) {
-    echo json_encode(['success' => false, 'message' => 'Please login to use cart']);
+// Helper to reliably send JSON and exit
+function sendJson($data) {
+    ob_end_clean(); // Discard any prior output/warnings
+    header('Content-Type: application/json');
+    echo json_encode($data);
     exit;
 }
 
-$userId = $_SESSION['user_id'];
-$action = $_POST['action'] ?? '';
-
-// Helper to re-validate coupon
-function checkCouponValidity($pdo, $userId) {
-    if (!isset($_SESSION['applied_coupon'])) return null;
-
-    $couponCode = $_SESSION['applied_coupon']['code'];
-    
-    // Get cart items for validation
-    $stmt = $pdo->prepare("
-        SELECT c.product_id, c.quantity, p.price, p.category_id
-        FROM cart c
-        JOIN products p ON c.product_id = p.id
-        WHERE c.user_id = :uid
-    ");
-    $stmt->execute([':uid' => $userId]);
-    $cartItems = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    $cartTotal = 0;
-    foreach ($cartItems as $item) {
-        $cartTotal += $item['price'] * $item['quantity'];
-    }
-    
-    $result = validateCoupon($couponCode, $userId, $cartTotal, $cartItems, $pdo);
-    
-    if (!$result['valid']) {
-        removeCouponFromSession();
-        return [
-            'status' => 'removed',
-            'message' => "Coupon removed: " . $result['message']
-        ];
-    } else {
-        // Update discount amount in session as total might have changed
-        $coupon = $result['coupon'];
-        $discount = calculateDiscount($coupon, $cartTotal);
-        applyCouponToSession($coupon, $discount);
-        return [
-            'status' => 'updated',
-            'discount' => $discount,
-            'final_total' => $cartTotal - $discount
-        ];
-    }
-}
-
-if ($action === 'add') {
-    $productId = isset($_POST['product_id']) ? (int)$_POST['product_id'] : 0;
-    $quantity = isset($_POST['quantity']) ? (int)$_POST['quantity'] : 1;
-
-    if ($productId <= 0 || $quantity <= 0) {
-        echo json_encode(['success' => false, 'message' => 'Invalid product or quantity']);
-        exit;
-    }
-
+try {
+    // 1. Load Dependencies
     try {
+        require_once __DIR__ . '/includes/db.php';
+        require_once __DIR__ . '/includes/coupon_helpers.php';
+        require_once __DIR__ . '/includes/order_pricing_helper.php';
+        
+        if (!isset($pdo)) {
+            throw new Exception("Database connection failed");
+        }
+    } catch (Throwable $e) {
+        sendJson(['success' => false, 'message' => 'System Error: ' . $e->getMessage()]);
+    }
+
+    // 2. Start Session
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+
+    if (!isset($_SESSION['user_id'])) {
+        sendJson(['success' => false, 'message' => 'Please login to use cart']);
+    }
+
+    $userId = $_SESSION['user_id'];
+    $action = $_POST['action'] ?? '';
+
+    // 3. Define Helper Functions (must be before usage or defined globally)
+    function getCartPricingState(PDO $pdo, int $userId): array {
+        $items = fetch_order_context_items($pdo, $userId, false);
+        $pricing = calculate_order_pricing($pdo, $userId, $items, getAppliedCoupon());
+        $couponStatus = null;
+
+        if (!empty($pricing['coupon']['removed_message'])) {
+            $couponStatus = [
+                'status' => 'removed',
+                'message' => $pricing['coupon']['removed_message'],
+            ];
+        }
+
+        return [
+            'count' => (int)($pricing['line_item_count'] ?? count($items)),
+            'total' => (float)($pricing['base_subtotal'] ?? 0),
+            'delivery_charge' => (float)($pricing['delivery_charge'] ?? 0),
+            'grand_total' => (float)($pricing['final_total'] ?? 0),
+            'pricing' => order_pricing_frontend_payload($pricing),
+            'coupon_status' => $couponStatus,
+        ];
+    }
+
+    // 4. Handle Actions
+    if ($action === 'direct_buy') {
+        $productId = isset($_POST['product_id']) ? (int)$_POST['product_id'] : 0;
+        $quantity = isset($_POST['quantity']) ? (int)$_POST['quantity'] : 1;
+
+        if ($productId > 0 && $quantity > 0) {
+            $_SESSION['direct_buy_item'] = [
+                'product_id' => $productId,
+                'quantity' => $quantity
+            ];
+            session_write_close(); 
+            sendJson(['success' => true]);
+        } else {
+            sendJson(['success' => false, 'message' => 'Invalid product']);
+        }
+    }
+    
+    elseif ($action === 'add') {
+        $productId = isset($_POST['product_id']) ? (int)$_POST['product_id'] : 0;
+        $quantity = isset($_POST['quantity']) ? (int)$_POST['quantity'] : 1;
+
+        if ($productId <= 0 || $quantity <= 0) {
+            sendJson(['success' => false, 'message' => 'Invalid product or quantity']);
+        }
+
         // Check if product already in cart
         $stmt = $pdo->prepare("SELECT id, quantity FROM cart WHERE user_id = :uid AND product_id = :pid");
         $stmt->execute([':uid' => $userId, ':pid' => $productId]);
         $existing = $stmt->fetch();
 
         if ($existing) {
-            // Update quantity
             $newQty = $existing['quantity'] + $quantity;
             $upd = $pdo->prepare("UPDATE cart SET quantity = :qty WHERE id = :id");
             $upd->execute([':qty' => $newQty, ':id' => $existing['id']]);
         } else {
-            // Insert new
             $ins = $pdo->prepare("INSERT INTO cart (user_id, product_id, quantity) VALUES (:uid, :pid, :qty)");
             $ins->execute([':uid' => $userId, ':pid' => $productId, ':qty' => $quantity]);
         }
 
-        // Get updated cart stats
-        $stats = getCartStats($pdo, $userId);
-        $couponStatus = checkCouponValidity($pdo, $userId);
+        $stats = getCartPricingState($pdo, $userId);
         
-        $discount = 0;
-        if ($couponStatus && $couponStatus['status'] === 'updated') {
-            $discount = $couponStatus['discount'];
-        }
-        
-        $grandTotal = $stats['total'] - $discount + $stats['delivery_charge'];
-        
-        echo json_encode([
+        sendJson([
             'success' => true, 
             'message' => 'Added to cart', 
             'count' => $stats['count'], 
             'total' => $stats['total'],
             'delivery_charge' => $stats['delivery_charge'],
-            'grand_total' => $grandTotal,
-            'coupon_status' => $couponStatus
+            'grand_total' => $stats['grand_total'],
+            'pricing' => $stats['pricing'],
+            'coupon_status' => $stats['coupon_status']
         ]);
-    } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error']);
-    }
-} elseif ($action === 'remove') {
-    $productId = isset($_POST['product_id']) ? (int)$_POST['product_id'] : 0;
+    } 
+    
+    elseif ($action === 'remove') {
+        $productId = isset($_POST['product_id']) ? (int)$_POST['product_id'] : 0;
+        if ($productId <= 0) sendJson(['success' => false, 'message' => 'Invalid product']);
 
-    if ($productId <= 0) {
-        echo json_encode(['success' => false, 'message' => 'Invalid product']);
-        exit;
-    }
-
-    try {
         $del = $pdo->prepare("DELETE FROM cart WHERE user_id = :uid AND product_id = :pid");
         $del->execute([':uid' => $userId, ':pid' => $productId]);
 
-        $stats = getCartStats($pdo, $userId);
-        $couponStatus = checkCouponValidity($pdo, $userId);
+        $stats = getCartPricingState($pdo, $userId);
         
-        $discount = 0;
-        if ($couponStatus && $couponStatus['status'] === 'updated') {
-            $discount = $couponStatus['discount'];
-        }
-        
-        $grandTotal = $stats['total'] - $discount + $stats['delivery_charge'];
-        
-        echo json_encode([
+        sendJson([
             'success' => true, 
             'message' => 'Removed from cart', 
             'count' => $stats['count'], 
             'total' => $stats['total'],
             'delivery_charge' => $stats['delivery_charge'],
-            'grand_total' => $grandTotal,
-            'coupon_status' => $couponStatus
+            'grand_total' => $stats['grand_total'],
+            'pricing' => $stats['pricing'],
+            'coupon_status' => $stats['coupon_status']
         ]);
-    } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error']);
-    }
-} elseif ($action === 'update_quantity') {
-    $productId = isset($_POST['product_id']) ? (int)$_POST['product_id'] : 0;
-    $quantity = isset($_POST['quantity']) ? (int)$_POST['quantity'] : 0;
+    } 
+    
+    elseif ($action === 'update_quantity') {
+        $productId = isset($_POST['product_id']) ? (int)$_POST['product_id'] : 0;
+        $quantity = isset($_POST['quantity']) ? (int)$_POST['quantity'] : 0;
 
-    if ($productId <= 0) {
-        echo json_encode(['success' => false, 'message' => 'Invalid product']);
-        exit;
-    }
+        if ($productId <= 0) sendJson(['success' => false, 'message' => 'Invalid product']);
 
-    try {
         if ($quantity <= 0) {
-            // Remove if quantity is 0 or less
             $del = $pdo->prepare("DELETE FROM cart WHERE user_id = :uid AND product_id = :pid");
             $del->execute([':uid' => $userId, ':pid' => $productId]);
         } else {
-            // Update quantity
             $upd = $pdo->prepare("UPDATE cart SET quantity = :qty WHERE user_id = :uid AND product_id = :pid");
             $upd->execute([':qty' => $quantity, ':uid' => $userId, ':pid' => $productId]);
         }
 
-        $stats = getCartStats($pdo, $userId);
-        $couponStatus = checkCouponValidity($pdo, $userId);
+        $stats = getCartPricingState($pdo, $userId);
         
-        $discount = 0;
-        if ($couponStatus && $couponStatus['status'] === 'updated') {
-            $discount = $couponStatus['discount'];
-        }
-        
-        $grandTotal = $stats['total'] - $discount + $stats['delivery_charge'];
-        
-        echo json_encode([
+        sendJson([
             'success' => true, 
             'count' => $stats['count'], 
             'total' => $stats['total'],
             'delivery_charge' => $stats['delivery_charge'],
-            'grand_total' => $grandTotal,
-            'coupon_status' => $couponStatus
+            'grand_total' => $stats['grand_total'],
+            'pricing' => $stats['pricing'],
+            'coupon_status' => $stats['coupon_status']
         ]);
-    } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error']);
-    }
-} elseif ($action === 'get_all') {
-    try {
-        $stmt = $pdo->prepare("
-            SELECT c.id, c.product_id, c.quantity, p.name, p.price, p.images
-            FROM cart c
-            JOIN products p ON c.product_id = p.id
-            WHERE c.user_id = :uid
-        ");
+    } 
+    
+    elseif ($action === 'get_all') {
+        $stmt = $pdo->prepare("SELECT c.id, c.product_id, c.quantity, p.name, p.price, p.images FROM cart c JOIN products p ON c.product_id = p.id WHERE c.user_id = :uid");
         $stmt->execute([':uid' => $userId]);
         $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $stats = getCartStats($pdo, $userId);
-        echo json_encode(['success' => true, 'items' => $items, 'count' => $stats['count'], 'total' => $stats['total']]);
-    } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'items' => []]);
+        $stats = getCartPricingState($pdo, $userId);
+        sendJson([
+            'success' => true,
+            'items' => $items,
+            'count' => $stats['count'],
+            'total' => $stats['total'],
+            'delivery_charge' => $stats['delivery_charge'],
+            'grand_total' => $stats['grand_total'],
+            'pricing' => $stats['pricing'],
+        ]);
+    } 
+    
+    else {
+        sendJson(['success' => false, 'message' => 'Invalid action']);
     }
-} else {
-    echo json_encode(['success' => false, 'message' => 'Invalid action']);
-}
 
-function getCartStats($pdo, $userId) {
-    $stmt = $pdo->prepare("
-        SELECT COUNT(*) as count, COALESCE(SUM(p.price * c.quantity), 0) as total
-        FROM cart c
-        JOIN products p ON c.product_id = p.id
-        WHERE c.user_id = :uid
-    ");
-    $stmt->execute([':uid' => $userId]);
-    $result = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-    $count = (int)$result['count'];
-    $total = (float)$result['total'];
-    
-    // Calculate Delivery Charge
-    $deliveryCharge = ($total < 1000 && $count > 0) ? 80 : 0;
-    
-    // Calculate Discount if coupon applied
-    $discount = 0;
-    if (isset($_SESSION['applied_coupon'])) {
-        $coupon = $_SESSION['applied_coupon'];
-        // Re-calculate discount based on new total
-        // Note: This is a simplified check. Ideally, we should re-validate the coupon fully.
-        // For now, we'll just re-apply the percentage or fixed amount logic if possible, 
-        // or rely on the client to refresh if complex validation is needed.
-        // But since we want to avoid refresh, let's do a basic calc here.
-        
-        // However, checkCouponValidity() is called in the main flow which updates the session.
-        // So we can just read the updated session value if checkCouponValidity was called before this.
-        // But getCartStats is called inside the action blocks.
-        // Let's rely on the fact that checkCouponValidity returns the updated discount.
-        // We will pass the discount *into* this function or merge it outside.
-        // Actually, let's just return the raw total and delivery here, and let the main block merge coupon data.
-    }
-    
-    return [
-        'count' => $count, 
-        'total' => $total, 
-        'delivery_charge' => $deliveryCharge
-    ];
+} catch (Throwable $e) {
+    sendJson(['success' => false, 'message' => 'Unexpected Error: ' . $e->getMessage()]);
 }
