@@ -7,11 +7,13 @@ require_once __DIR__ . '/blog_scope_helper.php';
 $scope = admin_blog_scope_from_request();
 $scopePostsLabel = admin_blog_scope_posts_label($scope);
 $scopePostLabel = admin_blog_scope_post_label($scope);
+$supportsSubcategories = admin_blog_scope_supports_subcategories($scope);
 $pageTitle = 'Add New ' . $scopePostLabel;
 $errors = [];
 $success = '';
 $scopeColumnAvailable = admin_blog_ensure_scope_column($pdo);
 $categoryScopeColumnAvailable = admin_blog_ensure_category_scope_column($pdo);
+$categoryParentColumnAvailable = admin_blog_ensure_category_parent_column($pdo);
 $tagScopeColumnAvailable = admin_blog_ensure_tag_scope_column($pdo);
 $listUrl = admin_blog_scope_url('/admin/blogs.php', $scope);
 
@@ -19,6 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $scope = admin_blog_scope_normalize($_POST['blog_scope'] ?? $scope);
     $scopePostsLabel = admin_blog_scope_posts_label($scope);
     $scopePostLabel = admin_blog_scope_post_label($scope);
+    $supportsSubcategories = admin_blog_scope_supports_subcategories($scope);
     $pageTitle = 'Add New ' . $scopePostLabel;
     $listUrl = admin_blog_scope_url('/admin/blogs.php', $scope);
 
@@ -248,16 +251,55 @@ include __DIR__ . '/layout/header.php';
         <?php
         // Fetch blog categories for dropdown
         try {
+            $categories = [];
             if ($categoryScopeColumnAvailable) {
                 [$catScopeClause, $catScopeParams] = admin_blog_scope_taxonomy_filter_clause($scope, 'blog_scope', 'cat_scope');
-                $catStmt = $pdo->prepare("SELECT id, title FROM blog_categories WHERE {$catScopeClause} ORDER BY title ASC");
+                $catSql = "SELECT id, title";
+                if ($categoryParentColumnAvailable) {
+                    $catSql .= ", parent_id";
+                }
+                $catSql .= " FROM blog_categories WHERE {$catScopeClause}";
+                if ($categoryParentColumnAvailable && !$supportsSubcategories) {
+                    $catSql .= " AND (parent_id IS NULL OR parent_id = 0)";
+                }
+                $catSql .= " ORDER BY COALESCE(parent_id, id), (parent_id IS NOT NULL), title ASC";
+                $catStmt = $pdo->prepare($catSql);
                 $catStmt->execute($catScopeParams);
             } else {
-                $catStmt = $pdo->query("SELECT id, title FROM blog_categories ORDER BY title ASC");
+                if ($categoryParentColumnAvailable && !$supportsSubcategories) {
+                    $catStmt = $pdo->query("SELECT id, title, parent_id FROM blog_categories WHERE parent_id IS NULL OR parent_id = 0 ORDER BY title ASC");
+                } elseif ($categoryParentColumnAvailable) {
+                    $catStmt = $pdo->query("SELECT id, title, parent_id FROM blog_categories ORDER BY COALESCE(parent_id, id), (parent_id IS NOT NULL), title ASC");
+                } else {
+                    $catStmt = $pdo->query("SELECT id, title FROM blog_categories ORDER BY title ASC");
+                }
             }
-            while ($cat = $catStmt->fetch(PDO::FETCH_ASSOC)) {
-                $selected = (isset($_POST['blog_category_id']) && $_POST['blog_category_id'] == $cat['id']) ? 'selected' : '';
-                echo '<option value="' . $cat['id'] . '" ' . $selected . '>' . htmlspecialchars($cat['title']) . '</option>';
+
+            $categories = $catStmt->fetchAll(PDO::FETCH_ASSOC);
+            $parentCategories = [];
+            $childCategoriesByParent = [];
+            foreach ($categories as $cat) {
+                $parentId = isset($cat['parent_id']) ? (int)$cat['parent_id'] : 0;
+                if ($supportsSubcategories && $categoryParentColumnAvailable && $parentId > 0) {
+                    if (!isset($childCategoriesByParent[$parentId])) {
+                        $childCategoriesByParent[$parentId] = [];
+                    }
+                    $childCategoriesByParent[$parentId][] = $cat;
+                } else {
+                    $parentCategories[] = $cat;
+                }
+            }
+
+            foreach ($parentCategories as $parentCategory) {
+                $selected = (isset($_POST['blog_category_id']) && $_POST['blog_category_id'] == $parentCategory['id']) ? 'selected' : '';
+                echo '<option value="' . $parentCategory['id'] . '" ' . $selected . '>' . htmlspecialchars($parentCategory['title']) . '</option>';
+
+                if ($supportsSubcategories && $categoryParentColumnAvailable && !empty($childCategoriesByParent[$parentCategory['id']])) {
+                    foreach ($childCategoriesByParent[$parentCategory['id']] as $childCategory) {
+                        $childSelected = (isset($_POST['blog_category_id']) && $_POST['blog_category_id'] == $childCategory['id']) ? 'selected' : '';
+                        echo '<option value="' . $childCategory['id'] . '" ' . $childSelected . '>&nbsp;&nbsp;&nbsp;↳ ' . htmlspecialchars($childCategory['title']) . '</option>';
+                    }
+                }
             }
         } catch (PDOException $e) {
             // ignore
