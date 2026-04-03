@@ -30,10 +30,112 @@ $seoUrl = 'https://develixirs.com/' . $blogListPath;
 $blogs = [];
 $recentBlogs = [];
 $categories = []; // Define categories array
+$mainCategories = [];
+$subcategoriesByParent = [];
+$selectedMainCategoryId = null;
+$dbError = null;
 $categoryId = isset($_GET['cat']) ? (int)$_GET['cat'] : null;
 $tagSlug = isset($_GET['tag']) ? $_GET['tag'] : null; // Get tag slug from URL
+$categoryScopeColumnAvailable = site_blog_scope_category_scope_column_exists($pdo);
+$categoryParentColumnAvailable = site_blog_scope_category_parent_column_exists($pdo);
+$supportsSubcategories = site_blog_scope_supports_subcategories($scope) && $categoryParentColumnAvailable;
+
+// Helper to truncate text
+function truncate($text, $length = 150) {
+    $text = strip_tags($text);
+    if (strlen($text) > $length) {
+        return substr($text, 0, $length) . '...';
+    }
+    return $text;
+}
+
+// Helper for escaping
+function e($v) {
+    return htmlspecialchars($v, ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8');
+}
+
+function render_blog_grid_items_html(array $blogs, ?string $dbError, bool $isAyurvedhScope): string
+{
+    ob_start();
+    if (empty($blogs)): ?>
+      <div class="empty-state">
+        <i class="fa-regular fa-newspaper"></i>
+        <h3>No stories found</h3>
+        <p>We haven't published any articles in this category yet.</p>
+        <?php if (!empty($dbError)): ?>
+          <div style="margin-top:20px; padding:10px; border:1px solid red; color:red; font-family:monospace; font-size:12px; text-align:left; display:inline-block;">
+            <strong>Debug Error:</strong> <?= e($dbError) ?>
+          </div>
+        <?php endif; ?>
+      </div>
+    <?php else: ?>
+      <?php foreach ($blogs as $p): ?>
+        <?php
+          $postUrl = site_blog_scope_append_query('blog_single.php', [
+            'slug' => $p['slug'] ?? '',
+            'scope' => $isAyurvedhScope ? 'ayurvedh' : ''
+          ]);
+        ?>
+        <article class="post-card">
+          <a href="<?= e($postUrl) ?>" class="post-thumb">
+            <img src="<?= e($p['featured_image'] ?: '/assets/images/blog-default.jpg') ?>" alt="<?= e($p['title']) ?>">
+            <?php if (!empty($p['category_name'])): ?>
+              <span class="post-category-badge"><?= e($p['category_name']) ?></span>
+            <?php endif; ?>
+          </a>
+
+          <div class="post-body">
+            <div class="post-meta">
+              <?php if (!empty($p['author_name'])): ?>
+                <div class="author-info" style="display:flex; align-items:center; gap:8px; margin-right:15px;">
+                  <?php if(!empty($p['author_pic'])): ?>
+                    <img src="<?= e($p['author_pic']) ?>" alt="<?= e($p['author_name']) ?>" style="width:24px; height:24px; border-radius:50%; object-fit:cover;">
+                  <?php else: ?>
+                    <i class="fa-solid fa-circle-user" style="font-size:24px; color:#ccc;"></i>
+                  <?php endif; ?>
+                  <span><?= e($p['author_name']) ?></span>
+                </div>
+              <?php endif; ?>
+
+              <span style="display:flex; align-items:center; gap:6px;">
+                <i class="fa-regular fa-calendar"></i>
+                <?= e(date('F j, Y', strtotime($p['created_at']))) ?>
+              </span>
+            </div>
+
+            <h2 class="post-title">
+              <a href="<?= e($postUrl) ?>"><?= e($p['title']) ?></a>
+            </h2>
+
+            <p class="post-excerpt"><?= e(truncate($p['content'], 140)) ?></p>
+
+            <a href="<?= e($postUrl) ?>" class="post-readmore">
+              Read Story <i class="fa-solid fa-arrow-right-long"></i>
+            </a>
+          </div>
+        </article>
+      <?php endforeach; ?>
+    <?php endif;
+
+    return (string)ob_get_clean();
+}
 
 try {
+    $selectedCategory = null;
+    if ($categoryId && $supportsSubcategories) {
+        $selectedCategorySql = "SELECT id, parent_id FROM blog_categories WHERE id = :cat_id";
+        $selectedCategoryParams = [':cat_id' => $categoryId];
+        if ($categoryScopeColumnAvailable) {
+            [$selectedCatScopeClause, $selectedCatScopeParams] = site_blog_scope_taxonomy_filter_clause($scope, 'blog_scope', ':selected_cat_scope');
+            $selectedCategorySql .= " AND {$selectedCatScopeClause}";
+            $selectedCategoryParams = array_merge($selectedCategoryParams, $selectedCatScopeParams);
+        }
+        $selectedCategorySql .= " LIMIT 1";
+        $stmtSelectedCategory = $pdo->prepare($selectedCategorySql);
+        $stmtSelectedCategory->execute($selectedCategoryParams);
+        $selectedCategory = $stmtSelectedCategory->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
     // Build query
     $sql = "SELECT DISTINCT b.id, b.title, b.slug, b.content, b.featured_image, b.created_at, 
                    c.title as category_name,
@@ -62,7 +164,23 @@ try {
     }
 
     if ($categoryId) {
-        $sql .= " AND b.blog_category_id = :cat_id";
+        $isMainCategorySelection = $supportsSubcategories
+            && $selectedCategory
+            && (int)($selectedCategory['parent_id'] ?? 0) === 0;
+
+        if ($isMainCategorySelection) {
+            // Selecting a main Ayurvedh category shows posts from the main + its children.
+            $sql .= " AND (b.blog_category_id = :cat_id OR b.blog_category_id IN (SELECT id FROM blog_categories WHERE parent_id = :cat_parent_id))";
+            $selectedMainCategoryId = (int)$selectedCategory['id'];
+            $params[':cat_parent_id'] = $categoryId;
+        } else {
+            $sql .= " AND b.blog_category_id = :cat_id";
+            if ($supportsSubcategories && $selectedCategory) {
+                $parentId = (int)($selectedCategory['parent_id'] ?? 0);
+                $selectedMainCategoryId = $parentId > 0 ? $parentId : (int)$selectedCategory['id'];
+            }
+        }
+
         $params[':cat_id'] = $categoryId;
     }
     
@@ -97,26 +215,126 @@ try {
     $stmtRecent->execute($recentParams);
     $recentBlogs = $stmtRecent->fetchAll(PDO::FETCH_ASSOC);
 
-    // Fetch Categories for Sidebar (scope-aware)
-    if ($blogTypeColumnAvailable) {
-        [$catScopeClause, $catScopeParams] = site_blog_scope_filter_clause($scope, 'b.blog_type');
-        $catSql = "
-            SELECT DISTINCT c.id, c.title
-            FROM blog_categories c
-            INNER JOIN blogs b ON b.blog_category_id = c.id
-            WHERE b.is_published = 1
-              AND (b.published_at IS NULL OR b.published_at <= :current_time)
-              AND {$catScopeClause}
-            ORDER BY c.title ASC
-        ";
-        $stmtCats = $pdo->prepare($catSql);
-        $stmtCats->execute(array_merge([':current_time' => date('Y-m-d H:i:s')], $catScopeParams));
-        $categories = $stmtCats->fetchAll(PDO::FETCH_ASSOC);
-    } elseif ($isAyurvedhScope) {
-        $categories = [];
+    // Fetch Categories for Sidebar (scope-aware, with main/subcategory support for Ayurvedh).
+    $allCategories = [];
+    $catSql = "SELECT id, title";
+    if ($categoryParentColumnAvailable) {
+        $catSql .= ", parent_id";
+    }
+    $catSql .= " FROM blog_categories";
+
+    $catWhere = [];
+    $catParams = [];
+    if ($categoryScopeColumnAvailable) {
+        [$catScopeClause, $catScopeParams] = site_blog_scope_taxonomy_filter_clause($scope, 'blog_scope', ':cat_scope_type');
+        $catWhere[] = $catScopeClause;
+        $catParams = array_merge($catParams, $catScopeParams);
+    }
+    if (!$supportsSubcategories && $categoryParentColumnAvailable) {
+        $catWhere[] = "(parent_id IS NULL OR parent_id = 0)";
+    }
+    if (!empty($catWhere)) {
+        $catSql .= " WHERE " . implode(' AND ', $catWhere);
+    }
+    if ($categoryParentColumnAvailable) {
+        $catSql .= " ORDER BY COALESCE(parent_id, id), (parent_id IS NOT NULL), title ASC";
     } else {
-        $stmtCats = $pdo->query("SELECT id, title FROM blog_categories ORDER BY title ASC");
-        $categories = $stmtCats->fetchAll(PDO::FETCH_ASSOC);
+        $catSql .= " ORDER BY title ASC";
+    }
+
+    $stmtCats = $pdo->prepare($catSql);
+    $stmtCats->execute($catParams);
+    $allCategories = $stmtCats->fetchAll(PDO::FETCH_ASSOC);
+
+    if (!$blogTypeColumnAvailable && $isAyurvedhScope) {
+        // Keep Ayurvedha page isolated when blog_type column is unavailable.
+        $categories = [];
+    } elseif (!$blogTypeColumnAvailable && !$isAyurvedhScope) {
+        // Legacy fallback behavior for regular blog.
+        $categories = $allCategories;
+    } else {
+        // Determine which categories actually have published posts in this scope.
+        $usedSql = "
+            SELECT DISTINCT b.blog_category_id AS category_id
+            FROM blogs b
+            WHERE b.blog_category_id IS NOT NULL
+              AND b.is_published = 1
+              AND (b.published_at IS NULL OR b.published_at <= :current_time)
+        ";
+        $usedParams = [':current_time' => date('Y-m-d H:i:s')];
+        if ($blogTypeColumnAvailable) {
+            [$usedScopeClause, $usedScopeParams] = site_blog_scope_filter_clause($scope, 'b.blog_type');
+            $usedSql .= " AND {$usedScopeClause}";
+            $usedParams = array_merge($usedParams, $usedScopeParams);
+        }
+
+        $stmtUsedCats = $pdo->prepare($usedSql);
+        $stmtUsedCats->execute($usedParams);
+        $usedRows = $stmtUsedCats->fetchAll(PDO::FETCH_ASSOC);
+        $usedCategoryIdMap = [];
+        foreach ($usedRows as $usedRow) {
+            $usedId = isset($usedRow['category_id']) ? (int)$usedRow['category_id'] : 0;
+            if ($usedId > 0) {
+                $usedCategoryIdMap[$usedId] = true;
+            }
+        }
+
+        if ($supportsSubcategories) {
+            $allCategoriesById = [];
+            foreach ($allCategories as $catRow) {
+                $allCategoriesById[(int)$catRow['id']] = $catRow;
+            }
+
+            $visibleCategoryMap = [];
+            foreach (array_keys($usedCategoryIdMap) as $usedCategoryId) {
+                if (!isset($allCategoriesById[$usedCategoryId])) {
+                    continue;
+                }
+                $visibleCategoryMap[$usedCategoryId] = true;
+                $parentId = isset($allCategoriesById[$usedCategoryId]['parent_id']) ? (int)$allCategoriesById[$usedCategoryId]['parent_id'] : 0;
+                if ($parentId > 0) {
+                    $visibleCategoryMap[$parentId] = true;
+                }
+            }
+
+            if ($selectedMainCategoryId) {
+                $visibleCategoryMap[$selectedMainCategoryId] = true;
+                foreach ($allCategories as $catRow) {
+                    $parentId = isset($catRow['parent_id']) ? (int)$catRow['parent_id'] : 0;
+                    if ($parentId === (int)$selectedMainCategoryId) {
+                        $visibleCategoryMap[(int)$catRow['id']] = true;
+                    }
+                }
+            }
+
+            foreach ($allCategories as $catRow) {
+                if (isset($visibleCategoryMap[(int)$catRow['id']])) {
+                    $categories[] = $catRow;
+                }
+            }
+        } else {
+            foreach ($allCategories as $catRow) {
+                if (isset($usedCategoryIdMap[(int)$catRow['id']])) {
+                    $categories[] = $catRow;
+                }
+            }
+        }
+    }
+
+    if ($supportsSubcategories) {
+        foreach ($categories as $catRow) {
+            $parentId = isset($catRow['parent_id']) ? (int)$catRow['parent_id'] : 0;
+            if ($parentId > 0) {
+                if (!isset($subcategoriesByParent[$parentId])) {
+                    $subcategoriesByParent[$parentId] = [];
+                }
+                $subcategoriesByParent[$parentId][] = $catRow;
+            } else {
+                $mainCategories[] = $catRow;
+            }
+        }
+    } else {
+        $mainCategories = $categories;
     }
     
 } catch (PDOException $e) {
@@ -124,6 +342,20 @@ try {
     error_log('Blog fetch error: ' . $dbError);
     $blogs = [];
     $recentBlogs = [];
+    $categories = [];
+    $mainCategories = [];
+    $subcategoriesByParent = [];
+}
+
+if (isset($_GET['ajax']) && (string)$_GET['ajax'] === '1') {
+    header('Content-Type: application/json; charset=UTF-8');
+    echo json_encode([
+        'success' => true,
+        'html' => render_blog_grid_items_html($blogs, $dbError, $isAyurvedhScope),
+        'count' => count($blogs),
+        'categoryId' => $categoryId,
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
 }
 
 // Fetch blog banners
@@ -139,20 +371,6 @@ try {
     }
 } catch (PDOException $e) {
     error_log('Banner fetch error: ' . $e->getMessage());
-}
-
-// Helper to truncate text
-function truncate($text, $length = 150) {
-    $text = strip_tags($text);
-    if (strlen($text) > $length) {
-        return substr($text, 0, $length) . '...';
-    }
-    return $text;
-}
-
-// Helper for escaping
-function e($v) { 
-    return htmlspecialchars($v, ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8'); 
 }
 ?>
 <!DOCTYPE html>
@@ -306,6 +524,11 @@ echo generate_website_schema();
       display: grid;
       grid-template-columns: repeat(2, 1fr);
       gap: 35px;
+    }
+    .blog-grid.is-loading{
+      opacity: 0.55;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
     }
     
     /* POST CARD */
@@ -521,6 +744,53 @@ echo generate_website_schema();
     .category-list a:hover i {
       transform: translateX(3px);
     }
+    .category-item{
+      border-bottom: 1px solid var(--border);
+    }
+    .category-item:last-child{
+      border-bottom: 0;
+    }
+    .category-main-row{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .category-main-row > a{
+      flex: 1;
+      border-bottom: 0;
+      padding: 12px 0;
+    }
+    .category-toggle-btn{
+      border: 0;
+      background: transparent;
+      color: var(--text-light);
+      cursor: pointer;
+      padding: 8px 4px;
+      transition: color 0.2s;
+    }
+    .category-toggle-btn:hover{
+      color: var(--primary);
+    }
+    .category-toggle-btn i{
+      transition: transform 0.2s;
+    }
+    .category-item.expanded .category-toggle-btn i{
+      transform: rotate(90deg);
+    }
+    .subcategory-list{
+      list-style: none;
+      margin: 0;
+      padding: 0 0 8px 12px;
+      display: none;
+    }
+    .category-item.expanded .subcategory-list{
+      display: block;
+    }
+    .subcategory-list a{
+      border-bottom: 0;
+      padding: 8px 0;
+      font-size: 13px;
+    }
     
     /* EMPTY STATE */
     .empty-state{
@@ -590,66 +860,8 @@ echo generate_website_schema();
 
     <!-- BLOG CONTENT -->
     <section>
-      <div class="blog-grid">
-        <?php if (empty($blogs)): ?>
-          <div class="empty-state">
-            <i class="fa-regular fa-newspaper"></i>
-            <h3>No stories found</h3>
-            <p>We haven't published any articles in this category yet.</p>
-            <?php if (!empty($dbError)): ?>
-                <div style="margin-top:20px; padding:10px; border:1px solid red; color:red; font-family:monospace; font-size:12px; text-align:left; display:inline-block;">
-                    <strong>Debug Error:</strong> <?= htmlspecialchars($dbError) ?>
-                </div>
-            <?php endif; ?>
-          </div>
-        <?php else: ?>
-          <?php foreach ($blogs as $p): ?>
-            <?php
-              $postUrl = site_blog_scope_append_query('blog_single.php', [
-                'slug' => $p['slug'] ?? '',
-                'scope' => $isAyurvedhScope ? 'ayurvedh' : ''
-              ]);
-            ?>
-            <article class="post-card">
-              <a href="<?= e($postUrl) ?>" class="post-thumb">
-                <img src="<?= e($p['featured_image'] ?: '/assets/images/blog-default.jpg') ?>" alt="<?= e($p['title']) ?>">
-                <?php if (!empty($p['category_name'])): ?>
-                  <span class="post-category-badge"><?= e($p['category_name']) ?></span>
-                <?php endif; ?>
-              </a>
-              
-              <div class="post-body">
-                <div class="post-meta">
-                  <?php if (!empty($p['author_name'])): ?>
-                      <div class="author-info" style="display:flex; align-items:center; gap:8px; margin-right:15px;">
-                          <?php if(!empty($p['author_pic'])): ?>
-                              <img src="<?= e($p['author_pic']) ?>" alt="<?= e($p['author_name']) ?>" style="width:24px; height:24px; border-radius:50%; object-fit:cover;">
-                          <?php else: ?>
-                              <i class="fa-solid fa-circle-user" style="font-size:24px; color:#ccc;"></i>
-                          <?php endif; ?>
-                          <span><?= e($p['author_name']) ?></span>
-                      </div>
-                  <?php endif; ?>
-                  
-                  <span style="display:flex; align-items:center; gap:6px;">
-                    <i class="fa-regular fa-calendar"></i>
-                    <?= e(date('F j, Y', strtotime($p['created_at']))) ?>
-                  </span>
-                </div>
-                
-                <h2 class="post-title">
-                  <a href="<?= e($postUrl) ?>"><?= e($p['title']) ?></a>
-                </h2>
-                
-                <p class="post-excerpt"><?= e(truncate($p['content'], 140)) ?></p>
-                
-                <a href="<?= e($postUrl) ?>" class="post-readmore">
-                  Read Story <i class="fa-solid fa-arrow-right-long"></i>
-                </a>
-              </div>
-            </article>
-          <?php endforeach; ?>
-        <?php endif; ?>
+      <div class="blog-grid" id="blogGrid">
+        <?= render_blog_grid_items_html($blogs, $dbError, $isAyurvedhScope) ?>
       </div>
     </section>
 
@@ -657,23 +869,77 @@ echo generate_website_schema();
     <aside>
       
       <!-- Categories -->
-      <div class="sidebar-widget">
+      <div class="sidebar-widget" id="blogCategoriesWidget">
         <h3 class="widget-title">Categories</h3>
         <ul class="category-list">
           <li>
-            <a href="<?= e($blogListPath) ?>" class="<?= !$categoryId ? 'active' : '' ?>">
+            <a href="<?= e($blogListPath) ?>" class="<?= !$categoryId ? 'active' : '' ?>" data-category-filter-link="1">
               All Stories <span><i class="fa-solid fa-angle-right"></i></span>
             </a>
           </li>
-          <?php if (!empty($categories)): ?>
-            <?php foreach ($categories as $cat): ?>
-              <li>
-                <a href="<?= e(site_blog_scope_append_query($blogListPath, ['cat' => (int)$cat['id']])) ?>" class="<?= ($categoryId == $cat['id']) ? 'active' : '' ?>">
-                  <?= htmlspecialchars($cat['title'] ?? $cat['name'] ?? '') ?>
-                  <span><i class="fa-solid fa-angle-right"></i></span>
-                </a>
-              </li>
-            <?php endforeach; ?>
+          <?php if (!empty($mainCategories)): ?>
+            <?php if ($supportsSubcategories): ?>
+              <?php foreach ($mainCategories as $mainCategory): ?>
+                <?php
+                  $mainCategoryId = (int)$mainCategory['id'];
+                  $subcategories = $subcategoriesByParent[$mainCategoryId] ?? [];
+                  $hasSubcategories = !empty($subcategories);
+                  $isMainSelected = ((int)$categoryId === $mainCategoryId);
+                  $isSubSelected = false;
+                  foreach ($subcategories as $subCategory) {
+                      if ((int)$categoryId === (int)$subCategory['id']) {
+                          $isSubSelected = true;
+                          break;
+                      }
+                  }
+                  $isExpanded = $isMainSelected || $isSubSelected;
+                ?>
+                <li class="category-item <?= $isExpanded ? 'expanded' : '' ?>">
+                  <div class="category-main-row">
+                    <a href="<?= e(site_blog_scope_append_query($blogListPath, ['cat' => $mainCategoryId])) ?>" class="<?= $isMainSelected ? 'active' : '' ?>" data-category-filter-link="1">
+                      <?= htmlspecialchars($mainCategory['title'] ?? '') ?>
+                      <?php if (!$hasSubcategories): ?>
+                        <span><i class="fa-solid fa-angle-right"></i></span>
+                      <?php endif; ?>
+                    </a>
+                    <?php if ($hasSubcategories): ?>
+                      <button
+                        type="button"
+                        class="category-toggle-btn"
+                        data-main-category="<?= $mainCategoryId ?>"
+                        aria-expanded="<?= $isExpanded ? 'true' : 'false' ?>"
+                        aria-controls="subcategory-list-<?= $mainCategoryId ?>"
+                      >
+                        <i class="fa-solid fa-angle-right"></i>
+                      </button>
+                    <?php endif; ?>
+                  </div>
+
+                  <?php if (!empty($subcategories)): ?>
+                    <ul class="subcategory-list" id="subcategory-list-<?= $mainCategoryId ?>">
+                      <?php foreach ($subcategories as $subCategory): ?>
+                        <?php $subCategoryId = (int)$subCategory['id']; ?>
+                        <li>
+                          <a href="<?= e(site_blog_scope_append_query($blogListPath, ['cat' => $subCategoryId])) ?>" class="<?= ((int)$categoryId === $subCategoryId) ? 'active' : '' ?>" data-category-filter-link="1">
+                            ↳ <?= htmlspecialchars($subCategory['title'] ?? '') ?>
+                            <span><i class="fa-solid fa-angle-right"></i></span>
+                          </a>
+                        </li>
+                      <?php endforeach; ?>
+                    </ul>
+                  <?php endif; ?>
+                </li>
+              <?php endforeach; ?>
+            <?php else: ?>
+              <?php foreach ($mainCategories as $cat): ?>
+                <li>
+                  <a href="<?= e(site_blog_scope_append_query($blogListPath, ['cat' => (int)$cat['id']])) ?>" class="<?= ($categoryId == $cat['id']) ? 'active' : '' ?>" data-category-filter-link="1">
+                    <?= htmlspecialchars($cat['title'] ?? $cat['name'] ?? '') ?>
+                    <span><i class="fa-solid fa-angle-right"></i></span>
+                  </a>
+                </li>
+              <?php endforeach; ?>
+            <?php endif; ?>
           <?php endif; ?>
         </ul>
       </div>
@@ -730,6 +996,133 @@ echo generate_website_schema();
     setInterval(nextSlide, 5000);
   })();
   <?php endif; ?>
+
+  (function() {
+    const toggleButtons = document.querySelectorAll('.category-toggle-btn');
+    if (!toggleButtons.length) {
+      return;
+    }
+
+    toggleButtons.forEach((button) => {
+      button.addEventListener('click', function(event) {
+        event.preventDefault();
+        const categoryItem = this.closest('.category-item');
+        if (!categoryItem) {
+          return;
+        }
+        const expanded = categoryItem.classList.toggle('expanded');
+        this.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      });
+    });
+  })();
+
+  (function() {
+    const gridEl = document.getElementById('blogGrid');
+    const categoryWidgetEl = document.getElementById('blogCategoriesWidget');
+    if (!gridEl || !categoryWidgetEl) {
+      return;
+    }
+
+    const getCatParam = (urlValue) => {
+      const url = new URL(urlValue, window.location.origin);
+      return url.searchParams.get('cat') || '';
+    };
+
+    const syncActiveCategoryLink = (urlValue) => {
+      const activeCat = getCatParam(urlValue);
+      const filterLinks = categoryWidgetEl.querySelectorAll('a[data-category-filter-link="1"]');
+
+      filterLinks.forEach((linkEl) => linkEl.classList.remove('active'));
+
+      let matchedLink = null;
+      for (const linkEl of filterLinks) {
+        if (getCatParam(linkEl.href) === activeCat) {
+          matchedLink = linkEl;
+          break;
+        }
+      }
+      if (!matchedLink && activeCat === '' && filterLinks.length) {
+        matchedLink = filterLinks[0];
+      }
+      if (matchedLink) {
+        matchedLink.classList.add('active');
+        const categoryItem = matchedLink.closest('.category-item');
+        if (categoryItem) {
+          categoryItem.classList.add('expanded');
+          const toggleBtn = categoryItem.querySelector('.category-toggle-btn');
+          if (toggleBtn) {
+            toggleBtn.setAttribute('aria-expanded', 'true');
+          }
+        }
+      }
+    };
+
+    let activeController = null;
+    const loadPostsWithAjax = async (targetUrl, pushHistory = true) => {
+      const ajaxUrl = new URL(targetUrl, window.location.origin);
+      ajaxUrl.searchParams.set('ajax', '1');
+
+      if (activeController) {
+        activeController.abort();
+      }
+      activeController = new AbortController();
+
+      gridEl.classList.add('is-loading');
+
+      try {
+        const response = await fetch(ajaxUrl.toString(), {
+          method: 'GET',
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+          },
+          signal: activeController.signal
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to load filtered posts');
+        }
+
+        const payload = await response.json();
+        if (!payload || typeof payload.html !== 'string') {
+          throw new Error('Invalid AJAX payload');
+        }
+
+        gridEl.innerHTML = payload.html;
+        if (pushHistory) {
+          window.history.pushState({ blogAjax: true }, '', targetUrl);
+        }
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          return;
+        }
+        window.location.href = targetUrl;
+      } finally {
+        gridEl.classList.remove('is-loading');
+      }
+    };
+
+    categoryWidgetEl.addEventListener('click', (event) => {
+      const linkEl = event.target.closest('a[data-category-filter-link="1"]');
+      if (!linkEl || !categoryWidgetEl.contains(linkEl)) {
+        return;
+      }
+
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+      }
+
+      event.preventDefault();
+      const targetUrl = linkEl.href;
+      syncActiveCategoryLink(targetUrl);
+      loadPostsWithAjax(targetUrl, true);
+    });
+
+    window.addEventListener('popstate', () => {
+      const targetUrl = window.location.href;
+      syncActiveCategoryLink(targetUrl);
+      loadPostsWithAjax(targetUrl, false);
+    });
+  })();
   </script>
 
 </body>

@@ -4,7 +4,8 @@ if (!function_exists('admin_blog_scope_normalize')) {
     function admin_blog_scope_normalize(?string $scope): string
     {
         $value = strtolower(trim((string)$scope));
-        return $value === 'ayurvedh' ? 'ayurvedh' : 'blog';
+        $ayurvedhAliases = ['ayurvedh', 'ayurvedha', 'ayurvedic', 'ayurvedhic'];
+        return in_array($value, $ayurvedhAliases, true) ? 'ayurvedh' : 'blog';
     }
 }
 
@@ -102,7 +103,7 @@ if (!function_exists('admin_blog_scope_tag_label')) {
 if (!function_exists('admin_blog_scope_db_value')) {
     function admin_blog_scope_db_value(string $scope): ?string
     {
-        return admin_blog_scope_is_ayurvedh($scope) ? 'ayurvedh' : null;
+        return admin_blog_scope_is_ayurvedh($scope) ? 'ayurvedh' : 'blog';
     }
 }
 
@@ -161,7 +162,14 @@ if (!function_exists('admin_blog_scope_filter_clause')) {
 if (!function_exists('admin_blog_scope_taxonomy_value')) {
     function admin_blog_scope_taxonomy_value(string $scope): ?string
     {
-        return admin_blog_scope_is_ayurvedh($scope) ? 'ayurvedh' : null;
+        return admin_blog_scope_is_ayurvedh($scope) ? 'ayurvedh' : 'blog';
+    }
+}
+
+if (!function_exists('admin_blog_scope_supports_subcategories')) {
+    function admin_blog_scope_supports_subcategories(string $scope): bool
+    {
+        return admin_blog_scope_is_ayurvedh($scope);
     }
 }
 
@@ -193,6 +201,40 @@ if (!function_exists('admin_blog_ensure_category_scope_column')) {
             return true;
         } catch (PDOException $e) {
             error_log('Blog categories scope column setup failed: ' . $e->getMessage());
+            $available = false;
+            return false;
+        }
+    }
+}
+
+if (!function_exists('admin_blog_ensure_category_parent_column')) {
+    function admin_blog_ensure_category_parent_column(PDO $pdo): bool
+    {
+        static $checked = false;
+        static $available = false;
+
+        if ($checked) {
+            return $available;
+        }
+        $checked = true;
+
+        try {
+            $stmt = $pdo->query("SHOW COLUMNS FROM blog_categories LIKE 'parent_id'");
+            if ($stmt && $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $available = true;
+                return true;
+            }
+
+            $pdo->exec("ALTER TABLE blog_categories ADD COLUMN parent_id INT NULL DEFAULT NULL AFTER description");
+            try {
+                $pdo->exec("CREATE INDEX idx_blog_categories_parent_id ON blog_categories (parent_id)");
+            } catch (PDOException $e) {
+                // safe ignore
+            }
+            $available = true;
+            return true;
+        } catch (PDOException $e) {
+            error_log('Blog categories parent_id column setup failed: ' . $e->getMessage());
             $available = false;
             return false;
         }

@@ -7,10 +7,12 @@ require_once __DIR__ . '/blog_scope_helper.php';
 $scope = admin_blog_scope_from_request();
 $categoriesLabel = admin_blog_scope_categories_label($scope);
 $categoryLabel = admin_blog_scope_category_label($scope);
+$supportsSubcategories = admin_blog_scope_supports_subcategories($scope);
 $pageTitle = $categoriesLabel;
 $errors = [];
 $success = '';
 $scopeColumnAvailable = admin_blog_ensure_category_scope_column($pdo);
+$parentColumnAvailable = admin_blog_ensure_category_parent_column($pdo);
 $listUrl = admin_blog_scope_url('/admin/blog_categories.php', $scope);
 $addUrl = admin_blog_scope_url('/admin/add_blog_category.php', $scope);
 
@@ -18,6 +20,17 @@ $addUrl = admin_blog_scope_url('/admin/add_blog_category.php', $scope);
 if (isset($_GET['delete'])) {
     $id = (int)$_GET['delete'];
     try {
+        if ($parentColumnAvailable) {
+            if ($scopeColumnAvailable) {
+                [$childScopeClause, $childScopeParams] = admin_blog_scope_taxonomy_filter_clause($scope, 'blog_scope', 'cat_child_scope');
+                $stmtReparent = $pdo->prepare("UPDATE blog_categories SET parent_id = NULL WHERE parent_id = :parent_id AND {$childScopeClause}");
+                $stmtReparent->execute(array_merge([':parent_id' => $id], $childScopeParams));
+            } else {
+                $stmtReparent = $pdo->prepare("UPDATE blog_categories SET parent_id = NULL WHERE parent_id = :parent_id");
+                $stmtReparent->execute([':parent_id' => $id]);
+            }
+        }
+
         if ($scopeColumnAvailable) {
             [$scopeClause, $scopeParams] = admin_blog_scope_taxonomy_filter_clause($scope, 'blog_scope', 'cat_del_scope');
             $stmt = $pdo->prepare("DELETE FROM blog_categories WHERE id = :id AND {$scopeClause}");
@@ -40,14 +53,27 @@ $categories = [];
 try {
     if ($scopeColumnAvailable) {
         [$scopeClause, $scopeParams] = admin_blog_scope_taxonomy_filter_clause($scope, 'blog_scope', 'cat_list_scope');
-        $stmt = $pdo->prepare("SELECT * FROM blog_categories WHERE {$scopeClause} ORDER BY title ASC");
+        if ($parentColumnAvailable) {
+            $stmt = $pdo->prepare("SELECT * FROM blog_categories WHERE {$scopeClause} ORDER BY COALESCE(parent_id, id), (parent_id IS NOT NULL), title ASC");
+        } else {
+            $stmt = $pdo->prepare("SELECT * FROM blog_categories WHERE {$scopeClause} ORDER BY title ASC");
+        }
         $stmt->execute($scopeParams);
     } else {
-        $stmt = $pdo->query("SELECT * FROM blog_categories ORDER BY title ASC");
+        if ($parentColumnAvailable) {
+            $stmt = $pdo->query("SELECT * FROM blog_categories ORDER BY COALESCE(parent_id, id), (parent_id IS NOT NULL), title ASC");
+        } else {
+            $stmt = $pdo->query("SELECT * FROM blog_categories ORDER BY title ASC");
+        }
     }
     $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     $errors[] = "Error fetching categories: " . $e->getMessage();
+}
+
+$categoryTitleById = [];
+foreach ($categories as $catRow) {
+    $categoryTitleById[(int)$catRow['id']] = (string)$catRow['title'];
 }
 
 include __DIR__ . '/layout/header.php';
@@ -85,6 +111,10 @@ include __DIR__ . '/layout/header.php';
       <thead class="bg-gray-50">
         <tr>
           <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+          <?php if ($supportsSubcategories && $parentColumnAvailable): ?>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Parent</th>
+          <?php endif; ?>
           <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Slug</th>
           <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
           <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -93,16 +123,32 @@ include __DIR__ . '/layout/header.php';
       <tbody class="bg-white divide-y divide-gray-200">
         <?php if (empty($categories)): ?>
             <tr>
-                <td colspan="4" class="px-6 py-8 text-center text-gray-500">
+                <td colspan="<?php echo ($supportsSubcategories && $parentColumnAvailable) ? '6' : '4'; ?>" class="px-6 py-8 text-center text-gray-500">
                     No <?php echo htmlspecialchars(strtolower($categoriesLabel)); ?> found. Create one to get started.
                 </td>
             </tr>
         <?php else: ?>
             <?php foreach ($categories as $cat): ?>
+                <?php
+                $parentId = isset($cat['parent_id']) ? (int)$cat['parent_id'] : 0;
+                $isSubcategory = ($supportsSubcategories && $parentColumnAvailable && $parentId > 0);
+                $parentTitle = $isSubcategory ? ($categoryTitleById[$parentId] ?? 'Unknown') : '-';
+                ?>
                 <tr class="hover:bg-gray-50">
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <?php if ($isSubcategory): ?>
+                        <span class="text-gray-400 mr-1">↳</span>
+                    <?php endif; ?>
                     <?php echo htmlspecialchars($cat['title']); ?>
                 </td>
+                <?php if ($supportsSubcategories && $parentColumnAvailable): ?>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <?php echo $isSubcategory ? 'Subcategory' : 'Main'; ?>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <?php echo htmlspecialchars($parentTitle); ?>
+                </td>
+                <?php endif; ?>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     <?php echo htmlspecialchars($cat['slug']); ?>
                 </td>
